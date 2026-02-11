@@ -1,0 +1,84 @@
+# 量化交易信号系统配置文件
+
+# 数据源配置
+data_source:
+  tushare_token: "你的Tushare_Token"  # 在 https://tushare.pro 注册获取
+  use_cache: true
+  cache_dir: "./cache"
+
+# 策略参数
+strategy:
+  # 基本面筛选
+  fundamental:
+    min_roe: 10  # 最小ROE (%)
+    max_debt_ratio: 50  # 最大负债率 (%)
+    max_pe: 30  # 最大市盈率
+    min_market_cap: 50  # 最小市值 (亿)
+    max_market_cap: 500  # 最大市值 (亿)
+
+  # 技术面参数
+  technical:
+    ma_period: 250  # 年线周期
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    ma250_distance_threshold: 0.05  # 距离年线阈值
+
+  # 成交量参数
+  volume:
+    min_turnover_rate: 1  # 最小换手率 (%)
+    max_turnover_rate: 5  # 最大换手率 (%)
+    volume_burst_ratio: 1.5  # 放量倍数
+
+# 风控参数
+risk_control:
+  # 仓位控制
+  position:
+    max_total_position: 0.8  # 最大总仓位
+    max_single_position: 0.25  # 单只股票最大仓位
+    reserve_cash_ratio: 0.25  # 机动资金比例
+
+  # 市场环境仓位
+  market_position:
+    bull_market: 0.8  # 牛市最大仓位
+    sideways_market: 0.5  # 震荡市最大仓位
+    bear_market: 0.2  # 熊市最大仓位
+
+  # 止损止盈
+  stop_loss: 0.08  # 止损比例
+  stop_profit: 0.30  # 止盈比例
+  max_drawdown: 0.15  # 最大回撤
+
+# 通知配置
+notification:
+  # 企业微信机器人
+  wechat:
+    enabled: true
+    webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+
+  # 邮件通知
+  email:
+    enabled: false
+    smtp_server: "smtp.qq.com"
+    smtp_port: 465
+    sender: "your@email.com"
+    password: "your_password"
+    receiver: "your@email.com"
+
+# 运行配置
+runtime:
+  # 定时任务
+  schedule:
+    daily_scan_time: "15:30"  # 每日扫描时间 (收盘后)
+    weekly_review_day: "Friday"  # 每周复盘日
+
+  # 日志配置
+  logging:
+    level: "INFO"
+    file: "./logs/signal_system.log"
+
+  # 数据库配置 (可选)
+  database:
+    enabled: false
+    type: "sqlite"
+    path: "./data/signals.db"
