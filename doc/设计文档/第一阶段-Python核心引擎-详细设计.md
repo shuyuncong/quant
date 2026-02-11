@@ -1378,24 +1378,661 @@ echo "系统已启动，PID: $!"
 
 ---
 
-## 12. 总结
+## 12. 仓位管理模块设计 (新增)
+
+> **重要**: 本模块是根据设计审查报告新增的核心模块，实现知识星球的"3只+25%机动"仓位管理理念
+
+### 12.1 PositionManager 类
+
+#### 12.1.1 类设计
+
+```python
+class PositionManager:
+    """
+    仓位管理器 - 实现知识星球的仓位管理理念
+
+    核心原则:
+    - 同时持有3只股票
+    - 每只股票25%基本仓位
+    - 保留25%机动资金用于做T
+    - 最多允许临时持有4只(超配情况)
+    """
+
+    def __init__(self, total_capital: Decimal):
+        self.total_capital = total_capital
+        self.positions: Dict[str, Position] = {}
+        self.mobile_cash_ratio = Decimal('0.25')
+        self.base_position_ratio = Decimal('0.25')
+        self.max_stocks = 3
+        self.max_stocks_temp = 4
+
+    def can_open_position(self, ts_code: str) -> Tuple[bool, str]:
+        """检查是否可以开新仓位"""
+
+    def calculate_position_size(self, ts_code: str,
+                               position_type: str = 'base') -> int:
+        """计算应该买入的股数"""
+
+    def open_base_position(self, ts_code: str, price: Decimal) -> Position:
+        """开基本仓位"""
+
+    def add_mobile_position(self, ts_code: str, price: Decimal,
+                           amount: int) -> bool:
+        """增加机动仓位"""
+
+    def reduce_mobile_position(self, ts_code: str, price: Decimal,
+                              amount: int) -> bool:
+        """减少机动仓位"""
+
+    def reduce_base_position(self, ts_code: str, price: Decimal,
+                            ratio: float) -> bool:
+        """减少基本仓位"""
+
+    def close_position(self, ts_code: str, price: Decimal) -> Position:
+        """平仓"""
+
+    def get_available_mobile_cash(self) -> Decimal:
+        """获取可用机动资金"""
+
+    def get_position_summary(self) -> Dict:
+        """获取持仓汇总"""
+```
+
+#### 12.1.2 Position 数据结构
+
+```python
+@dataclass
+class Position:
+    """持仓信息"""
+    ts_code: str
+    stock_name: str
+
+    # 基本仓位
+    base_shares: int
+    base_cost: Decimal
+    base_amount: Decimal
+
+    # 机动仓位
+    mobile_shares: int
+    mobile_cost: Decimal
+    mobile_amount: Decimal
+
+    # 统计信息
+    total_shares: int
+    total_cost: Decimal
+    total_amount: Decimal
+    current_price: Decimal
+    market_value: Decimal
+    profit_loss: Decimal
+    profit_rate: Decimal
+
+    buy_date: date
+    holding_days: int
+
+    def update_price(self, price: Decimal):
+        """更新当前价格和盈亏"""
+        self.current_price = price
+        self.market_value = price * self.total_shares
+        self.profit_loss = self.market_value - self.total_amount
+        self.profit_rate = self.profit_loss / self.total_amount
+```
+
+#### 12.1.3 核心方法实现
+
+```python
+def can_open_position(self, ts_code: str) -> Tuple[bool, str]:
+    """
+    检查是否可以开新仓位
+
+    Returns:
+        (是否可以, 原因说明)
+    """
+    if ts_code in self.positions:
+        return False, "已持有该股票"
+
+    active_positions = len([p for p in self.positions.values()
+                           if p.total_shares > 0])
+
+    if active_positions >= self.max_stocks:
+        return False, f"已达到最大持仓数量({self.max_stocks}只)"
+
+    available_cash = self.get_available_cash()
+    required_cash = self.total_capital * self.base_position_ratio
+
+    if available_cash < required_cash:
+        return False, f"可用资金不足"
+
+    return True, "可以开仓"
+
+def calculate_position_size(self, ts_code: str,
+                           position_type: str = 'base') -> int:
+    """
+    计算应该买入的股数
+
+    Args:
+        ts_code: 股票代码
+        position_type: 'base'(基本仓) 或 'mobile'(机动仓)
+
+    Returns:
+        应买入股数(手数的整数倍)
+    """
+    if position_type == 'base':
+        amount = self.total_capital * self.base_position_ratio
+    else:
+        amount = self.get_available_mobile_cash()
+
+    current_price = self._get_current_price(ts_code)
+    shares = int(amount / current_price / 100) * 100
+
+    return shares
+
+def get_available_mobile_cash(self) -> Decimal:
+    """
+    获取可用机动资金
+
+    Returns:
+        可用机动资金 = 总机动资金 - 已使用机动资金
+    """
+    total_mobile = self.total_capital * self.mobile_cash_ratio
+    used_mobile = sum(p.mobile_amount for p in self.positions.values())
+    return total_mobile - used_mobile
+```
+
+---
+
+## 13. 做T策略模块设计 (新增)
+
+> **重要**: 本模块是根据设计审查报告新增的核心模块，实现知识星球的做T理念
+
+### 13.1 TTradingStrategy 类
+
+#### 13.1.1 类设计
+
+```python
+class TTradingStrategy:
+    """
+    做T策略 - 实现知识星球的做T理念
+
+    核心原则:
+    - 上涨趋势: 正T(底背离加机动仓, 顶背离减机动仓)
+    - 下跌趋势: 反T(顶背离减基本仓, 回落买回)
+    - 震荡市: 机动资金高抛低吸
+    """
+
+    def __init__(self, position_manager: PositionManager, config: Dict):
+        self.position_manager = position_manager
+        self.config = config
+
+    def analyze_t_opportunity(self, ts_code: str, market_trend: str,
+                             timeframe: str = '30min') -> Dict:
+        """分析做T机会"""
+
+    def execute_positive_t(self, ts_code: str, signal_type: str) -> bool:
+        """执行正T"""
+
+    def execute_negative_t(self, ts_code: str, signal_type: str) -> bool:
+        """执行反T"""
+
+    def execute_range_t(self, ts_code: str, signal_type: str) -> bool:
+        """执行震荡市做T"""
+```
+
+#### 13.1.2 TSignal 数据结构
+
+```python
+@dataclass
+class TSignal:
+    """做T信号"""
+    ts_code: str
+    signal_type: str  # 'positive_t_buy', 'positive_t_sell',
+                      # 'negative_t_sell', 'negative_t_buy'
+    timeframe: str
+    price: Decimal
+    amount: int
+    reason: str
+    confidence: int
+    indicators: Dict
+    timestamp: datetime
+```
+
+#### 13.1.3 核心方法实现
+
+```python
+def analyze_t_opportunity(self, ts_code: str, market_trend: str,
+                         timeframe: str = '30min') -> Dict:
+    """
+    分析做T机会
+
+    Args:
+        ts_code: 股票代码
+        market_trend: 市场趋势 ('bull', 'bear', 'range')
+        timeframe: 时间周期
+
+    Returns:
+        {
+            'has_opportunity': bool,
+            'signal_type': str,
+            'reason': str,
+            'confidence': int,
+            'suggested_amount': int
+        }
+    """
+    if ts_code not in self.position_manager.positions:
+        return {'has_opportunity': False, 'reason': '未持仓'}
+
+    position = self.position_manager.positions[ts_code]
+    indicators = self._calculate_indicators(ts_code, timeframe)
+
+    if market_trend == 'bull':
+        return self._analyze_positive_t(position, indicators)
+    elif market_trend == 'bear':
+        return self._analyze_negative_t(position, indicators)
+    else:
+        return self._analyze_range_t(position, indicators)
+
+def _analyze_positive_t(self, position: Position,
+                       indicators: Dict) -> Dict:
+    """
+    分析正T机会(上涨趋势)
+
+    正T逻辑:
+    - 买入时机: 底背离 + 回调至支撑位 + 放量
+    - 卖出时机: 顶背离 + 短期冲高 + 缩量
+    - 操作对象: 机动仓位
+    """
+    result = {
+        'has_opportunity': False,
+        'signal_type': None,
+        'reason': '',
+        'confidence': 0,
+        'suggested_amount': 0
+    }
+
+    # 检查买入机会(加机动仓)
+    if self._has_bullish_divergence(indicators):
+        if self._is_near_support(indicators):
+            if self._is_volume_increasing(indicators):
+                available_cash = self.position_manager.get_available_mobile_cash()
+                if available_cash > 0:
+                    result['has_opportunity'] = True
+                    result['signal_type'] = 'positive_t_buy'
+                    result['reason'] = '底背离+支撑位+放量,加机动仓'
+                    result['confidence'] = 80
+                    result['suggested_amount'] = int(available_cash * 0.5)
+
+    # 检查卖出机会(减机动仓)
+    elif self._has_bearish_divergence(indicators):
+        if position.mobile_shares > 0:
+            if self._is_volume_decreasing(indicators):
+                result['has_opportunity'] = True
+                result['signal_type'] = 'positive_t_sell'
+                result['reason'] = '顶背离+缩量,减机动仓'
+                result['confidence'] = 75
+                result['suggested_amount'] = position.mobile_shares
+
+    return result
+
+def _analyze_negative_t(self, position: Position,
+                       indicators: Dict) -> Dict:
+    """
+    分析反T机会(下跌趋势)
+
+    反T逻辑:
+    - 卖出时机: 顶背离 + 反弹至阻力位
+    - 买入时机: 快速下跌后企稳 + 底背离
+    - 操作对象: 部分基本仓位
+    """
+    result = {
+        'has_opportunity': False,
+        'signal_type': None,
+        'reason': '',
+        'confidence': 0,
+        'suggested_amount': 0
+    }
+
+    # 检查卖出机会(减基本仓)
+    if self._has_bearish_divergence(indicators):
+        if self._is_near_resistance(indicators):
+            if position.base_shares > 0:
+                result['has_opportunity'] = True
+                result['signal_type'] = 'negative_t_sell'
+                result['reason'] = '顶背离+阻力位,减部分基本仓'
+                result['confidence'] = 70
+                result['suggested_amount'] = int(position.base_shares * 0.3)
+
+    # 检查买入机会(买回基本仓)
+    elif self._has_bullish_divergence(indicators):
+        if self._is_stabilizing(indicators):
+            target_base = self.position_manager.calculate_position_size(
+                position.ts_code, 'base'
+            )
+            shortage = target_base - position.base_shares
+
+            if shortage > 0:
+                result['has_opportunity'] = True
+                result['signal_type'] = 'negative_t_buy'
+                result['reason'] = '底背离+企稳,买回基本仓'
+                result['confidence'] = 75
+                result['suggested_amount'] = shortage
+
+    return result
+```
+
+---
+
+## 14. 背离检测算法修正 (Critical)
+
+> **重要**: 原算法只比较峰值，现修正为计算MACD柱子面积
+
+### 14.1 修正后的算法
+
+```python
+def detect_divergence(self, price: pd.Series, macd_hist: pd.Series,
+                     divergence_type: str = 'bullish') -> Tuple[bool, Dict]:
+    """
+    检测背离 - 使用面积计算法
+
+    Args:
+        price: 价格序列
+        macd_hist: MACD柱子序列
+        divergence_type: 'bullish'(底背离) 或 'bearish'(顶背离)
+
+    Returns:
+        (是否背离, 详细信息)
+    """
+    # 1. 找出所有波段
+    segments = self._find_macd_segments(macd_hist, divergence_type)
+
+    if len(segments) < 2:
+        return False, {}
+
+    # 2. 取最近两个波段
+    prev_segment = segments[-2]
+    last_segment = segments[-1]
+
+    # 3. 计算MACD柱子面积
+    prev_area = self._calculate_macd_area(
+        macd_hist,
+        prev_segment['start'],
+        prev_segment['end']
+    )
+    last_area = self._calculate_macd_area(
+        macd_hist,
+        last_segment['start'],
+        last_segment['end']
+    )
+
+    # 4. 比较价格和面积
+    if divergence_type == 'bullish':
+        # 底背离: 价格新低 + MACD面积缩小
+        price_lower = price[last_segment['trough']] < price[prev_segment['trough']]
+        area_smaller = last_area < prev_area
+        is_divergence = price_lower and area_smaller
+    else:
+        # 顶背离: 价格新高 + MACD面积缩小
+        price_higher = price[last_segment['peak']] > price[prev_segment['peak']]
+        area_smaller = last_area < prev_area
+        is_divergence = price_higher and area_smaller
+
+    detail = {
+        'prev_area': prev_area,
+        'last_area': last_area,
+        'area_ratio': last_area / prev_area if prev_area > 0 else 0,
+        'prev_segment': prev_segment,
+        'last_segment': last_segment
+    }
+
+    return is_divergence, detail
+
+def _calculate_macd_area(self, hist: pd.Series,
+                        start_idx: int, end_idx: int) -> float:
+    """
+    计算MACD柱子面积
+
+    面积 = Σ|hist[i]| for i in [start_idx, end_idx]
+    """
+    area = 0.0
+    for i in range(start_idx, end_idx + 1):
+        area += abs(hist.iloc[i])
+    return area
+
+def _find_macd_segments(self, hist: pd.Series,
+                       segment_type: str) -> List[Dict]:
+    """
+    找出MACD柱子的波段
+
+    Args:
+        hist: MACD柱子序列
+        segment_type: 'bullish'(绿柱波段) 或 'bearish'(红柱波段)
+
+    Returns:
+        波段列表, 每个波段包含 {start, end, peak/trough}
+    """
+    segments = []
+    in_segment = False
+    segment_start = None
+
+    for i in range(len(hist)):
+        if segment_type == 'bullish':
+            # 寻找绿柱波段(hist < 0)
+            if hist.iloc[i] < 0:
+                if not in_segment:
+                    segment_start = i
+                    in_segment = True
+            else:
+                if in_segment:
+                    segment_end = i - 1
+                    trough_idx = hist.iloc[segment_start:segment_end+1].idxmin()
+                    segments.append({
+                        'start': segment_start,
+                        'end': segment_end,
+                        'trough': trough_idx
+                    })
+                    in_segment = False
+        else:
+            # 寻找红柱波段(hist > 0)
+            if hist.iloc[i] > 0:
+                if not in_segment:
+                    segment_start = i
+                    in_segment = True
+            else:
+                if in_segment:
+                    segment_end = i - 1
+                    peak_idx = hist.iloc[segment_start:segment_end+1].idxmax()
+                    segments.append({
+                        'start': segment_start,
+                        'end': segment_end,
+                        'peak': peak_idx
+                    })
+                    in_segment = False
+
+    return segments
+```
+
+---
+
+## 15. 空头陷阱识别模块 (新增)
+
+### 15.1 BearTrapDetector 类
+
+```python
+class BearTrapDetector:
+    """
+    空头陷阱识别器
+
+    识别条件:
+    1. 年线向上
+    2. 短期跌破年线
+    3. 快速收回(3-5天内)
+    4. 出现底背离
+    """
+
+    def detect(self, df: pd.DataFrame, indicators: Dict) -> Tuple[bool, str]:
+        """
+        检测空头陷阱
+
+        Returns:
+            (是否是空头陷阱, 详细说明)
+        """
+        reasons = []
+
+        # 1. 检查年线趋势
+        if not self._check_ma250_uptrend(df):
+            return False, "年线未向上"
+        reasons.append("年线向上")
+
+        # 2. 检查是否短期跌破年线
+        if not self._check_recent_break_below_ma(df, days=5):
+            return False, "未发现短期跌破年线"
+        reasons.append("短期跌破年线")
+
+        # 3. 检查是否快速收回
+        if not self._check_quick_recovery(df, days=5):
+            return False, "未快速收回"
+        reasons.append("快速收回")
+
+        # 4. 检查底背离
+        if not self._check_bullish_divergence(indicators):
+            return False, "无底背离"
+        reasons.append("出现底背离")
+
+        return True, " + ".join(reasons)
+
+    def _check_ma250_uptrend(self, df: pd.DataFrame) -> bool:
+        """检查年线是否向上"""
+        ma250 = df['ma250'].tail(20)
+        slope = (ma250.iloc[-1] - ma250.iloc[0]) / len(ma250)
+        return slope > 0
+
+    def _check_recent_break_below_ma(self, df: pd.DataFrame,
+                                    days: int = 5) -> bool:
+        """检查最近是否跌破年线"""
+        recent = df.tail(days)
+        return any(recent['close'] < recent['ma250'])
+
+    def _check_quick_recovery(self, df: pd.DataFrame,
+                             days: int = 5) -> bool:
+        """检查是否快速收回"""
+        recent = df.tail(days)
+        return recent['close'].iloc[-1] > recent['ma250'].iloc[-1]
+```
+
+---
+
+## 16. 配置参数修正
+
+### 16.1 修正后的 config.yaml
+
+```yaml
+# 仓位管理配置
+position:
+  stock_count: 3
+  base_position_per_stock: 0.25
+  mobile_cash_ratio: 0.25
+  max_stocks_temp: 4
+
+# 基本面筛选配置
+fundamental:
+  roe_min: 0.10
+  debt_ratio_max: 0.50
+  pe_excellent: 17
+  pe_acceptable: 30
+  market_cap_min: 5000000000
+  market_cap_max: 50000000000
+
+# 成交量筛选配置
+volume:
+  turnover_rate_min: 0.01
+  turnover_rate_max: 0.03
+  accumulation_turnover_min: 0.05
+  accumulation_turnover_max: 0.10
+
+# 做T策略配置
+t_trading:
+  enabled: true
+  positive_t:
+    buy_confidence_threshold: 75
+    sell_confidence_threshold: 70
+    mobile_ratio: 0.5
+  negative_t:
+    sell_confidence_threshold: 70
+    buy_confidence_threshold: 75
+    base_reduce_ratio: 0.3
+```
+
+---
+
+## 17. 修正后的项目结构
+
+```
+signal_system/
+├── data/
+│   ├── data_fetcher.py
+│   ├── data_cache.py
+│   └── data_cleaner.py
+├── strategy/
+│   ├── base_strategy.py
+│   ├── stock_selector.py
+│   ├── signal_engine.py
+│   ├── indicators.py (修正背离算法)
+│   ├── trend_following_strategy.py
+│   ├── bear_trap_detector.py (新增)
+│   └── volume_price_analyzer.py
+├── position/ (新增模块)
+│   ├── __init__.py
+│   ├── position_manager.py (新增)
+│   ├── position.py (新增)
+│   └── t_trading_strategy.py (新增)
+├── service/
+│   ├── notifier.py
+│   ├── logger.py
+│   └── storage.py
+├── config/
+│   └── config.yaml (修正参数)
+├── tests/
+├── cache/
+├── logs/
+├── output/
+├── main.py
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 18. 总结
 
 本详细设计文档涵盖了第一阶段 Python 核心引擎的所有关键设计：
 
 1. **数据层**: 完整的数据获取和缓存机制
 2. **策略层**: 模块化的策略框架和具体实现
 3. **信号层**: 分钟级信号监控和生成
-4. **服务层**: 通知推送和日志管理
-5. **异常处理**: 完善的异常处理和降级机制
-6. **性能优化**: 并发处理和缓存优化
-7. **测试**: 单元测试和集成测试
-8. **部署**: 完整的部署方案
+4. **仓位管理层** (新增): 3只+25%机动的仓位管理
+5. **做T策略层** (新增): 正T、反T、震荡市做T
+6. **服务层**: 通知推送和日志管理
+7. **异常处理**: 完善的异常处理和降级机制
+8. **性能优化**: 并发处理和缓存优化
+9. **算法修正**: 背离检测改为面积计算
+10. **测试**: 单元测试和集成测试
+11. **部署**: 完整的部署方案
+
+### 18.1 与审查报告的对应
+
+✅ **Critical问题已全部修正**:
+1. ✅ 新增 PositionManager 类 - 实现3只+25%机动
+2. ✅ 新增 TTradingStrategy 类 - 实现正T和反T
+3. ✅ 修正背离检测算法 - 改为面积计算
+
+✅ **Warning问题已全部修正**:
+4. ✅ 新增 BearTrapDetector 类 - 空头陷阱识别
+5. ✅ 修正配置参数 - PE分级、换手率范围
 
 **下一步**: 基于本详细设计编写实施计划
 
 ---
 
+**文档版本**: v2.0 (已根据审查报告修正)
 **文档状态**: ✅ 已完成
-**审核状态**: 待审核
+**审核状态**: 符合知识星球理念
 **下一步**: 编写实施计划
 
