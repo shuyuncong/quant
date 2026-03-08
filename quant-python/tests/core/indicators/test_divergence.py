@@ -43,6 +43,26 @@ class DivergenceDetectorTest(unittest.TestCase):
 
         self.assertEqual(result, "none")
 
+    def test_ignores_single_bar_segments_by_default(self):
+        detector = DivergenceDetector()
+        hist = pd.Series([-0.4, -0.2, 0.1, -0.1, 0.2, -0.3, -0.2, 0.1])
+
+        segments = detector._find_macd_segments(hist, "bullish")
+
+        self.assertEqual(len(segments), 2)
+        self.assertEqual(segments[0]["start"], 0)
+        self.assertEqual(segments[1]["start"], 5)
+
+    def test_supports_single_bar_segments_when_configured(self):
+        detector = DivergenceDetector(min_segment_length=1)
+        hist = pd.Series([-0.4, -0.2, 0.1, -0.1, 0.2, -0.3, -0.2, 0.1])
+
+        segments = detector._find_macd_segments(hist, "bullish")
+
+        self.assertEqual(len(segments), 3)
+        self.assertEqual(segments[1]["start"], 3)
+        self.assertEqual(segments[1]["end"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

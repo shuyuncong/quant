@@ -119,6 +119,47 @@ class StockSelectorTest(unittest.TestCase):
         self.assertEqual(result["candidate_pool"], ["A", "B"])
         self.assertGreaterEqual(result["selected"][0]["score"], result["selected"][1]["score"])
 
+    def test_falls_back_to_strategy_thresholds_when_selector_values_are_absent(self):
+        selector = StockSelector(
+            {
+                "strategy": {
+                    "fundamental": {
+                        "min_roe": 10,
+                        "max_debt_ratio": 50,
+                        "max_pe": 30,
+                        "min_market_cap": 50,
+                        "max_market_cap": 500,
+                    },
+                    "volume": {
+                        "min_turnover_rate": 1,
+                        "max_turnover_rate": 5,
+                        "volume_burst_ratio": 1.5,
+                    },
+                },
+                "selector": {
+                    "near_ma_threshold": 0.05,
+                    "price_change_soft_min": -0.03,
+                    "price_change_soft_max": 0.03,
+                },
+            }
+        )
+
+        record = selector.evaluate(
+            {
+                "ts_code": "FALLBACK",
+                "name": "Fallback",
+                "roe": 12,
+                "debt_ratio": 35,
+                "pe": 20,
+                "market_cap": 120,
+                "avg_turnover": 4.0,
+            },
+            checks=("fundamental", "turnover"),
+        )
+
+        self.assertTrue(record.passed)
+        self.assertEqual(record.passed_checks, ["fundamental", "turnover"])
+
 
 if __name__ == "__main__":
     unittest.main()

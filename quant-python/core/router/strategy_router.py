@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from .strategies import BreakoutStrategy, DefensiveStrategy, MeanReversionStrategy
+from core.position.position_manager import PositionManager
+
+from .strategies import BreakoutStrategy, DefensiveStrategy, MeanReversionStrategy, TrendFollowingStrategy
 
 
 class StrategyRouter:
@@ -17,7 +19,13 @@ class StrategyRouter:
         "BUY": 1,
     }
 
-    def __init__(self):
+    def __init__(self, config: Optional[Dict] = None, position_manager: Optional[PositionManager] = None):
+        self.config = config or {}
+        self.position_manager = position_manager or PositionManager(config=self.config)
+        self.trend_following = TrendFollowingStrategy(
+            position_manager=self.position_manager,
+            config=self.config,
+        )
         self.mean_reversion = MeanReversionStrategy()
         self.defensive = DefensiveStrategy()
         self.breakout = BreakoutStrategy()
@@ -28,6 +36,7 @@ class StrategyRouter:
         candidate_pool: List[Dict],
         positions: Optional[List[Dict]] = None,
         primary_signals: Optional[List[Dict]] = None,
+        portfolio_risk=None,
     ) -> List[Dict]:
         positions = positions or []
         primary_signals = primary_signals or []
@@ -36,6 +45,14 @@ class StrategyRouter:
 
         for stock in candidate_pool:
             current_position = position_lookup.get(stock["ts_code"])
+            trend_signal = self.trend_following.generate(
+                stock,
+                market_status,
+                current_position=current_position,
+                portfolio_risk=portfolio_risk,
+            )
+            if trend_signal:
+                routed_signals.append(trend_signal)
             if market_status == "range":
                 signal = self.mean_reversion.generate(stock, current_position)
                 if signal:

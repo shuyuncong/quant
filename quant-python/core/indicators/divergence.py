@@ -25,6 +25,9 @@ class DivergenceResult:
 class DivergenceDetector:
     """Detect bullish and bearish divergence by MACD histogram area."""
 
+    def __init__(self, min_segment_length: int = 2):
+        self.min_segment_length = max(int(min_segment_length), 1)
+
     def detect(
         self,
         price: pd.Series,
@@ -93,13 +96,20 @@ class DivergenceDetector:
                 continue
 
             if in_segment:
-                segments.append(self._build_segment(hist, segment_start, idx - 1, segment_type))
+                segment = self._build_segment(hist, segment_start, idx - 1, segment_type)
+                if self._is_valid_segment(segment):
+                    segments.append(segment)
                 in_segment = False
 
         if in_segment:
-            segments.append(self._build_segment(hist, segment_start, len(hist) - 1, segment_type))
+            segment = self._build_segment(hist, segment_start, len(hist) - 1, segment_type)
+            if self._is_valid_segment(segment):
+                segments.append(segment)
 
         return segments
+
+    def _is_valid_segment(self, segment: Dict) -> bool:
+        return (segment["end"] - segment["start"] + 1) >= self.min_segment_length
 
     @staticmethod
     def _build_segment(hist: pd.Series, start_idx: int, end_idx: int, segment_type: str) -> Dict:

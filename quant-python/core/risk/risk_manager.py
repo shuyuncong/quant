@@ -35,21 +35,34 @@ class RiskManager:
         self.override_config = self.config.get("manual_overrides", {})
         self.position_config = self.config.get("position", {})
 
-    def evaluate_position(self, profit_pct: float, tech_result: Dict, market_status: str = "range") -> RiskDecision:
+    def evaluate_position(
+        self,
+        profit_pct: float,
+        tech_result: Dict,
+        market_status: str = "range",
+        holding_days: Optional[int] = None,
+        volatility_pct: Optional[float] = None,
+    ) -> RiskDecision:
         reasons: List[str] = []
         flags: List[str] = []
         action = "HOLD"
         suggested_position_change = 0.0
 
-        stop_loss_pct = self.risk_config.get("stop_loss_pct", 0.08)
-        stop_profit_pct = self.risk_config.get("stop_profit_pct", 0.30)
+        stop_loss_pct, stop_profit_pct = self._resolve_dynamic_thresholds(
+            holding_days=holding_days,
+            volatility_pct=volatility_pct,
+        )
 
         if profit_pct <= -stop_loss_pct:
-            reasons.append(f"触发止损阈值 ({profit_pct*100:.2f}%)")
+            reasons.append(
+                f"触发止损阈值({profit_pct * 100:.2f}%, 阈值 {stop_loss_pct * 100:.2f}%)"
+            )
             flags.append("stop_loss")
 
         if profit_pct >= stop_profit_pct:
-            reasons.append(f"触发止盈阈值 ({profit_pct*100:.2f}%)")
+            reasons.append(
+                f"触发止盈阈值({profit_pct * 100:.2f}%, 阈值 {stop_profit_pct * 100:.2f}%)"
+            )
             flags.append("take_profit")
 
         if not tech_result.get("is_above_ma250", True) and tech_result.get("ma250_slope", 0) < 0:
@@ -57,7 +70,7 @@ class RiskManager:
             flags.append("trend_breakdown")
 
         if market_status == "bear" and profit_pct < 0:
-            reasons.append("熊市环境下亏损持仓")
+            reasons.append("熊市环境下亏损持仓承压")
             flags.append("bear_market_pressure")
 
         if reasons:
@@ -101,8 +114,7 @@ class RiskManager:
             reasons.append("总仓位超过人工上限")
             flags.append("manual_exposure_limit")
 
-        only_reduce = self.override_config.get("only_reduce_positions", False)
-        if only_reduce:
+        if self.override_config.get("only_reduce_positions", False):
             reasons.append("当前仅允许减仓，不允许新增")
             flags.append("only_reduce_positions")
 
@@ -115,7 +127,15 @@ class RiskManager:
             and not allow_new_position_when_drawdown_exceeded
         )
 
-        allowed = not (flags and (disallowed_by_drawdown or "manual_disable_new_positions" in flags or "only_reduce_positions" in flags or "manual_exposure_limit" in flags))
+        allowed = not (
+            flags
+            and (
+                disallowed_by_drawdown
+                or "manual_disable_new_positions" in flags
+                or "only_reduce_positions" in flags
+                or "manual_exposure_limit" in flags
+            )
+        )
         action = "ALLOW_NEW_POSITION" if allowed else "BLOCK_NEW_POSITION"
 
         return RiskDecision(
@@ -125,3 +145,25 @@ class RiskManager:
             risk_flags=flags,
             suggested_position_change=0.0,
         )
+
+    def _resolve_dynamic_thresholds(
+        self,
+        holding_days: Optional[int] = None,
+        volatility_pct: Optional[float] = None,
+    ) -> tuple[float, float]:
+        stop_loss_pct = float(self.risk_config.get("stop_loss_pct", 0.08))
+        stop_profit_pct = float(self.risk_config.get("stop_profit_pct", 0.30))
+
+        if holding_days is not None:
+            threshold_days = int(self.risk_config.get("long_holding_days_threshold", 40))
+            if holding_days >= threshold_days:
+                stop_loss_pct *= float(self.risk_config.get("long_holding_stop_loss_multiplier", 1.25))
+                stop_profit_pct *= float(self.risk_config.get("long_holding_stop_profit_multiplier", 1.10))
+
+        if volatility_pct is not None:
+            volatility_threshold = float(self.risk_config.get("high_volatility_threshold_pct", 0.35))
+            if volatility_pct >= volatility_threshold:
+                stop_loss_pct *= float(self.risk_config.get("high_volatility_stop_loss_multiplier", 1.20))
+                stop_profit_pct *= float(self.risk_config.get("high_volatility_stop_profit_multiplier", 1.10))
+
+        return stop_loss_pct, stop_profit_pct

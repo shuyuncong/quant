@@ -35,17 +35,19 @@ class StockSelectionRecord:
 class StockSelector:
     """Filters stocks by fundamentals, turnover and volume-price structure."""
 
+    DEFAULT_CHECKS = ("fundamental", "turnover", "volume_price")
+
     def __init__(self, config: Dict | None = None):
         self.config = config or {}
         self.selector_config = self._resolve_selector_config(self.config)
 
-    def select(self, stock_candidates) -> Dict:
+    def select(self, stock_candidates, checks: tuple[str, ...] | None = None) -> Dict:
         records = self._to_records(stock_candidates)
         selected: List[Dict] = []
         rejected: List[Dict] = []
 
         for record in records:
-            result = self.evaluate(record).to_dict()
+            result = self.evaluate(record, checks=checks).to_dict()
             if result["passed"]:
                 selected.append(result)
             else:
@@ -58,36 +60,33 @@ class StockSelector:
             "candidate_pool": [item["ts_code"] for item in selected],
         }
 
-    def evaluate(self, stock: Dict) -> StockSelectionRecord:
+    def evaluate(self, stock: Dict, checks: tuple[str, ...] | None = None) -> StockSelectionRecord:
+        active_checks = checks or self.DEFAULT_CHECKS
+        check_handlers = {
+            "fundamental": (self._check_fundamental, 40),
+            "turnover": (self._check_turnover, 25),
+            "volume_price": (self._check_volume_price_structure, 35),
+        }
         passed_checks: List[str] = []
         failed_reasons: List[str] = []
         score = 0
 
-        fundamental_ok, fundamental_detail = self._check_fundamental(stock)
-        if fundamental_ok:
-            passed_checks.append("fundamental")
-            score += 40
-        else:
-            failed_reasons.append(fundamental_detail)
+        for check_name in active_checks:
+            if check_name not in check_handlers:
+                raise ValueError(f"Unknown selector check: {check_name}")
 
-        turnover_ok, turnover_detail = self._check_turnover(stock)
-        if turnover_ok:
-            passed_checks.append("turnover")
-            score += 25
-        else:
-            failed_reasons.append(turnover_detail)
-
-        structure_ok, structure_detail = self._check_volume_price_structure(stock)
-        if structure_ok:
-            passed_checks.append("volume_price")
-            score += 35
-        else:
-            failed_reasons.append(structure_detail)
+            check_handler, points = check_handlers[check_name]
+            check_ok, detail = check_handler(stock)
+            if check_ok:
+                passed_checks.append(check_name)
+                score += points
+            else:
+                failed_reasons.append(detail)
 
         return StockSelectionRecord(
             ts_code=stock.get("ts_code", ""),
             name=stock.get("name", ""),
-            passed=fundamental_ok and turnover_ok and structure_ok,
+            passed=len(passed_checks) == len(active_checks),
             score=score,
             passed_checks=passed_checks,
             failed_reasons=failed_reasons,
@@ -164,7 +163,7 @@ class StockSelector:
             "market_cap_min": selector_cfg.get("market_cap_min", fundamental_cfg.get("min_market_cap", 50)),
             "market_cap_max": selector_cfg.get("market_cap_max", fundamental_cfg.get("max_market_cap", 500)),
             "turnover_rate_min": selector_cfg.get("turnover_rate_min", volume_cfg.get("min_turnover_rate", 1)),
-            "turnover_rate_max": selector_cfg.get("turnover_rate_max", 3),
+            "turnover_rate_max": selector_cfg.get("turnover_rate_max", volume_cfg.get("max_turnover_rate", 3)),
             "volume_ratio_min": selector_cfg.get("volume_ratio_min", volume_cfg.get("volume_burst_ratio", 1.5)),
             "near_ma_threshold": selector_cfg.get("near_ma_threshold", 0.05),
             "price_change_soft_min": selector_cfg.get("price_change_soft_min", -0.03),

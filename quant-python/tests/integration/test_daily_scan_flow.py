@@ -15,6 +15,9 @@ from strategy.strategy_engine import StrategyEngine
 
 
 class IntegrationDataFetcher:
+    def __init__(self, turnover_rate=2.0):
+        self.turnover_rate = turnover_rate
+
     def get_stock_list(self):
         return pd.DataFrame([{"ts_code": "000001.SZ", "name": "平安银行"}])
 
@@ -22,11 +25,11 @@ class IntegrationDataFetcher:
         return {"roe": 12.5, "debt_to_assets": 42.0}
 
     def get_daily_basic(self, ts_code):
-        return {"pe": 8.5, "total_mv": 2200000, "turnover_rate": 2.0}
+        return {"pe": 8.5, "total_mv": 2200000, "turnover_rate": self.turnover_rate}
 
     def get_daily_data(self, ts_code, period=300):
         closes = [10 + idx * 0.03 for idx in range(295)] + [18.7, 18.5, 18.4, 18.6, 18.8]
-        turnover = [2.0] * len(closes)
+        turnover = [self.turnover_rate] * len(closes)
         df = pd.DataFrame({"close": closes, "turnover_rate": turnover, "volume": [1000] * len(closes)})
         df.attrs["ts_code"] = ts_code
         return df
@@ -154,6 +157,20 @@ class DailyScanFlowTest(unittest.TestCase):
         self.assertEqual(payload["candidate_pool"][0]["ts_code"], "000001.SZ")
         self.assertEqual(payload["high_priority_trade_signals"][0]["signal_type"], "BUY")
         self.assertEqual(payload["stats"]["risk_alerts_count"], 0)
+
+    def test_daily_scan_stops_before_technical_analysis_when_selector_turnover_rejects(self):
+        engine = StrategyEngine(
+            config=self.config,
+            data_fetcher=IntegrationDataFetcher(turnover_rate=4.0),
+            technical_indicators=IntegrationTechnicalIndicators(),
+        )
+
+        result = engine.run_daily_scan(positions=[])
+
+        self.assertEqual(result["stats"]["fundamental_passed"], 1)
+        self.assertEqual(result["stats"]["volume_passed"], 0)
+        self.assertEqual(result["stats"]["technical_analyzed"], 0)
+        self.assertEqual(result["stats"]["candidate_pool_count"], 0)
 
 
 if __name__ == "__main__":

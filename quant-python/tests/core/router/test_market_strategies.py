@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.router.strategies import BreakoutStrategy, DefensiveStrategy, MeanReversionStrategy
+from core.router.strategies import BreakoutStrategy, DefensiveStrategy, MeanReversionStrategy, TrendFollowingStrategy
 
 
 class MarketStrategiesTest(unittest.TestCase):
@@ -30,6 +30,11 @@ class MarketStrategiesTest(unittest.TestCase):
         signal = MeanReversionStrategy().generate(self.base_stock)
         self.assertEqual(signal["strategy_name"], "mean_reversion")
         self.assertIn(signal["signal_type"], {"BUY", "ADD"})
+
+    def test_trend_following_strategy_supports_bull_market(self):
+        signal = TrendFollowingStrategy().generate(self.base_stock, market_status="bull")
+        self.assertEqual(signal["strategy_name"], "trend_following")
+        self.assertEqual(signal["signal_type"], "BUY")
 
     def test_defensive_strategy_supports_bear(self):
         signal = DefensiveStrategy().generate(self.base_stock)

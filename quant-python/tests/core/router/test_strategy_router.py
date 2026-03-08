@@ -14,7 +14,7 @@ class StrategyRouterTest(unittest.TestCase):
         self.router = StrategyRouter()
         self.stock = {
             "ts_code": "000001.SZ",
-            "name": "平安银行",
+            "name": "Test Bank",
             "current_price": 10.5,
             "selection_score": 72,
             "divergence": "bullish",
@@ -26,14 +26,32 @@ class StrategyRouterTest(unittest.TestCase):
             "is_above_ma250": True,
             "close_above_recent_high": True,
         }
+        self.range_stock = {
+            **self.stock,
+            "selection_score": 45,
+            "ma250_slope": 0.0,
+            "bear_trap": False,
+            "close_above_recent_high": False,
+        }
+        self.breakout_stock = {
+            **self.stock,
+            "selection_score": 60,
+            "divergence": "none",
+            "near_ma250": False,
+            "bear_trap": False,
+        }
 
     def test_routes_range_to_mean_reversion_family(self):
-        signals = self.router.route_signals("range", [self.stock], [])
-        self.assertTrue(any(signal["strategy_name"] == "mean_reversion" for signal in signals))
+        signals = self.router.route_signals("range", [self.range_stock], [])
+        self.assertEqual(signals[0]["strategy_name"], "mean_reversion")
 
     def test_routes_bear_to_defensive(self):
         signals = self.router.route_signals("bear", [self.stock], [])
         self.assertEqual(signals[0]["strategy_name"], "defensive")
+
+    def test_routes_bull_to_breakout_when_breakout_scores_higher(self):
+        signals = self.router.route_signals("bull", [self.breakout_stock], [])
+        self.assertEqual(signals[0]["strategy_name"], "breakout")
 
     def test_resolves_conflict_by_action_priority(self):
         signals = self.router.resolve_conflicts(

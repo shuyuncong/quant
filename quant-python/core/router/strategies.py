@@ -4,6 +4,100 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
+from core.position.position_manager import PositionManager
+
+
+class TrendFollowingStrategy:
+    """Primary trend-following entry strategy."""
+
+    name = "trend_following"
+
+    def __init__(self, position_manager: Optional[PositionManager] = None, config: Optional[Dict] = None):
+        self.config = config or {}
+        self.position_manager = position_manager or PositionManager(config=self.config)
+
+    def generate(
+        self,
+        stock: Dict,
+        market_status: str,
+        current_position: Optional[Dict] = None,
+        portfolio_risk=None,
+    ) -> Optional[Dict]:
+        if market_status == "bear":
+            return None
+        if current_position is None and portfolio_risk and not portfolio_risk.allowed:
+            return None
+        if current_position is not None and self.config.get("manual_overrides", {}).get("only_reduce_positions", False):
+            return None
+
+        signals = []
+        score = int(stock.get("selection_score", 0))
+
+        if stock.get("ma250_slope", 0) > 0:
+            signals.append("年线向上")
+            score += 15
+
+        if stock.get("near_ma250") and stock.get("is_above_ma250"):
+            signals.append("回调至年线附近")
+            score += 12
+
+        if stock.get("divergence") == "bullish":
+            signals.append("底背离")
+            score += 18
+
+        if stock.get("bear_trap"):
+            signals.append("空头陷阱回收")
+            score += 15
+
+        if stock.get("macd_golden_cross"):
+            signals.append("MACD金叉")
+            score += 10
+
+        if stock.get("volume_ratio", 0) > 1.5:
+            signals.append("放量")
+            score += 8
+
+        if stock.get("price_change_pct", 0) < 0 and stock.get("volume_ratio", 0) <= 1.2:
+            signals.append("缩量下跌")
+            score += 6
+
+        threshold = 75 if market_status == "bull" else 85
+        if score < threshold:
+            return None
+
+        if current_position is None:
+            signal_type = "BUY"
+            action = "买入"
+            suggested_ratio = self.position_manager.base_exposure_ratio()
+            reason = "趋势策略买入点"
+        else:
+            signal_type = "ADD"
+            action = "加仓"
+            suggested_ratio = self.position_manager.mobile_exposure_ratio()
+            reason = "上涨趋势中的回调加仓"
+
+        if suggested_ratio <= 0:
+            return None
+
+        return {
+            "ts_code": stock["ts_code"],
+            "name": stock["name"],
+            "price": stock["current_price"],
+            "signal_type": signal_type,
+            "action": action,
+            "strategy_name": self.name,
+            "market_status": market_status,
+            "signals": signals,
+            "score": score,
+            "roe": stock.get("roe", 0),
+            "pe": stock.get("pe", 0),
+            "market_cap": stock.get("market_cap", 0),
+            "reason": reason,
+            "explanation": f"{action}依据: " + " + ".join(signals),
+            "suggested_position_change": round(suggested_ratio, 4),
+            "risk_flags": [],
+        }
+
 
 class MeanReversionStrategy:
     """Range-market mean reversion strategy."""

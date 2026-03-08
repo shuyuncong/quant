@@ -2,7 +2,7 @@
 
 # 兼容旧版 signal_system 的数据源配置
 data_source:
-  tushare_token: "你的Tushare_Token"
+  tushare_token: "83b68f9509d340d740a27abf45a2d989b1002d303749a0e01b443ce6"
   use_cache: true
   cache_dir: "./cache"
 
@@ -44,15 +44,7 @@ strategy:
   candidate_pool_size: 30
 
 selector:
-  roe_min: 10
-  debt_ratio_max: 50
   pe_excellent_max: 17
-  pe_acceptable_max: 30
-  market_cap_min: 50
-  market_cap_max: 500
-  turnover_rate_min: 1
-  turnover_rate_max: 3
-  volume_ratio_min: 1.5
   near_ma_threshold: 0.05
   price_change_soft_min: -0.03
   price_change_soft_max: 0.03
@@ -79,6 +71,12 @@ position:
 risk:
   stop_loss_pct: 0.08
   stop_profit_pct: 0.30
+  long_holding_days_threshold: 40
+  long_holding_stop_loss_multiplier: 1.25
+  long_holding_stop_profit_multiplier: 1.10
+  high_volatility_threshold_pct: 0.35
+  high_volatility_stop_loss_multiplier: 1.20
+  high_volatility_stop_profit_multiplier: 1.10
   max_portfolio_drawdown_pct: 0.20
   max_single_day_drawdown_pct: 0.02
   allow_new_position_when_drawdown_exceeded: false
