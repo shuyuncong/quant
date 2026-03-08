@@ -10,7 +10,13 @@ from .strategies import BreakoutStrategy, DefensiveStrategy, MeanReversionStrate
 
 
 class StrategyRouter:
-    """Routes signals according to market regime and resolves conflicts."""
+    """按市场状态选择可用策略，并解决同一股票的信号冲突。
+
+    设计约束:
+    - bull: 优先做趋势和突破
+    - range: 允许趋势、均值回归、突破并行尝试
+    - bear: 只允许防守型动作
+    """
 
     ACTION_PRIORITY = {
         "SELL": 4,
@@ -38,6 +44,7 @@ class StrategyRouter:
         primary_signals: Optional[List[Dict]] = None,
         portfolio_risk=None,
     ) -> List[Dict]:
+        """为候选池生成最终交易信号。"""
         positions = positions or []
         primary_signals = primary_signals or []
         position_lookup = {position["ts_code"]: position for position in positions}
@@ -45,15 +52,16 @@ class StrategyRouter:
 
         for stock in candidate_pool:
             current_position = position_lookup.get(stock["ts_code"])
-            trend_signal = self.trend_following.generate(
-                stock,
-                market_status,
-                current_position=current_position,
-                portfolio_risk=portfolio_risk,
-            )
-            if trend_signal:
-                routed_signals.append(trend_signal)
             if market_status == "range":
+                # 震荡市需要多策略并行尝试，最后再靠优先级和分数选优。
+                trend_signal = self.trend_following.generate(
+                    stock,
+                    market_status,
+                    current_position=current_position,
+                    portfolio_risk=portfolio_risk,
+                )
+                if trend_signal:
+                    routed_signals.append(trend_signal)
                 signal = self.mean_reversion.generate(stock, current_position)
                 if signal:
                     routed_signals.append(signal)
@@ -66,13 +74,37 @@ class StrategyRouter:
                 if signal:
                     routed_signals.append(signal)
             else:
-                breakout_signal = self.breakout.generate(stock, current_position)
-                if breakout_signal:
-                    routed_signals.append(breakout_signal)
+                # bull 市里，明显突破 setup 直接优先跑 breakout，
+                # 这样可以避免同一只票先算一遍趋势、再算一遍突破。
+                if self._is_breakout_setup_candidate(stock):
+                    breakout_signal = self.breakout.generate(stock, current_position)
+                    if breakout_signal:
+                        routed_signals.append(breakout_signal)
+                        continue
+
+                trend_signal = self.trend_following.generate(
+                    stock,
+                    market_status,
+                    current_position=current_position,
+                    portfolio_risk=portfolio_risk,
+                )
+                if trend_signal:
+                    routed_signals.append(trend_signal)
 
         return self.resolve_conflicts(routed_signals)
 
+    @staticmethod
+    def _is_breakout_setup_candidate(stock: Dict) -> bool:
+        """判断是否属于值得优先尝试 breakout 的候选。"""
+        return bool(stock.get("close_above_recent_high")) and float(stock.get("volume_ratio", 0.0)) >= 1.6
+
     def resolve_conflicts(self, signals: List[Dict]) -> List[Dict]:
+        """同一股票只保留一条最终信号。
+
+        规则:
+        - 先比较动作优先级: SELL > REDUCE > ADD > BUY
+        - 动作相同再比较 score
+        """
         resolved: Dict[str, Dict] = {}
         for signal in signals:
             ts_code = signal["ts_code"]

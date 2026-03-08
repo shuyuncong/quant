@@ -31,6 +31,8 @@ strategy:
     ma250_distance_threshold: 0.05
 
   volume:
+    # StockSelector fundamentals/turnover defaults are sourced from strategy.volume.
+    # Keep turnover and volume-burst thresholds here as the single source of truth.
     min_turnover_rate: 1
     max_turnover_rate: 5
     volume_burst_ratio: 1.5
@@ -44,6 +46,8 @@ strategy:
   candidate_pool_size: 30
 
 selector:
+  # selector only keeps structure-specific tuning.
+  # fundamental and turnover thresholds inherit from strategy.fundamental / strategy.volume.
   pe_excellent_max: 17
   near_ma_threshold: 0.05
   price_change_soft_min: -0.03

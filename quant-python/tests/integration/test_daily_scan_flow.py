@@ -83,14 +83,6 @@ class DailyScanFlowTest(unittest.TestCase):
                 "candidate_pool_size": 30,
             },
             "selector": {
-                "roe_min": 10,
-                "debt_ratio_max": 50,
-                "pe_acceptable_max": 30,
-                "market_cap_min": 50,
-                "market_cap_max": 500,
-                "turnover_rate_min": 1,
-                "turnover_rate_max": 3,
-                "volume_ratio_min": 1.5,
                 "near_ma_threshold": 0.05,
                 "price_change_soft_min": -0.03,
                 "price_change_soft_max": 0.03,
@@ -161,7 +153,7 @@ class DailyScanFlowTest(unittest.TestCase):
     def test_daily_scan_stops_before_technical_analysis_when_selector_turnover_rejects(self):
         engine = StrategyEngine(
             config=self.config,
-            data_fetcher=IntegrationDataFetcher(turnover_rate=4.0),
+            data_fetcher=IntegrationDataFetcher(turnover_rate=6.0),
             technical_indicators=IntegrationTechnicalIndicators(),
         )
 

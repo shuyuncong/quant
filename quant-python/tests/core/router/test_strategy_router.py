@@ -40,6 +40,11 @@ class StrategyRouterTest(unittest.TestCase):
             "near_ma250": False,
             "bear_trap": False,
         }
+        self.trend_stock = {
+            **self.stock,
+            "close_above_recent_high": False,
+            "volume_ratio": 1.4,
+        }
 
     def test_routes_range_to_mean_reversion_family(self):
         signals = self.router.route_signals("range", [self.range_stock], [])
@@ -52,6 +57,10 @@ class StrategyRouterTest(unittest.TestCase):
     def test_routes_bull_to_breakout_when_breakout_scores_higher(self):
         signals = self.router.route_signals("bull", [self.breakout_stock], [])
         self.assertEqual(signals[0]["strategy_name"], "breakout")
+
+    def test_routes_bull_to_trend_when_not_breakout_setup(self):
+        signals = self.router.route_signals("bull", [self.trend_stock], [])
+        self.assertEqual(signals[0]["strategy_name"], "trend_following")
 
     def test_resolves_conflict_by_action_priority(self):
         signals = self.router.resolve_conflicts(

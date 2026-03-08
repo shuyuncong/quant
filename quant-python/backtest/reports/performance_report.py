@@ -23,7 +23,14 @@ from .records import (
 
 
 class PerformanceReportBuilder:
-    """Builds standardized backtest reports and export payloads."""
+    """标准化回测报告构建器。
+
+    它负责把引擎产出的原始结果整理成统一结构，并额外生成:
+    - 指标汇总
+    - 交易/信号/持仓标准记录
+    - 文件共享 payload
+    - REST API 映射 payload
+    """
 
     def __init__(self, format_version: str = "v1"):
         self.format_version = format_version
@@ -47,6 +54,7 @@ class PerformanceReportBuilder:
         ending_position: Optional[Dict[str, Any]] = None,
         regime_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        """构建完整标准报告。"""
         signal_records = [
             SignalRecord.from_payload(signal, index=index, default_ts_code=ts_code)
             for index, signal in enumerate(signals or [])
@@ -110,11 +118,20 @@ class PerformanceReportBuilder:
         equity_curve: List[Dict[str, Any]],
         signal_records: List[SignalRecord],
     ) -> Dict[str, Any]:
+        """计算扩展指标。
+
+        除基础收益指标外，还会补充:
+        - `turnover_rate`: 交易额 / 平均权益
+        - `signal_hit_rate`: 入场信号中最终盈利的占比
+        - `sharpe_ratio`: 基于日收益序列的年化 Sharpe
+        - `calmar_ratio`: 年化收益 / 最大回撤
+        """
         equity_frame = pd.DataFrame(equity_curve)
         average_equity = float(equity_frame["equity"].mean()) if not equity_frame.empty else 0.0
         turnover_notional = sum(abs(float(item.get("notional", 0.0))) for item in raw_trades)
         turnover_rate = (turnover_notional / average_equity) if average_equity else 0.0
 
+        # 命中率只看入场类信号，因为它们才对应“开新仓或加仓是否有效”。
         entry_signals = [record for record in signal_records if record.signal_type in {"BUY", "ADD"}]
         profitable_trades = [record for record in trade_records if record.pnl > 0]
         signal_hit_rate = (len(profitable_trades) / len(entry_signals)) if entry_signals else 0.0
@@ -158,12 +175,14 @@ class PerformanceReportBuilder:
         return metrics
 
     def export_json_report(self, report: Dict[str, Any], output_path: str) -> None:
+        """导出 JSON 报告。"""
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as handle:
             json.dump(report, handle, ensure_ascii=False, indent=2, default=str)
 
     def export_trade_csv(self, trades: Iterable[Dict[str, Any]], output_path: str) -> None:
+        """导出交易明细 CSV，方便手工审阅。"""
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         rows = list(trades)
@@ -191,6 +210,7 @@ class PerformanceReportBuilder:
                 writer.writerow({field: row.get(field) for field in fieldnames})
 
     def export_bundle(self, report: Dict[str, Any], output_path: str) -> Dict[str, str]:
+        """把报告拆成 JSON/CSV 多文件输出。"""
         json_path = Path(output_path)
         self.export_json_report(report, str(json_path))
 
@@ -223,6 +243,7 @@ class PerformanceReportBuilder:
         }
 
     def build_file_share_bundle(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        """构建适合文件共享场景的结构化 payload。"""
         return {
             "format_version": self.format_version,
             "channel": "file_share",
@@ -252,6 +273,7 @@ class PerformanceReportBuilder:
         }
 
     def build_rest_api_mapping(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        """构建未来 REST API 入库时的资源映射。"""
         run_id = report["run"]["run_id"]
         return {
             "format_version": self.format_version,
@@ -278,6 +300,7 @@ class PerformanceReportBuilder:
 
     @staticmethod
     def generate_run_id(prefix: str = "bt") -> str:
+        """生成一次回测运行的唯一 ID。"""
         return f"{prefix}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S_%f')}"
 
     def _build_trade_records(
@@ -286,6 +309,7 @@ class PerformanceReportBuilder:
         closed_trades: List[Dict[str, Any]],
         ts_code: str,
     ) -> List[BacktestTrade]:
+        """把闭合交易转成标准记录对象。"""
         records = []
         for payload in closed_trades:
             records.append(
@@ -310,6 +334,7 @@ class PerformanceReportBuilder:
         return records
 
     def _build_position_snapshots(self, ending_position: Optional[Dict[str, Any]], ts_code: str) -> List[PositionSnapshot]:
+        """只在期末仍有持仓时生成持仓快照。"""
         if not ending_position or not ending_position.get("shares"):
             return []
         return [
@@ -328,6 +353,7 @@ class PerformanceReportBuilder:
         trade_records: List[BacktestTrade],
         signal_records: List[SignalRecord],
     ) -> Dict[str, Dict[str, Any]]:
+        """按市场状态拆分交易和信号表现。"""
         regimes = sorted({
             record.regime for record in trade_records if record.regime
         } | {
@@ -354,6 +380,7 @@ class PerformanceReportBuilder:
 
     @staticmethod
     def _as_iso(value: Any) -> str:
+        """把任意时间值转换成 ISO 字符串。"""
         if value is None:
             return ""
         if isinstance(value, datetime):

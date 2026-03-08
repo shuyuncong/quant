@@ -10,7 +10,11 @@ import pandas as pd
 
 
 class ParameterScanner:
-    """Runs a constrained parameter scan and flags overfitting risk."""
+    """受限参数扫描器。
+
+    它不是无限搜索，而是在组合数和样本内外差异上加 guardrail，
+    目标是尽快找出“更稳健”的参数，而不是仅仅找最高收益。
+    """
 
     def __init__(self, engine_cls, engine_config: Optional[Dict[str, Any]] = None):
         self.engine_cls = engine_cls
@@ -30,6 +34,7 @@ class ParameterScanner:
         score_field: str = "annual_return",
         regime_scope: str = "all",
     ) -> Dict[str, Any]:
+        """执行一次参数扫描，并输出稳健性比较结果。"""
         combinations = self._build_combinations(param_grid)
         in_sample, out_of_sample = self._split_price_data(price_data, split_ratio)
         results = []
@@ -54,6 +59,7 @@ class ParameterScanner:
                 regime_scope=regime_scope,
             ) if not out_of_sample.empty else None
 
+            # 样本内高分但样本外失真太大，会被打上过拟合风险标记。
             in_score = float(in_result["summary"].get(score_field, 0.0) or 0.0)
             out_score = float(out_result["summary"].get(score_field, 0.0) or 0.0) if out_result else 0.0
             generalization_gap = in_score - out_score
@@ -128,6 +134,7 @@ class ParameterScanner:
         strategy_name: str,
         regime_scope: str,
     ) -> Dict[str, Any]:
+        """在给定参数下执行一次完整回测。"""
         engine = self.engine_cls(config=config)
         signals = strategy.generate_signals(price_data)
         return engine.run(
@@ -139,6 +146,7 @@ class ParameterScanner:
         )
 
     def _build_combinations(self, param_grid: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+        """生成参数组合，并限制最大组合数。"""
         if not param_grid:
             return [{}]
         keys = list(param_grid.keys())
@@ -152,6 +160,7 @@ class ParameterScanner:
 
     @staticmethod
     def _split_price_data(price_data: pd.DataFrame, split_ratio: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """把数据切成样本内和样本外两段。"""
         if price_data.empty:
             raise ValueError("price_data must not be empty")
         ratio = min(max(split_ratio, 0.5), 0.9)
@@ -162,6 +171,7 @@ class ParameterScanner:
 
     @staticmethod
     def _apply_params(base_config: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Any]:
+        """把点路径参数写回配置副本，例如 `strategy.ma_period=120`。"""
         effective_config = deepcopy(base_config)
         for key, value in params.items():
             current = effective_config
@@ -173,6 +183,7 @@ class ParameterScanner:
 
     @staticmethod
     def _stringify_index(frame: pd.DataFrame, first: bool) -> Optional[str]:
+        """把 DataFrame 边界时间转成可序列化字符串。"""
         if frame.empty:
             return None
         row = frame.iloc[0] if first else frame.iloc[-1]

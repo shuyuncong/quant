@@ -8,7 +8,10 @@ from core.position.position_manager import PositionManager
 
 
 class TrendFollowingStrategy:
-    """Primary trend-following entry strategy."""
+    """趋势跟随策略。
+
+    目标是抓住“长期趋势未坏、短期回踩后重新启动”的买点。
+    """
 
     name = "trend_following"
 
@@ -23,6 +26,7 @@ class TrendFollowingStrategy:
         current_position: Optional[Dict] = None,
         portfolio_risk=None,
     ) -> Optional[Dict]:
+        """根据单只股票上下文生成趋势型 BUY / ADD 信号。"""
         if market_status == "bear":
             return None
         if current_position is None and portfolio_risk and not portfolio_risk.allowed:
@@ -31,6 +35,7 @@ class TrendFollowingStrategy:
             return None
 
         signals = []
+        # selector 给的是基础分，这里再叠加趋势确认信号。
         score = int(stock.get("selection_score", 0))
 
         if stock.get("ma250_slope", 0) > 0:
@@ -65,6 +70,7 @@ class TrendFollowingStrategy:
         if score < threshold:
             return None
 
+        # 当前无仓位时是开仓，有仓位时才允许加仓。
         if current_position is None:
             signal_type = "BUY"
             action = "买入"
@@ -100,11 +106,12 @@ class TrendFollowingStrategy:
 
 
 class MeanReversionStrategy:
-    """Range-market mean reversion strategy."""
+    """震荡市均值回归策略。"""
 
     name = "mean_reversion"
 
     def generate(self, stock: Dict, current_position: Optional[Dict] = None) -> Optional[Dict]:
+        """在区间震荡中寻找回踩后的反弹机会。"""
         score = int(stock.get("selection_score", 0))
         reasons = []
 
@@ -143,11 +150,15 @@ class MeanReversionStrategy:
 
 
 class DefensiveStrategy:
-    """Bear-market defensive strategy."""
+    """熊市防守策略。
+
+    核心目标不是进攻收益，而是限制回撤和控制试错仓位。
+    """
 
     name = "defensive"
 
     def generate(self, stock: Dict, current_position: Optional[Dict] = None) -> Optional[Dict]:
+        """在熊市环境下生成 REDUCE 或小仓位 BUY。"""
         score = 50
         reasons = []
 
@@ -202,11 +213,15 @@ class DefensiveStrategy:
 
 
 class BreakoutStrategy:
-    """Breakout strategy for range-end or trend ignition setups."""
+    """突破策略。
+
+    关注“价格站上近期高点 + 量能确认”的启动形态。
+    """
 
     name = "breakout"
 
     def generate(self, stock: Dict, current_position: Optional[Dict] = None) -> Optional[Dict]:
+        """当突破条件成立时生成 BUY / ADD。"""
         score = int(stock.get("selection_score", 0))
         reasons = []
 

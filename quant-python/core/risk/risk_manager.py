@@ -8,7 +8,14 @@ from typing import Dict, List, Optional
 
 @dataclass(frozen=True)
 class RiskDecision:
-    """Structured risk evaluation result."""
+    """风控评估结果。
+
+    - `allowed`: 是否允许执行当前动作
+    - `action`: 风控建议，例如 HOLD / SELL / REDUCE
+    - `reasons`: 面向日志和通知的人类可读原因
+    - `risk_flags`: 稳定的机器可读标签
+    - `suggested_position_change`: 建议仓位变化比例，负数表示减仓
+    """
 
     allowed: bool
     action: str
@@ -17,6 +24,7 @@ class RiskDecision:
     suggested_position_change: float = 0.0
 
     def to_dict(self) -> Dict:
+        """转换成可序列化字典。"""
         return {
             "allowed": self.allowed,
             "action": self.action,
@@ -27,7 +35,12 @@ class RiskDecision:
 
 
 class RiskManager:
-    """Evaluates position and portfolio level risk constraints."""
+    """风控管理器。
+
+    负责两层判断:
+    - 持仓级: 单个仓位是否需要 SELL / REDUCE
+    - 组合级: 当前组合是否还能继续开新仓
+    """
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
@@ -43,11 +56,13 @@ class RiskManager:
         holding_days: Optional[int] = None,
         volatility_pct: Optional[float] = None,
     ) -> RiskDecision:
+        """评估单个持仓的风险状态。"""
         reasons: List[str] = []
         flags: List[str] = []
         action = "HOLD"
         suggested_position_change = 0.0
 
+        # 动态阈值的目的，是避免所有股票都套用完全一样的止损/止盈标准。
         stop_loss_pct, stop_profit_pct = self._resolve_dynamic_thresholds(
             holding_days=holding_days,
             volatility_pct=volatility_pct,
@@ -90,6 +105,7 @@ class RiskManager:
         )
 
     def evaluate_portfolio(self, portfolio_stats: Optional[Dict] = None) -> RiskDecision:
+        """评估组合级约束，决定当前是否允许新增仓位。"""
         portfolio_stats = portfolio_stats or {}
         reasons: List[str] = []
         flags: List[str] = []
@@ -151,6 +167,12 @@ class RiskManager:
         holding_days: Optional[int] = None,
         volatility_pct: Optional[float] = None,
     ) -> tuple[float, float]:
+        """根据持仓时间和波动率调整止损/止盈阈值。
+
+        调整思路:
+        - 持仓时间越长，允许的正常波动可以略大
+        - 波动率越高，阈值也应适度放宽，避免高波动标的被过度敏感处理
+        """
         stop_loss_pct = float(self.risk_config.get("stop_loss_pct", 0.08))
         stop_profit_pct = float(self.risk_config.get("stop_profit_pct", 0.30))
 

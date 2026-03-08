@@ -10,7 +10,10 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class StockSelectionRecord:
-    """One stock selection outcome."""
+    """单只股票在某一轮选股中的结果。
+
+    `data` 保留原始股票记录，方便后续阶段继续复用，不需要重新拼装。
+    """
 
     ts_code: str
     name: str
@@ -21,6 +24,7 @@ class StockSelectionRecord:
     data: Dict
 
     def to_dict(self) -> Dict:
+        """转换成便于序列化和测试断言的字典。"""
         return {
             "ts_code": self.ts_code,
             "name": self.name,
@@ -33,7 +37,13 @@ class StockSelectionRecord:
 
 
 class StockSelector:
-    """Filters stocks by fundamentals, turnover and volume-price structure."""
+    """三条腿选股器。
+
+    三条腿分别是:
+    - fundamental: 基本面质量
+    - turnover: 活跃度区间
+    - volume_price: 量价结构是否具备启动基础
+    """
 
     DEFAULT_CHECKS = ("fundamental", "turnover", "volume_price")
 
@@ -42,6 +52,10 @@ class StockSelector:
         self.selector_config = self._resolve_selector_config(self.config)
 
     def select(self, stock_candidates, checks: tuple[str, ...] | None = None) -> Dict:
+        """批量执行选股。
+
+        `checks` 允许分阶段调用，例如只跑 fundamental 或 turnover。
+        """
         records = self._to_records(stock_candidates)
         selected: List[Dict] = []
         rejected: List[Dict] = []
@@ -61,6 +75,7 @@ class StockSelector:
         }
 
     def evaluate(self, stock: Dict, checks: tuple[str, ...] | None = None) -> StockSelectionRecord:
+        """评估单只股票是否通过指定检查项。"""
         active_checks = checks or self.DEFAULT_CHECKS
         check_handlers = {
             "fundamental": (self._check_fundamental, 40),
@@ -94,6 +109,14 @@ class StockSelector:
         )
 
     def _check_fundamental(self, stock: Dict) -> tuple[bool, str]:
+        """基本面检查。
+
+        关键参数:
+        - `roe_min`: 盈利能力下限
+        - `debt_ratio_max`: 负债率上限
+        - `pe_acceptable_max`: 估值上限
+        - `market_cap_min/max`: 市值区间
+        """
         cfg = self.selector_config
         roe = stock.get("roe")
         debt_ratio = stock.get("debt_ratio")
@@ -111,6 +134,10 @@ class StockSelector:
         return True, "基本面通过"
 
     def _check_turnover(self, stock: Dict) -> tuple[bool, str]:
+        """换手率检查。
+
+        `avg_turnover` 优先于单日 `turnover_rate`，因为它更能代表近期真实活跃度。
+        """
         cfg = self.selector_config
         turnover = stock.get("avg_turnover", stock.get("turnover_rate"))
         if turnover is None:
@@ -122,6 +149,10 @@ class StockSelector:
         return True, "换手率通过"
 
     def _check_volume_price_structure(self, stock: Dict) -> tuple[bool, str]:
+        """量价结构检查。
+
+        这里不直接判断“是否可以买”，而是判断是否具备继续进入策略路由的基础。
+        """
         cfg = self.selector_config
         volume_ratio = stock.get("volume_ratio", 0.0)
         price_change_pct = stock.get("price_change_pct", 0.0)
@@ -144,17 +175,25 @@ class StockSelector:
 
     @staticmethod
     def _to_records(stock_candidates) -> List[Dict]:
+        """兼容 DataFrame 和 list[dict] 两种输入格式。"""
         if isinstance(stock_candidates, pd.DataFrame):
             return stock_candidates.to_dict("records")
         return list(stock_candidates)
 
     @staticmethod
     def _resolve_selector_config(config: Dict) -> Dict:
+        """解析 selector 配置。
+
+        当前约定:
+        - `strategy.fundamental` / `strategy.volume` 是基础阈值来源
+        - `selector` 只覆盖 selector 自己特有或需要微调的参数
+        """
         selector_cfg = (config or {}).get("selector", {})
         strategy_cfg = (config or {}).get("strategy", {})
         fundamental_cfg = strategy_cfg.get("fundamental", {})
         volume_cfg = strategy_cfg.get("volume", {})
 
+        # 结构类参数放在 selector.*，基础阈值优先继承 strategy.*，兼容旧配置。
         return {
             "roe_min": selector_cfg.get("roe_min", fundamental_cfg.get("min_roe", 10)),
             "debt_ratio_max": selector_cfg.get("debt_ratio_max", fundamental_cfg.get("max_debt_ratio", 50)),

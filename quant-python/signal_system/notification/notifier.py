@@ -16,6 +16,7 @@ class NotificationService:
     """通知服务"""
 
     def __init__(self, config):
+        """初始化通知服务配置。"""
         self.config = config
         self.wechat_config = config.get('notification', {}).get('wechat', {})
         self.email_config = config.get('notification', {}).get('email', {})
@@ -31,6 +32,7 @@ class NotificationService:
         Returns:
             bool: 是否发送成功
         """
+        # 企业微信是首选通知出口，未启用时直接短路。
         if not self.wechat_config.get('enabled', False):
             logger.info("企业微信通知未启用")
             return False
@@ -43,6 +45,7 @@ class NotificationService:
         try:
             import requests
 
+            # 同一份内容按不同消息类型封装，避免上层关心 webhook payload 细节。
             if msg_type == 'markdown':
                 data = {
                     "msgtype": "markdown",
@@ -84,6 +87,7 @@ class NotificationService:
         Returns:
             bool: 是否发送成功
         """
+        # 邮件是补充通知渠道，通常用于保存更完整的格式化报告。
         if not self.email_config.get('enabled', False):
             logger.info("邮件通知未启用")
             return False
@@ -124,6 +128,7 @@ class NotificationService:
         Returns:
             str: 格式化的报告内容
         """
+        # 先整理成统一 payload，再做文案渲染，减少对 scan_result 内部结构的直接耦合。
         payload = self.build_daily_payload(scan_result)
         market_status_map = {
             'bull': '🐂 牛市',
@@ -159,6 +164,7 @@ class NotificationService:
 ---
 """
 
+        # 候选池和信号都只展示前几项，避免通知正文过长。
         if payload['candidate_pool']:
             content += "\n## 📋 候选池\n\n"
             for i, candidate in enumerate(payload['candidate_pool'], 1):
@@ -208,6 +214,7 @@ class NotificationService:
         else:
             content += "\n## 🔴 卖出信号\n\n暂无卖出信号\n\n"
 
+        # 高优先级信号把买卖、做T、风险提示统一排序后再截断展示。
         if payload['high_priority_trade_signals']:
             content += "\n## 🚨 高优先级交易信号\n\n"
             for i, signal in enumerate(payload['high_priority_trade_signals'], 1):
@@ -237,6 +244,7 @@ class NotificationService:
 
     def build_daily_payload(self, scan_result):
         """构建统一通知消息结构。"""
+        # 通知层只保留稳定字段，避免直接透传整份扫描结果导致格式漂移。
         candidate_pool = []
         for item in scan_result.get('candidate_pool', [])[:5]:
             candidate_pool.append({
@@ -248,6 +256,7 @@ class NotificationService:
             })
 
         trade_signals = scan_result.get('trade_signals', [])
+        # 这里用 score 做一次粗筛，只把最值得先处理的信号放到顶部摘要里。
         high_priority_trade_signals = [
             signal for signal in trade_signals
             if signal.get('score', 0) >= 85
@@ -278,6 +287,7 @@ class NotificationService:
             logger.error("扫描结果为空，无法发送报告")
             return False
 
+        # 报告只渲染一次，再分发到不同渠道，避免两套文案长期漂移。
         content = self.format_signal_report(scan_result)
 
         wechat_success = self.send_wechat(content, msg_type='markdown')

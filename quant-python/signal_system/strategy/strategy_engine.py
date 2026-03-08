@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 class StrategyEngine:
+    """日常扫描主引擎。
+
+    负责把数据准备、选股预筛、技术分析、市场状态判断、策略路由、
+    持仓退出检查和做 T 分析串成一条完整流程。
+    """
+
     def __init__(self, config, data_fetcher, technical_indicators):
         self.config = config
         self.data_fetcher = data_fetcher
@@ -36,6 +42,7 @@ class StrategyEngine:
         )
 
     def build_selection_inputs(self, stock_list):
+        """把股票列表扩充成 selector 可直接消费的输入记录。"""
         logger.info("Preparing selection inputs: %s", len(stock_list))
 
         technical_config = self.config.get("strategy", {}).get("technical", {})
@@ -50,9 +57,11 @@ class StrategyEngine:
                 daily_basic = self.data_fetcher.get_daily_basic(ts_code)
                 df = self.data_fetcher.get_daily_data(ts_code, period=analysis_period)
 
+                # 数据不完整时直接跳过，避免后续 selector 和技术分析出现无意义噪声。
                 if financial is None or daily_basic is None or df is None or df.empty or len(df) < 20:
                     continue
 
+                # 优先使用近 30 日平均换手率；拿不到时再退回单日换手率。
                 if "turnover_rate" in df.columns:
                     avg_turnover = float(df["turnover_rate"].tail(30).mean())
                 else:
@@ -80,6 +89,7 @@ class StrategyEngine:
         return selection_inputs
 
     def analyze_technical(self, stock_codes):
+        """对预筛后的股票补齐 router 和 risk manager 需要的技术面字段。"""
         logger.info("Starting technical analysis for %s stocks", len(stock_codes))
 
         tech_config = self.config["strategy"]["technical"]
@@ -118,6 +128,7 @@ class StrategyEngine:
         return analyzed_stocks
 
     def judge_market_status(self):
+        """调用市场状态引擎，统一返回 bull / range / bear。"""
         try:
             decision = self.regime_engine.analyze_current_market()
             logger.info(
@@ -132,6 +143,7 @@ class StrategyEngine:
             return "range"
 
     def select_candidate_pool(self, analyzed_stocks):
+        """执行三条腿总筛选，并把 selector 输出整理成候选池。"""
         selection_result = self.selector.select(analyzed_stocks)
         candidate_pool = []
         for item in selection_result["selected"]:
@@ -143,9 +155,11 @@ class StrategyEngine:
 
     @staticmethod
     def _extract_selected_records(selection_result):
+        """把 selector 结果恢复成原始记录，供下一阶段继续处理。"""
         return [dict(item["data"]) for item in selection_result["selected"]]
 
     def generate_buy_signals(self, analyzed_stocks, market_status, positions=None, portfolio_risk=None):
+        """兼容旧入口，只生成趋势跟随型入场信号。"""
         logger.info("Generating trend entry signals for market status: %s", market_status)
         position_lookup = self._build_position_lookup(positions)
         candidate_limit = self.config.get("strategy", {}).get("candidate_pool_size", 10)
@@ -167,6 +181,7 @@ class StrategyEngine:
         return entry_signals[:candidate_limit]
 
     def check_positions_for_sell(self, positions, market_status="range"):
+        """检查已有持仓是否需要卖出或减仓。"""
         logger.info("Checking exit signals for %s positions", len(positions))
         exit_signals = []
         risk_alerts = []
@@ -186,6 +201,7 @@ class StrategyEngine:
                 current_price = tech_result["current_price"]
                 buy_price = pos["buy_price"]
                 profit_pct = (current_price - buy_price) / buy_price
+                # 这两个上下文会影响动态止损/止盈阈值，不再使用固定一刀切参数。
                 holding_days = self._estimate_holding_days(pos)
                 volatility_pct = self._estimate_volatility_pct(df)
                 signal = self._build_exit_signal(
@@ -237,6 +253,7 @@ class StrategyEngine:
         return exit_signals, risk_alerts
 
     def generate_t_signals(self, positions, market_status="range"):
+        """为已有持仓查找做 T 机会。"""
         logger.info("Checking T-trading opportunities for %s positions", len(positions))
         t_signals = []
 
@@ -281,6 +298,7 @@ class StrategyEngine:
         return t_signals
 
     def run_daily_scan(self, positions=None):
+        """执行一次完整的盘后扫描。"""
         logger.info("=" * 50)
         logger.info("Starting daily scan")
         logger.info("=" * 50)
@@ -294,6 +312,7 @@ class StrategyEngine:
             return None
 
         selection_inputs = self.build_selection_inputs(stock_list)
+        # 先做成本最低的基本面和换手率预筛，尽量缩小技术分析的输入规模。
         fundamental_result = self.selector.select(selection_inputs, checks=("fundamental",))
         turnover_input = self._extract_selected_records(fundamental_result)
         turnover_result = self.selector.select(turnover_input, checks=("turnover",))
@@ -301,6 +320,7 @@ class StrategyEngine:
         analyzed_stocks = self.analyze_technical(technical_input)
         selection_result, candidate_pool = self.select_candidate_pool(analyzed_stocks)
 
+        # 组合风控先判断是否允许开新仓，再把结果交给 router 使用。
         portfolio_risk = self.risk_manager.evaluate_portfolio(
             self._estimate_portfolio_stats(positions or [])
         )
@@ -356,12 +376,14 @@ class StrategyEngine:
         return result
 
     def _enrich_technical_context(self, stock_info, tech_result, df):
+        """把技术分析结果扩展成策略可直接消费的上下文。"""
         current_price = tech_result["current_price"]
         current_ma = tech_result["ma250"]
         close_series = df["close"]
         price_change_pct = float(close_series.pct_change().iloc[-1]) if len(close_series) >= 2 else 0.0
         close_vs_ma = ((current_price - current_ma) / current_ma) if current_ma else 0.0
 
+        # 空头陷阱检测只需要价格和长均线，不依赖完整技术对象。
         working_df = pd.DataFrame({"close": close_series}).copy()
         working_df["ma_long"] = close_series.rolling(self.config.get("regime", {}).get("ma_long", 250)).mean()
         bear_trap = self.bear_trap_detector.detect(
@@ -392,6 +414,7 @@ class StrategyEngine:
 
     @staticmethod
     def _build_position_lookup(positions):
+        """把持仓列表转成 ts_code -> position 的字典。"""
         positions = positions or []
         return {position["ts_code"]: position for position in positions}
 
@@ -404,6 +427,7 @@ class StrategyEngine:
         holding_days=None,
         volatility_pct=None,
     ):
+        """把风控和技术面减仓条件合并成统一退出信号。"""
         sell_reasons = []
         reduce_reasons = []
         risk_decision = self.risk_manager.evaluate_position(
@@ -434,6 +458,7 @@ class StrategyEngine:
         if not sell_reasons and not reduce_reasons:
             return None
 
+        # 只要出现强制卖出原因，就以 SELL 为最终动作；否则才考虑 REDUCE。
         if sell_reasons:
             signal_type = "SELL"
             action = "卖出"
@@ -469,6 +494,7 @@ class StrategyEngine:
         }
 
     def _estimate_portfolio_stats(self, positions):
+        """估算组合级回撤和风险暴露，供组合风控使用。"""
         if not positions:
             return {
                 "portfolio_drawdown_pct": 0.0,
@@ -498,6 +524,7 @@ class StrategyEngine:
 
     @staticmethod
     def _estimate_holding_days(position):
+        """从 buy_date 粗略估算持仓天数。"""
         buy_date = position.get("buy_date")
         if not buy_date:
             return None
@@ -511,6 +538,10 @@ class StrategyEngine:
 
     @staticmethod
     def _estimate_volatility_pct(df, window=20):
+        """估算近 N 日年化波动率。
+
+        返回值是比例，例如 0.35 代表 35% 年化波动率。
+        """
         if df is None or df.empty or "close" not in df.columns:
             return None
 

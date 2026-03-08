@@ -19,13 +19,27 @@ from .parameter_scan import ParameterScanner
 
 @dataclass
 class PositionState:
+    """回测过程中的单标的持仓快照。
+
+    - `shares`: 当前持股数
+    - `avg_price`: 当前持仓成本
+    - `entry_dt`: 第一笔建仓时间，用于 T+1 检查
+    """
+
     shares: int = 0
     avg_price: float = 0.0
     entry_dt: Optional[datetime] = None
 
 
 class BacktestEngine:
-    """Runs strategy signals through an internal backtester or Backtesting.py when available."""
+    """回测主引擎。
+
+    输入是价格序列和策略提前生成好的信号，输出是:
+    - 原始交易记录
+    - 成交配对后的闭合交易
+    - 权益曲线
+    - 标准化报告
+    """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, cost_model: Optional[ChinaCostModel] = None):
         self.config = config or {}
@@ -52,6 +66,7 @@ class BacktestEngine:
         config_snapshot: Optional[Dict[str, Any]] = None,
         regime_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        """执行一次完整回测，并产出标准化报告。"""
         raw_result = self._run_internal(
             price_data=price_data,
             signals=signals,
@@ -108,6 +123,7 @@ class BacktestEngine:
         return result
 
     def save_result(self, result: Dict[str, Any], output_path: str) -> Dict[str, str]:
+        """把回测结果和拆分报告保存到磁盘。"""
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as handle:
@@ -126,6 +142,7 @@ class BacktestEngine:
         strategy_signals: Dict[str, List[Dict[str, Any]]],
         regime_labels: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
+        """在同一段价格数据上比较多套策略信号结果。"""
         comparisons = {}
         for strategy_name, signals in strategy_signals.items():
             comparisons[strategy_name] = self.run(
@@ -171,6 +188,7 @@ class BacktestEngine:
         score_field: str = "annual_return",
         regime_scope: str = "all",
     ) -> Dict[str, Any]:
+        """委托参数扫描器执行样本内/样本外参数搜索。"""
         scanner = ParameterScanner(engine_cls=self.__class__, engine_config=self.config)
         return scanner.scan(
             price_data=price_data,
@@ -184,6 +202,7 @@ class BacktestEngine:
         )
 
     def _run_internal(self, price_data: pd.DataFrame, signals: List[Dict[str, Any]], initial_cash: float) -> Dict[str, Any]:
+        """执行最核心的逐 bar 撮合逻辑。"""
         if price_data.empty:
             raise ValueError("price_data must not be empty")
 
@@ -193,6 +212,7 @@ class BacktestEngine:
         else:
             frame["datetime"] = pd.to_datetime(frame["datetime"])
 
+        # 先按时间聚合信号，避免每个 bar 都全表扫描。
         signal_map = self._group_signals_by_datetime(signals)
         cash = float(initial_cash)
         position = PositionState()
@@ -210,6 +230,7 @@ class BacktestEngine:
             for signal in signal_map.get(dt, []):
                 action = str(signal.get("action", signal.get("signal_type", ""))).upper()
                 if action == "BUY":
+                    # position_pct / suggested_position_change 都表示本次计划动用的仓位比例。
                     position_ratio = float(signal.get("position_pct", signal.get("suggested_position_change", 1.0)) or 1.0)
                     budget = (cash + position.shares * close) * position_ratio
                     shares = self.cost_model.normalize_shares(int(budget / close))
@@ -221,12 +242,14 @@ class BacktestEngine:
                         position.entry_dt = position.entry_dt or dt
                         raw_trades.append(self._record_trade(dt, trade, position, signal, ts_code))
                 elif action == "SELL" and position.shares > 0:
+                    # 卖出同时受 T+1 和涨跌停近似模型约束。
                     if self.cost_model.can_sell(position.entry_dt, dt) and self.cost_model.validate_price_limit(price_change_pct):
                         trade = self.cost_model.estimate_trade(close, position.shares, "SELL")
                         cash += trade.cash_flow
                         raw_trades.append(self._record_trade(dt, trade, position, signal, ts_code))
                         position = PositionState()
 
+            # 每个 bar 都记录一次权益曲线，后面会基于它计算回撤和 Sharpe。
             equity = cash + position.shares * close
             peak_equity = max(peak_equity, equity)
             drawdown = 0.0 if peak_equity == 0 else (peak_equity - equity) / peak_equity
@@ -273,6 +296,7 @@ class BacktestEngine:
         ending_position: Dict[str, Any],
         period_days: int,
     ) -> Dict[str, Any]:
+        """把撮合结果汇总成基础统计。"""
         wins = [trade for trade in closed_trades if trade["pnl"] > 0]
         losses = [trade for trade in closed_trades if trade["pnl"] < 0]
         total_return = 0.0 if initial_cash == 0 else (ending_equity - initial_cash) / initial_cash
@@ -307,6 +331,7 @@ class BacktestEngine:
 
     @staticmethod
     def _group_signals_by_datetime(signals: List[Dict[str, Any]]) -> Dict[datetime, List[Dict[str, Any]]]:
+        """把信号按时间分桶，便于逐 bar 执行。"""
         grouped: Dict[datetime, List[Dict[str, Any]]] = {}
         for signal in signals:
             dt = pd.to_datetime(signal["datetime"]).to_pydatetime()
@@ -315,6 +340,7 @@ class BacktestEngine:
 
     @staticmethod
     def _recalculate_avg_price(position: PositionState, new_price: float, new_shares: int) -> float:
+        """在加仓后更新持仓均价。"""
         total_shares = position.shares + new_shares
         if total_shares == 0:
             return 0.0
@@ -328,6 +354,7 @@ class BacktestEngine:
         signal: Dict[str, Any],
         ts_code: str,
     ) -> Dict[str, Any]:
+        """把成交对象和信号上下文展开成统一交易记录。"""
         return {
             "datetime": dt.isoformat(),
             "ts_code": signal.get("ts_code", ts_code),
@@ -349,6 +376,10 @@ class BacktestEngine:
 
     @staticmethod
     def _pair_trades(trades: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """把买卖交易配对成闭合交易。
+
+        当前实现按先进先出配对，适合单标的、方向单一的基础回测。
+        """
         paired = []
         buy_stack: List[Dict[str, Any]] = []
         for trade in trades:
@@ -385,6 +416,7 @@ class BacktestEngine:
         return paired
 
     def _cost_model_dict(self) -> Dict[str, Any]:
+        """导出成本模型参数，方便写入报告。"""
         return {
             "commission_pct": self.cost_model.commission_pct,
             "stamp_tax_pct": self.cost_model.stamp_tax_pct,
@@ -396,6 +428,7 @@ class BacktestEngine:
 
     @staticmethod
     def _resolve_backend() -> str:
+        """检测是否可用 backtesting.py；否则回退到内置引擎。"""
         try:
             import backtesting  # noqa: F401
 
