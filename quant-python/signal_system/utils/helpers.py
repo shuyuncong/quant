@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
         "fallback_provider": "",
         "minute_fallback_provider": "",
         "disable_system_proxy": True,
+        "request_workers": 4,
         "cache_dir": "./cache",
         "daily_cache_hours": 24,
         "minute_cache_hours": 6,

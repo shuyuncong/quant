@@ -15,9 +15,12 @@ from strategy.strategy_engine import StrategyEngine
 
 class FakeDataFetcher:
     def __init__(self):
+        self.latest_trade_date_calls = 0
+        self.latest_report_period_calls = 0
         self.price_map = {
             "HOLD_RED": self._build_df("HOLD_RED", [10.0] * 95 + [11.0, 11.2, 11.1, 11.3, 11.4]),
             "HOLD_SELL": self._build_df("HOLD_SELL", [10.0] * 95 + [9.2, 9.0, 8.8, 8.7, 8.5]),
+            "SELECT": self._build_df("SELECT", [10.0 + i * 0.02 for i in range(320)]),
         }
 
     @staticmethod
@@ -28,6 +31,22 @@ class FakeDataFetcher:
 
     def get_daily_data(self, ts_code, period=100):
         return self.price_map[ts_code]
+
+    def get_financial_data(self, ts_code, period=None):
+        del ts_code, period
+        return {"roe": 18.0, "debt_to_assets": 35.0}
+
+    def get_daily_basic(self, ts_code, trade_date=None):
+        del ts_code, trade_date
+        return {"turnover_rate": 1.6, "pe": 18.0, "total_mv": 1800000}
+
+    def get_latest_trade_date(self):
+        self.latest_trade_date_calls += 1
+        return "20260306"
+
+    def _get_latest_report_period(self):
+        self.latest_report_period_calls += 1
+        return "20250930"
 
 
 class FakeTechnicalIndicators:
@@ -203,6 +222,17 @@ class StrategyEngineTrendSignalsTest(unittest.TestCase):
             market_status="bull",
         )
         self.assertEqual(t_signals[0]["signal_type"], "positive_t_sell")
+
+
+    def test_build_selection_inputs_reuses_shared_runtime_context(self):
+        stock_list = pd.DataFrame([{"ts_code": "SELECT", "name": "Selector Sample"}])
+
+        selection_inputs = self.engine.build_selection_inputs(stock_list)
+
+        self.assertEqual(len(selection_inputs), 1)
+        self.assertEqual(selection_inputs[0]["ts_code"], "SELECT")
+        self.assertEqual(self.engine.data_fetcher.latest_trade_date_calls, 1)
+        self.assertEqual(self.engine.data_fetcher.latest_report_period_calls, 1)
 
 
 if __name__ == "__main__":

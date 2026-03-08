@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pandas as pd
@@ -47,7 +48,45 @@ class StrategyEngine:
 
         technical_config = self.config.get("strategy", {}).get("technical", {})
         analysis_period = max(int(technical_config.get("ma_period", 250)), 300)
-        selection_inputs = []
+        stock_records = stock_list.to_dict("records")
+        latest_trade_date = self.data_fetcher.get_latest_trade_date()
+        report_period = self.data_fetcher._get_latest_report_period()
+        worker_count = self._selection_worker_count(len(stock_records))
+
+        # Selection input prep is dominated by per-symbol I/O, so run a small
+        # worker pool before falling back to the legacy serial path below.
+        if worker_count == 1:
+            selection_inputs = [
+                result
+                for stock in stock_records
+                if (
+                    result := self._build_selection_input_for_stock(
+                        stock=stock,
+                        analysis_period=analysis_period,
+                        latest_trade_date=latest_trade_date,
+                        report_period=report_period,
+                    )
+                )
+                is not None
+            ]
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                selection_inputs = [
+                    result
+                    for result in executor.map(
+                        lambda stock: self._build_selection_input_for_stock(
+                            stock=stock,
+                            analysis_period=analysis_period,
+                            latest_trade_date=latest_trade_date,
+                            report_period=report_period,
+                        ),
+                        stock_records,
+                    )
+                    if result is not None
+                ]
+
+        logger.info("Prepared selection inputs: %s", len(selection_inputs))
+        return selection_inputs
 
         for _, stock in stock_list.iterrows():
             ts_code = stock["ts_code"]
@@ -435,6 +474,58 @@ class StrategyEngine:
         """把持仓列表转成 ts_code -> position 的字典。"""
         positions = positions or []
         return {position["ts_code"]: position for position in positions}
+
+    def _build_selection_input_for_stock(
+        self,
+        stock,
+        analysis_period,
+        latest_trade_date,
+        report_period,
+    ):
+        """Build one selector input record from daily, basic and financial data."""
+        ts_code = stock["ts_code"]
+
+        try:
+            df = self.data_fetcher.get_daily_data(ts_code, period=analysis_period)
+            if df is None or df.empty or len(df) < 20:
+                return None
+
+            financial = self.data_fetcher.get_financial_data(ts_code, period=report_period)
+            daily_basic = self.data_fetcher.get_daily_basic(ts_code, trade_date=latest_trade_date)
+            if financial is None or daily_basic is None:
+                return None
+
+            if "turnover_rate" in df.columns:
+                avg_turnover = float(df["turnover_rate"].tail(30).mean())
+            else:
+                avg_turnover = daily_basic.get("turnover_rate")
+
+            return {
+                "ts_code": ts_code,
+                "name": stock.get("name", ts_code),
+                "roe": financial.get("roe"),
+                "debt_ratio": financial.get("debt_to_assets"),
+                "pe": daily_basic.get("pe"),
+                "market_cap": (daily_basic.get("total_mv") or 0) / 10000,
+                "turnover_rate": daily_basic.get("turnover_rate"),
+                "avg_turnover": avg_turnover,
+                "_daily_data": df,
+            }
+        except Exception as e:
+            logger.warning("Failed to prepare selection input for %s: %s", ts_code, e)
+            return None
+
+    def _selection_worker_count(self, stock_count):
+        """Choose a conservative worker count for I/O-bound selection prep."""
+        configured = int(
+            self.config.get("data", {}).get(
+                "request_workers",
+                self.config.get("runtime", {}).get("scan_workers", 4),
+            )
+        )
+        if stock_count <= 1:
+            return 1
+        return max(1, min(configured, stock_count))
 
     def _build_exit_signal(
         self,

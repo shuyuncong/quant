@@ -177,3 +177,9 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --outp
 - 数据源是否还能拿到真实行情
 - 当前 selector 默认阈值是否被改得过严
 - `StrategyEngine` 是否还保留了 `watchlist_only` 的约束入口
+濡傛灉瑕佽窇鏇村ぇ鏍锋湰鎴栦竴娆℃€绘敹澶氫釜鏍锋湰缁勶紝鍙互鐢?`--group`锛?
+```bash
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --group expanded_60
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --group quality_midcap_20
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --group all
+```

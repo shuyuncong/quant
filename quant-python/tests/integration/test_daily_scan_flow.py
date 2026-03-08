@@ -21,10 +21,12 @@ class IntegrationDataFetcher:
     def get_stock_list(self):
         return pd.DataFrame([{"ts_code": "000001.SZ", "name": "平安银行"}])
 
-    def get_financial_data(self, ts_code):
+    def get_financial_data(self, ts_code, period=None):
+        del ts_code, period
         return {"roe": 12.5, "debt_to_assets": 42.0}
 
-    def get_daily_basic(self, ts_code):
+    def get_daily_basic(self, ts_code, trade_date=None):
+        del ts_code, trade_date
         return {"pe": 8.5, "total_mv": 2200000, "turnover_rate": self.turnover_rate}
 
     def get_daily_data(self, ts_code, period=300):
@@ -37,6 +39,12 @@ class IntegrationDataFetcher:
     def get_index_daily(self, ts_code, period=300):
         closes = [3000 + idx * 3 for idx in range(period)]
         return pd.DataFrame({"close": closes})
+
+    def get_latest_trade_date(self):
+        return "20260306"
+
+    def _get_latest_report_period(self):
+        return "20250930"
 
 
 class IntegrationTechnicalIndicators:
