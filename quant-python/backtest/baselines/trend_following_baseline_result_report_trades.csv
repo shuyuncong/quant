@@ -1,0 +1,2 @@
+run_id,ts_code,entry_time,exit_time,side,entry_price,exit_price,shares,holding_days,pnl,pnl_ratio,regime,strategy_name,entry_reason,exit_reason
+bt_20260308_040446_284385,000001.SZ,2025-01-17T00:00:00,2025-01-23T00:00:00,LONG,10.30515,10.9945,9200,6,6182.08356600003,0.065187219572473,unknown,unknown,突破长期均线,跌破长期均线/止损止盈

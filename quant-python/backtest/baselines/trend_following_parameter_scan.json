@@ -1,0 +1,266 @@
+{
+  "parameter_grid": {
+    "strategy.technical.ma_period": [
+      4,
+      5
+    ],
+    "risk.stop_loss_pct": [
+      0.06,
+      0.08
+    ]
+  },
+  "tested_combinations": 4,
+  "sample_split": {
+    "split_ratio": 0.7,
+    "in_sample_rows": 21,
+    "out_of_sample_rows": 9,
+    "in_sample_start": "2025-01-01T00:00:00",
+    "in_sample_end": "2025-01-21T00:00:00",
+    "out_of_sample_start": "2025-01-22T00:00:00",
+    "out_of_sample_end": "2025-01-30T00:00:00"
+  },
+  "guardrails": {
+    "max_parameter_combinations": 4,
+    "max_in_out_sample_gap": 0.2,
+    "score_field": "annual_return"
+  },
+  "comparisons": [
+    {
+      "params": {
+        "strategy.technical.ma_period": 4,
+        "risk.stop_loss_pct": 0.06
+      },
+      "in_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 109584.17778600001,
+        "total_return": 0.09584177786000014,
+        "annual_return": 4.313715833244782,
+        "max_drawdown": 0.0007582221399998526,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9373607093935706,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 7.615167459523607,
+        "calmar_ratio": 5689.250690102007,
+        "average_equity": 101142.89947285716,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "out_of_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 105839.63787225,
+        "total_return": 0.05839637872249994,
+        "annual_return": 12.322347334657813,
+        "max_drawdown": 0.0007536212775000604,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9331204469552181,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 8.377438543444969,
+        "calmar_ratio": 16350.848499837939,
+        "average_equity": 100985.9904018611,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "comparison": {
+        "score_field": "annual_return",
+        "in_sample_score": 4.313715833244782,
+        "out_of_sample_score": 12.322347334657813,
+        "generalization_gap": -8.008631501413031,
+        "trade_count_gap": 0,
+        "robust_score": 4.513715833244782,
+        "risk_flags": [
+          "generalization_gap_exceeded",
+          "no_out_of_sample_trades"
+        ],
+        "is_stable": false
+      }
+    },
+    {
+      "params": {
+        "strategy.technical.ma_period": 4,
+        "risk.stop_loss_pct": 0.08
+      },
+      "in_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 109584.17778600001,
+        "total_return": 0.09584177786000014,
+        "annual_return": 4.313715833244782,
+        "max_drawdown": 0.0007582221399998526,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9373607093935706,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 7.615167459523607,
+        "calmar_ratio": 5689.250690102007,
+        "average_equity": 101142.89947285716,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "out_of_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 105839.63787225,
+        "total_return": 0.05839637872249994,
+        "annual_return": 12.322347334657813,
+        "max_drawdown": 0.0007536212775000604,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9331204469552181,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 8.377438543444969,
+        "calmar_ratio": 16350.848499837939,
+        "average_equity": 100985.9904018611,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "comparison": {
+        "score_field": "annual_return",
+        "in_sample_score": 4.313715833244782,
+        "out_of_sample_score": 12.322347334657813,
+        "generalization_gap": -8.008631501413031,
+        "trade_count_gap": 0,
+        "robust_score": 4.513715833244782,
+        "risk_flags": [
+          "generalization_gap_exceeded",
+          "no_out_of_sample_trades"
+        ],
+        "is_stable": false
+      }
+    },
+    {
+      "params": {
+        "strategy.technical.ma_period": 5,
+        "risk.stop_loss_pct": 0.06
+      },
+      "in_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 109584.17778600001,
+        "total_return": 0.09584177786000014,
+        "annual_return": 4.313715833244782,
+        "max_drawdown": 0.0007582221399998526,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9373607093935706,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 7.615167459523607,
+        "calmar_ratio": 5689.250690102007,
+        "average_equity": 101142.89947285716,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "out_of_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 102564.65787600001,
+        "total_return": 0.02564657876000012,
+        "annual_return": 2.175204423547743,
+        "max_drawdown": 0.0007534212399998797,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9394723075403022,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 5.428167145388965,
+        "calmar_ratio": 2887.1026035157843,
+        "average_equity": 100276.59063911112,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "comparison": {
+        "score_field": "annual_return",
+        "in_sample_score": 4.313715833244782,
+        "out_of_sample_score": 2.175204423547743,
+        "generalization_gap": 2.138511409697039,
+        "trade_count_gap": 0,
+        "robust_score": 0.23669301385070418,
+        "risk_flags": [
+          "generalization_gap_exceeded",
+          "no_out_of_sample_trades"
+        ],
+        "is_stable": false
+      }
+    },
+    {
+      "params": {
+        "strategy.technical.ma_period": 5,
+        "risk.stop_loss_pct": 0.08
+      },
+      "in_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 109584.17778600001,
+        "total_return": 0.09584177786000014,
+        "annual_return": 4.313715833244782,
+        "max_drawdown": 0.0007582221399998526,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9373607093935706,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 7.615167459523607,
+        "calmar_ratio": 5689.250690102007,
+        "average_equity": 101142.89947285716,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "out_of_sample": {
+        "initial_cash": 100000.0,
+        "ending_equity": 102564.65787600001,
+        "total_return": 0.02564657876000012,
+        "annual_return": 2.175204423547743,
+        "max_drawdown": 0.0007534212399998797,
+        "trade_count": 0,
+        "win_rate": 0.0,
+        "profit_loss_ratio": 0.0,
+        "avg_holding_days": 0.0,
+        "turnover_rate": 0.9394723075403022,
+        "signal_hit_rate": 0.0,
+        "sharpe_ratio": 5.428167145388965,
+        "calmar_ratio": 2887.1026035157843,
+        "average_equity": 100276.59063911112,
+        "total_pnl": 0,
+        "avg_trade_pnl": 0.0
+      },
+      "comparison": {
+        "score_field": "annual_return",
+        "in_sample_score": 4.313715833244782,
+        "out_of_sample_score": 2.175204423547743,
+        "generalization_gap": 2.138511409697039,
+        "trade_count_gap": 0,
+        "robust_score": 0.23669301385070418,
+        "risk_flags": [
+          "generalization_gap_exceeded",
+          "no_out_of_sample_trades"
+        ],
+        "is_stable": false
+      }
+    }
+  ],
+  "best_params": {
+    "strategy.technical.ma_period": 4,
+    "risk.stop_loss_pct": 0.06
+  },
+  "best_comparison": {
+    "score_field": "annual_return",
+    "in_sample_score": 4.313715833244782,
+    "out_of_sample_score": 12.322347334657813,
+    "generalization_gap": -8.008631501413031,
+    "trade_count_gap": 0,
+    "robust_score": 4.513715833244782,
+    "risk_flags": [
+      "generalization_gap_exceeded",
+      "no_out_of_sample_trades"
+    ],
+    "is_stable": false
+  }
+}

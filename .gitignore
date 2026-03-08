@@ -46,3 +46,8 @@ build/
 .idea
 /doc/知识星球
 /doc/掘金策略
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.pyc

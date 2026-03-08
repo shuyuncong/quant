@@ -1,0 +1,10 @@
+{
+  "result_json": "trend_following_baseline_result.json",
+  "report_json": "trend_following_baseline_result_report.json",
+  "trades_csv": "trend_following_baseline_result_report_trades.csv",
+  "signals_json": "trend_following_baseline_result_report_signals.json",
+  "positions_json": "trend_following_baseline_result_report_positions.json",
+  "parameter_scan_json": "trend_following_parameter_scan.json",
+  "signal_count": 3,
+  "trade_count": 1
+}

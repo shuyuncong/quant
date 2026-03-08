@@ -109,14 +109,18 @@ class SignalSystem:
         print(f"  - 基本面通过: {scan_result['stats']['fundamental_passed']}")
         print(f"  - 成交量通过: {scan_result['stats']['volume_passed']}")
         print(f"  - 技术分析: {scan_result['stats']['technical_analyzed']}")
+        print(f"  - 候选池: {scan_result['stats'].get('candidate_pool_count', 0)}")
         print(f"  - 买入信号: {scan_result['stats']['buy_signals_count']}")
         print(f"  - 卖出信号: {scan_result['stats']['sell_signals_count']}")
+        print(f"  - 做T信号: {scan_result['stats'].get('t_signals_count', 0)}")
+        print(f"  - 风险提示: {scan_result['stats'].get('risk_alerts_count', 0)}")
 
         if scan_result['buy_signals']:
             print(f"\n🟢 买入信号 (前5个):")
             for i, signal in enumerate(scan_result['buy_signals'][:5], 1):
                 print(f"  {i}. {signal['name']} ({signal['ts_code']})")
-                print(f"     价格: ¥{signal['price']:.2f} | 评分: {signal['score']}")
+                print(f"     类型: {signal.get('signal_type', 'BUY')} | 价格: ¥{signal['price']:.2f} | 评分: {signal['score']}")
+                print(f"     变化: {signal.get('suggested_position_change', 0):+.0%} | 原因: {signal['reason']}")
                 print(f"     信号: {', '.join(signal['signals'])}")
 
         if scan_result['sell_signals']:
@@ -124,8 +128,23 @@ class SignalSystem:
             for i, signal in enumerate(scan_result['sell_signals'], 1):
                 profit_emoji = '📈' if signal['profit_pct'] > 0 else '📉'
                 print(f"  {i}. {signal['name']} ({signal['ts_code']})")
+                print(f"     类型: {signal.get('signal_type', 'SELL')} | 建议变化: {signal.get('suggested_position_change', 0):+.0%}")
                 print(f"     买入: ¥{signal['buy_price']:.2f} | 当前: ¥{signal['current_price']:.2f}")
                 print(f"     盈亏: {profit_emoji} {signal['profit_pct']*100:.2f}%")
+                print(f"     原因: {', '.join(signal['reasons'])}")
+
+        if scan_result.get('t_signals'):
+            print(f"\n🔁 做T信号:")
+            for i, signal in enumerate(scan_result['t_signals'][:5], 1):
+                print(f"  {i}. {signal.get('name', '')} ({signal['ts_code']})")
+                print(f"     类型: {signal['signal_type']} | 建议变化: {signal.get('suggested_position_change', 0):+.0%}")
+                print(f"     原因: {signal['reason']}")
+
+        if scan_result.get('risk_alerts'):
+            print(f"\n⚠️ 风险提示:")
+            for i, signal in enumerate(scan_result['risk_alerts'][:5], 1):
+                print(f"  {i}. {signal.get('name', '')} ({signal['ts_code']})")
+                print(f"     类型: {signal['signal_type']} | 建议变化: {signal.get('suggested_position_change', 0):+.0%}")
                 print(f"     原因: {', '.join(signal['reasons'])}")
 
         print("=" * 60 + "\n")
@@ -144,9 +163,13 @@ class SignalSystem:
                     'ts_code': '000001.SZ',
                     'name': '平安银行',
                     'price': 12.50,
-                    'score': 8,
+                    'score': 88,
+                    'signal_type': 'BUY',
+                    'action': '买入',
                     'signals': ['年线向上', '底背离', 'MACD金叉'],
                     'reason': '战略买入点',
+                    'explanation': '买入依据: 年线向上 + 底背离 + MACD金叉',
+                    'suggested_position_change': 0.25,
                     'roe': 12.5,
                     'pe': 5.8,
                     'market_cap': 2400
@@ -158,8 +181,11 @@ class SignalSystem:
                 'fundamental_passed': 500,
                 'volume_passed': 200,
                 'technical_analyzed': 150,
+                'candidate_pool_count': 42,
                 'buy_signals_count': 1,
-                'sell_signals_count': 0
+                'sell_signals_count': 0,
+                't_signals_count': 0,
+                'risk_alerts_count': 0,
             }
         }
 

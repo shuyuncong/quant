@@ -1,0 +1,692 @@
+{
+  "format_version": "v1",
+  "run": {
+    "run_id": "bt_20260308_040446_284385",
+    "strategy_name": "trend_following",
+    "regime_scope": "bull",
+    "start_date": "2025-01-01T00:00:00",
+    "end_date": "2025-01-30T00:00:00",
+    "config_snapshot": {
+      "strategy_name": "trend_following",
+      "version": "baseline-v1",
+      "params": {
+        "strategy": {
+          "technical": {
+            "ma_period": 5
+          }
+        },
+        "risk": {
+          "stop_loss_pct": 0.08,
+          "stop_profit_pct": 0.2
+        },
+        "backtest": {
+          "strategy_name": "trend_following",
+          "initial_cash": 100000,
+          "commission_pct": 0.0003,
+          "stamp_tax_pct": 0.001,
+          "slippage_pct": 0.0005,
+          "lot_size": 100,
+          "t_plus_one": true,
+          "price_limit_model": "conservative",
+          "max_parameter_combinations": 4,
+          "max_in_out_sample_gap": 0.2,
+          "config_version": "baseline-v1"
+        }
+      },
+      "created_at": "2026-03-08T04:04:46.284403+00:00"
+    },
+    "metrics": {
+      "initial_cash": 100000.0,
+      "ending_equity": 108921.60447900003,
+      "total_return": 0.08921604479000031,
+      "annual_return": 1.931736013588924,
+      "max_drawdown": 0.03177989174496414,
+      "trade_count": 1,
+      "win_rate": 1.0,
+      "profit_loss_ratio": 0.0,
+      "avg_holding_days": 6.0,
+      "turnover_rate": 2.8847881731849006,
+      "signal_hit_rate": 0.5,
+      "sharpe_ratio": 4.496139030714843,
+      "calmar_ratio": 60.784851914891384,
+      "average_equity": 102810.69256900002,
+      "total_pnl": 6182.08356600003,
+      "avg_trade_pnl": 6182.08356600003
+    },
+    "engine_backend": "internal",
+    "cost_model": {
+      "commission_pct": 0.0003,
+      "stamp_tax_pct": 0.001,
+      "slippage_pct": 0.0005,
+      "lot_size": 100,
+      "t_plus_one": true,
+      "price_limit_model": "conservative"
+    }
+  },
+  "metrics": {
+    "initial_cash": 100000.0,
+    "ending_equity": 108921.60447900003,
+    "total_return": 0.08921604479000031,
+    "annual_return": 1.931736013588924,
+    "max_drawdown": 0.03177989174496414,
+    "trade_count": 1,
+    "win_rate": 1.0,
+    "profit_loss_ratio": 0.0,
+    "avg_holding_days": 6.0,
+    "turnover_rate": 2.8847881731849006,
+    "signal_hit_rate": 0.5,
+    "sharpe_ratio": 4.496139030714843,
+    "calmar_ratio": 60.784851914891384,
+    "average_equity": 102810.69256900002,
+    "total_pnl": 6182.08356600003,
+    "avg_trade_pnl": 6182.08356600003
+  },
+  "cost_model": {
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.001,
+    "slippage_pct": 0.0005,
+    "lot_size": 100,
+    "t_plus_one": true,
+    "price_limit_model": "conservative"
+  },
+  "regime_breakdown": {
+    "unknown": {
+      "trade_count": 1,
+      "signal_count": 3,
+      "win_rate": 1.0,
+      "profit_loss_ratio": 0.0,
+      "avg_holding_days": 6.0,
+      "total_pnl": 6182.08356600003
+    }
+  },
+  "signals": [
+    {
+      "signal_id": "000001.SZ-BUY-1",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-17T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "BUY",
+      "action": "BUY",
+      "suggested_position_change": 0.95,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "突破长期均线",
+      "risk_flags": []
+    },
+    {
+      "signal_id": "000001.SZ-SELL-2",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-23T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "SELL",
+      "action": "SELL",
+      "suggested_position_change": 0.0,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "跌破长期均线/止损止盈",
+      "risk_flags": []
+    },
+    {
+      "signal_id": "000001.SZ-BUY-3",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-29T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "BUY",
+      "action": "BUY",
+      "suggested_position_change": 0.95,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "突破长期均线",
+      "risk_flags": []
+    }
+  ],
+  "positions": [
+    {
+      "snapshot_time": "2025-01-30T00:00:00",
+      "ts_code": "000001.SZ",
+      "base_shares": 9400,
+      "base_cost": 10.70535,
+      "mobile_shares": 0,
+      "mobile_cost": 10.70535,
+      "current_price": 11.0,
+      "market_value": 103400.0,
+      "profit_loss": 2769.7100000000064,
+      "profit_rate": 0.027523621366886717
+    }
+  ],
+  "trades": [
+    {
+      "run_id": "bt_20260308_040446_284385",
+      "ts_code": "000001.SZ",
+      "entry_time": "2025-01-17T00:00:00",
+      "exit_time": "2025-01-23T00:00:00",
+      "side": "LONG",
+      "entry_price": 10.30515,
+      "exit_price": 10.9945,
+      "shares": 9200,
+      "holding_days": 6,
+      "pnl": 6182.08356600003,
+      "pnl_ratio": 0.065187219572473,
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "entry_reason": "突破长期均线",
+      "exit_reason": "跌破长期均线/止损止盈"
+    }
+  ],
+  "equity_curve": [
+    {
+      "datetime": "2025-01-01T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-02T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-03T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-04T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-05T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-06T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-07T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-08T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-09T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-10T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-11T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-12T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-13T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-14T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-15T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-16T00:00:00",
+      "equity": 100000.0,
+      "cash": 100000.0,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-17T00:00:00",
+      "equity": 99924.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-18T00:00:00",
+      "equity": 102224.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-19T00:00:00",
+      "equity": 104984.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-20T00:00:00",
+      "equity": 107284.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-21T00:00:00",
+      "equity": 109584.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-22T00:00:00",
+      "equity": 108204.17778600001,
+      "cash": 5164.177786000015,
+      "shares": 9200
+    },
+    {
+      "datetime": "2025-01-23T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-24T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-25T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-26T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-27T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-28T00:00:00",
+      "equity": 106182.08356600003,
+      "cash": 106182.08356600003,
+      "shares": 0
+    },
+    {
+      "datetime": "2025-01-29T00:00:00",
+      "equity": 106101.60447900003,
+      "cash": 5521.604479000031,
+      "shares": 9400
+    },
+    {
+      "datetime": "2025-01-30T00:00:00",
+      "equity": 108921.60447900003,
+      "cash": 5521.604479000031,
+      "shares": 9400
+    }
+  ],
+  "regime_decisions": [],
+  "file_share_bundle": {
+    "format_version": "v1",
+    "channel": "file_share",
+    "files": {
+      "backtest_run.json": {
+        "run_id": "bt_20260308_040446_284385",
+        "strategy_name": "trend_following",
+        "regime_scope": "bull",
+        "start_date": "2025-01-01T00:00:00",
+        "end_date": "2025-01-30T00:00:00",
+        "config_snapshot": {
+          "strategy_name": "trend_following",
+          "version": "baseline-v1",
+          "params": {
+            "strategy": {
+              "technical": {
+                "ma_period": 5
+              }
+            },
+            "risk": {
+              "stop_loss_pct": 0.08,
+              "stop_profit_pct": 0.2
+            },
+            "backtest": {
+              "strategy_name": "trend_following",
+              "initial_cash": 100000,
+              "commission_pct": 0.0003,
+              "stamp_tax_pct": 0.001,
+              "slippage_pct": 0.0005,
+              "lot_size": 100,
+              "t_plus_one": true,
+              "price_limit_model": "conservative",
+              "max_parameter_combinations": 4,
+              "max_in_out_sample_gap": 0.2,
+              "config_version": "baseline-v1"
+            }
+          },
+          "created_at": "2026-03-08T04:04:46.284403+00:00"
+        },
+        "metrics": {
+          "initial_cash": 100000.0,
+          "ending_equity": 108921.60447900003,
+          "total_return": 0.08921604479000031,
+          "annual_return": 1.931736013588924,
+          "max_drawdown": 0.03177989174496414,
+          "trade_count": 1,
+          "win_rate": 1.0,
+          "profit_loss_ratio": 0.0,
+          "avg_holding_days": 6.0,
+          "turnover_rate": 2.8847881731849006,
+          "signal_hit_rate": 0.5,
+          "sharpe_ratio": 4.496139030714843,
+          "calmar_ratio": 60.784851914891384,
+          "average_equity": 102810.69256900002,
+          "total_pnl": 6182.08356600003,
+          "avg_trade_pnl": 6182.08356600003
+        },
+        "engine_backend": "internal",
+        "cost_model": {
+          "commission_pct": 0.0003,
+          "stamp_tax_pct": 0.001,
+          "slippage_pct": 0.0005,
+          "lot_size": 100,
+          "t_plus_one": true,
+          "price_limit_model": "conservative"
+        }
+      },
+      "signals.json": [
+        {
+          "signal_id": "000001.SZ-BUY-1",
+          "ts_code": "000001.SZ",
+          "stock_name": "000001.SZ",
+          "signal_time": "2025-01-17T00:00:00",
+          "regime": "unknown",
+          "strategy_name": "unknown",
+          "signal_type": "BUY",
+          "action": "BUY",
+          "suggested_position_change": 0.95,
+          "stop_loss_price": null,
+          "stop_profit_price": null,
+          "reason": "突破长期均线",
+          "risk_flags": []
+        },
+        {
+          "signal_id": "000001.SZ-SELL-2",
+          "ts_code": "000001.SZ",
+          "stock_name": "000001.SZ",
+          "signal_time": "2025-01-23T00:00:00",
+          "regime": "unknown",
+          "strategy_name": "unknown",
+          "signal_type": "SELL",
+          "action": "SELL",
+          "suggested_position_change": 0.0,
+          "stop_loss_price": null,
+          "stop_profit_price": null,
+          "reason": "跌破长期均线/止损止盈",
+          "risk_flags": []
+        },
+        {
+          "signal_id": "000001.SZ-BUY-3",
+          "ts_code": "000001.SZ",
+          "stock_name": "000001.SZ",
+          "signal_time": "2025-01-29T00:00:00",
+          "regime": "unknown",
+          "strategy_name": "unknown",
+          "signal_type": "BUY",
+          "action": "BUY",
+          "suggested_position_change": 0.95,
+          "stop_loss_price": null,
+          "stop_profit_price": null,
+          "reason": "突破长期均线",
+          "risk_flags": []
+        }
+      ],
+      "positions.json": [
+        {
+          "snapshot_time": "2025-01-30T00:00:00",
+          "ts_code": "000001.SZ",
+          "base_shares": 9400,
+          "base_cost": 10.70535,
+          "mobile_shares": 0,
+          "mobile_cost": 10.70535,
+          "current_price": 11.0,
+          "market_value": 103400.0,
+          "profit_loss": 2769.7100000000064,
+          "profit_rate": 0.027523621366886717
+        }
+      ],
+      "trades.csv": {
+        "columns": [
+          "run_id",
+          "ts_code",
+          "entry_time",
+          "exit_time",
+          "side",
+          "entry_price",
+          "exit_price",
+          "shares",
+          "holding_days",
+          "pnl",
+          "pnl_ratio",
+          "regime",
+          "strategy_name"
+        ],
+        "rows": [
+          {
+            "run_id": "bt_20260308_040446_284385",
+            "ts_code": "000001.SZ",
+            "entry_time": "2025-01-17T00:00:00",
+            "exit_time": "2025-01-23T00:00:00",
+            "side": "LONG",
+            "entry_price": 10.30515,
+            "exit_price": 10.9945,
+            "shares": 9200,
+            "holding_days": 6,
+            "pnl": 6182.08356600003,
+            "pnl_ratio": 0.065187219572473,
+            "regime": "unknown",
+            "strategy_name": "unknown",
+            "entry_reason": "突破长期均线",
+            "exit_reason": "跌破长期均线/止损止盈"
+          }
+        ]
+      }
+    }
+  },
+  "rest_api_mapping": {
+    "format_version": "v1",
+    "channel": "rest_api",
+    "resources": {
+      "/api/backtests/runs": {
+        "method": "POST",
+        "payload": {
+          "run_id": "bt_20260308_040446_284385",
+          "strategy_name": "trend_following",
+          "regime_scope": "bull",
+          "start_date": "2025-01-01T00:00:00",
+          "end_date": "2025-01-30T00:00:00",
+          "config_snapshot": {
+            "strategy_name": "trend_following",
+            "version": "baseline-v1",
+            "params": {
+              "strategy": {
+                "technical": {
+                  "ma_period": 5
+                }
+              },
+              "risk": {
+                "stop_loss_pct": 0.08,
+                "stop_profit_pct": 0.2
+              },
+              "backtest": {
+                "strategy_name": "trend_following",
+                "initial_cash": 100000,
+                "commission_pct": 0.0003,
+                "stamp_tax_pct": 0.001,
+                "slippage_pct": 0.0005,
+                "lot_size": 100,
+                "t_plus_one": true,
+                "price_limit_model": "conservative",
+                "max_parameter_combinations": 4,
+                "max_in_out_sample_gap": 0.2,
+                "config_version": "baseline-v1"
+              }
+            },
+            "created_at": "2026-03-08T04:04:46.284403+00:00"
+          },
+          "metrics": {
+            "initial_cash": 100000.0,
+            "ending_equity": 108921.60447900003,
+            "total_return": 0.08921604479000031,
+            "annual_return": 1.931736013588924,
+            "max_drawdown": 0.03177989174496414,
+            "trade_count": 1,
+            "win_rate": 1.0,
+            "profit_loss_ratio": 0.0,
+            "avg_holding_days": 6.0,
+            "turnover_rate": 2.8847881731849006,
+            "signal_hit_rate": 0.5,
+            "sharpe_ratio": 4.496139030714843,
+            "calmar_ratio": 60.784851914891384,
+            "average_equity": 102810.69256900002,
+            "total_pnl": 6182.08356600003,
+            "avg_trade_pnl": 6182.08356600003
+          },
+          "engine_backend": "internal",
+          "cost_model": {
+            "commission_pct": 0.0003,
+            "stamp_tax_pct": 0.001,
+            "slippage_pct": 0.0005,
+            "lot_size": 100,
+            "t_plus_one": true,
+            "price_limit_model": "conservative"
+          }
+        }
+      },
+      "/api/backtests/runs/bt_20260308_040446_284385/signals": {
+        "method": "POST",
+        "payload": [
+          {
+            "signal_id": "000001.SZ-BUY-1",
+            "ts_code": "000001.SZ",
+            "stock_name": "000001.SZ",
+            "signal_time": "2025-01-17T00:00:00",
+            "regime": "unknown",
+            "strategy_name": "unknown",
+            "signal_type": "BUY",
+            "action": "BUY",
+            "suggested_position_change": 0.95,
+            "stop_loss_price": null,
+            "stop_profit_price": null,
+            "reason": "突破长期均线",
+            "risk_flags": []
+          },
+          {
+            "signal_id": "000001.SZ-SELL-2",
+            "ts_code": "000001.SZ",
+            "stock_name": "000001.SZ",
+            "signal_time": "2025-01-23T00:00:00",
+            "regime": "unknown",
+            "strategy_name": "unknown",
+            "signal_type": "SELL",
+            "action": "SELL",
+            "suggested_position_change": 0.0,
+            "stop_loss_price": null,
+            "stop_profit_price": null,
+            "reason": "跌破长期均线/止损止盈",
+            "risk_flags": []
+          },
+          {
+            "signal_id": "000001.SZ-BUY-3",
+            "ts_code": "000001.SZ",
+            "stock_name": "000001.SZ",
+            "signal_time": "2025-01-29T00:00:00",
+            "regime": "unknown",
+            "strategy_name": "unknown",
+            "signal_type": "BUY",
+            "action": "BUY",
+            "suggested_position_change": 0.95,
+            "stop_loss_price": null,
+            "stop_profit_price": null,
+            "reason": "突破长期均线",
+            "risk_flags": []
+          }
+        ]
+      },
+      "/api/backtests/runs/bt_20260308_040446_284385/positions": {
+        "method": "POST",
+        "payload": [
+          {
+            "snapshot_time": "2025-01-30T00:00:00",
+            "ts_code": "000001.SZ",
+            "base_shares": 9400,
+            "base_cost": 10.70535,
+            "mobile_shares": 0,
+            "mobile_cost": 10.70535,
+            "current_price": 11.0,
+            "market_value": 103400.0,
+            "profit_loss": 2769.7100000000064,
+            "profit_rate": 0.027523621366886717
+          }
+        ]
+      },
+      "/api/backtests/runs/bt_20260308_040446_284385/trades": {
+        "method": "POST",
+        "payload": [
+          {
+            "run_id": "bt_20260308_040446_284385",
+            "ts_code": "000001.SZ",
+            "entry_time": "2025-01-17T00:00:00",
+            "exit_time": "2025-01-23T00:00:00",
+            "side": "LONG",
+            "entry_price": 10.30515,
+            "exit_price": 10.9945,
+            "shares": 9200,
+            "holding_days": 6,
+            "pnl": 6182.08356600003,
+            "pnl_ratio": 0.065187219572473,
+            "regime": "unknown",
+            "strategy_name": "unknown",
+            "entry_reason": "突破长期均线",
+            "exit_reason": "跌破长期均线/止损止盈"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "format_version": "v1",
+  "positions": [
+    {
+      "snapshot_time": "2025-01-30T00:00:00",
+      "ts_code": "000001.SZ",
+      "base_shares": 9400,
+      "base_cost": 10.70535,
+      "mobile_shares": 0,
+      "mobile_cost": 10.70535,
+      "current_price": 11.0,
+      "market_value": 103400.0,
+      "profit_loss": 2769.7100000000064,
+      "profit_rate": 0.027523621366886717
+    }
+  ]
+}

@@ -1,62 +1,130 @@
 # 量化交易信号系统配置文件
 
-# 数据源配置
+# 兼容旧版 signal_system 的数据源配置
 data_source:
-  tushare_token: "你的Tushare_Token"  # 在 https://tushare.pro 注册获取
+  tushare_token: "你的Tushare_Token"
   use_cache: true
   cache_dir: "./cache"
 
-# 策略参数
-strategy:
-  # 基本面筛选
-  fundamental:
-    min_roe: 10  # 最小ROE (%)
-    max_debt_ratio: 50  # 最大负债率 (%)
-    max_pe: 30  # 最大市盈率
-    min_market_cap: 50  # 最小市值 (亿)
-    max_market_cap: 500  # 最大市值 (亿)
+# 新版统一数据层配置
+data:
+  provider: "tushare"
+  fallback_provider: "akshare"
+  cache_dir: "./cache"
+  daily_cache_hours: 24
+  minute_cache_hours: 6
+  fundamentals_cache_hours: 168
 
-  # 技术面参数
+strategy:
+  fundamental:
+    min_roe: 10
+    max_debt_ratio: 50
+    max_pe: 30
+    min_market_cap: 50
+    max_market_cap: 500
+
   technical:
-    ma_period: 250  # 年线周期
+    ma_period: 250
     macd_fast: 12
     macd_slow: 26
     macd_signal: 9
-    ma250_distance_threshold: 0.05  # 距离年线阈值
+    ma250_distance_threshold: 0.05
 
-  # 成交量参数
   volume:
-    min_turnover_rate: 1  # 最小换手率 (%)
-    max_turnover_rate: 5  # 最大换手率 (%)
-    volume_burst_ratio: 1.5  # 放量倍数
+    min_turnover_rate: 1
+    max_turnover_rate: 5
+    volume_burst_ratio: 1.5
 
-# 风控参数
+  enabled:
+    trend_following: true
+    mean_reversion: false
+    breakout: false
+
+  minute_frames: [5, 30, 60]
+  candidate_pool_size: 30
+
+selector:
+  roe_min: 10
+  debt_ratio_max: 50
+  pe_excellent_max: 17
+  pe_acceptable_max: 30
+  market_cap_min: 50
+  market_cap_max: 500
+  turnover_rate_min: 1
+  turnover_rate_max: 3
+  volume_ratio_min: 1.5
+  near_ma_threshold: 0.05
+  price_change_soft_min: -0.03
+  price_change_soft_max: 0.03
+
+regime:
+  mode: "auto"
+  index_code: "000001.SH"
+  ma_short: 20
+  ma_long: 250
+  slope_window: 20
+  lookback_bars: 300
+  bull_score_threshold: 0.70
+  bear_score_threshold: 0.70
+  range_score_threshold: 0.60
+
+position:
+  min_stocks: 2
+  target_stocks: 3
+  max_stocks: 4
+  base_position_per_stock: 0.25
+  mobile_cash_ratio: 0.25
+  max_position_per_stock: 0.40
+
+risk:
+  stop_loss_pct: 0.08
+  stop_profit_pct: 0.30
+  max_portfolio_drawdown_pct: 0.20
+  max_single_day_drawdown_pct: 0.02
+  allow_new_position_when_drawdown_exceeded: false
+
+t_trading:
+  enabled: true
+  positive_t_step_pct: 0.05
+  negative_t_step_pct: 0.05
+  range_t_step_pct: 0.05
+
+backtest:
+  initial_cash: 100000
+  commission_pct: 0.0003
+  stamp_tax_pct: 0.001
+  slippage_pct: 0.0005
+  lot_size: 100
+  t_plus_one: true
+  price_limit_model: "conservative"
+
+manual_overrides:
+  regime_override: "auto"
+  regime_override_reason: ""
+  disable_new_positions: false
+  only_reduce_positions: false
+  max_total_exposure: 1.0
+  watchlist_only: []
+
+# 兼容旧版 signal_system 的风控结构
 risk_control:
-  # 仓位控制
   position:
-    max_total_position: 0.8  # 最大总仓位
-    max_single_position: 0.25  # 单只股票最大仓位
-    reserve_cash_ratio: 0.25  # 机动资金比例
-
-  # 市场环境仓位
+    max_total_position: 0.8
+    max_single_position: 0.25
+    reserve_cash_ratio: 0.25
   market_position:
-    bull_market: 0.8  # 牛市最大仓位
-    sideways_market: 0.5  # 震荡市最大仓位
-    bear_market: 0.2  # 熊市最大仓位
+    bull_market: 0.8
+    sideways_market: 0.5
+    range_market: 0.5
+    bear_market: 0.2
+  stop_loss: 0.08
+  stop_profit: 0.30
+  max_drawdown: 0.15
 
-  # 止损止盈
-  stop_loss: 0.08  # 止损比例
-  stop_profit: 0.30  # 止盈比例
-  max_drawdown: 0.15  # 最大回撤
-
-# 通知配置
 notification:
-  # 企业微信机器人
   wechat:
     enabled: true
     webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
-
-  # 邮件通知
   email:
     enabled: false
     smtp_server: "smtp.qq.com"
@@ -64,20 +132,18 @@ notification:
     sender: "your@email.com"
     password: "your_password"
     receiver: "your@email.com"
+  channels: ["wecom", "email"]
+  push_market_regime: true
+  push_candidate_pool: true
+  push_trade_signal: true
 
-# 运行配置
 runtime:
-  # 定时任务
   schedule:
-    daily_scan_time: "15:30"  # 每日扫描时间 (收盘后)
-    weekly_review_day: "Friday"  # 每周复盘日
-
-  # 日志配置
+    daily_scan_time: "15:30"
+    weekly_review_day: "Friday"
   logging:
     level: "INFO"
     file: "./logs/signal_system.log"
-
-  # 数据库配置 (可选)
   database:
     enabled: false
     type: "sqlite"

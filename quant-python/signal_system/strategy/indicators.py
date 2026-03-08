@@ -3,13 +3,22 @@
 实现 MACD、均线、背离检测等核心指标
 """
 
-import pandas as pd
-import numpy as np
-import talib
-from scipy.signal import find_peaks
 import logging
+from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+import talib
+
+QUANT_ROOT = Path(__file__).resolve().parents[2]
+if str(QUANT_ROOT) not in sys.path:
+    sys.path.append(str(QUANT_ROOT))
+
+from core.indicators.divergence import DivergenceDetector
 
 logger = logging.getLogger(__name__)
+divergence_detector = DivergenceDetector()
 
 
 class TechnicalIndicators:
@@ -89,39 +98,14 @@ class TechnicalIndicators:
         Returns:
             str: 'bullish' (底背离), 'bearish' (顶背离), 'none' (无背离)
         """
+        del min_distance
+
         if len(price) < lookback or len(indicator) < lookback:
             return 'none'
 
-        recent_price = price.iloc[-lookback:].values
-        recent_indicator = indicator.iloc[-lookback:].values
-
-        price_peaks, _ = find_peaks(recent_price, distance=min_distance)
-        price_troughs, _ = find_peaks(-recent_price, distance=min_distance)
-
-        indicator_peaks, _ = find_peaks(recent_indicator, distance=min_distance)
-        indicator_troughs, _ = find_peaks(-recent_indicator, distance=min_distance)
-
-        if len(price_troughs) >= 2 and len(indicator_troughs) >= 2:
-            last_price_trough = price_troughs[-1]
-            prev_price_trough = price_troughs[-2]
-            last_ind_trough = indicator_troughs[-1]
-            prev_ind_trough = indicator_troughs[-2]
-
-            if (recent_price[last_price_trough] < recent_price[prev_price_trough] and
-                recent_indicator[last_ind_trough] > recent_indicator[prev_ind_trough]):
-                return 'bullish'
-
-        if len(price_peaks) >= 2 and len(indicator_peaks) >= 2:
-            last_price_peak = price_peaks[-1]
-            prev_price_peak = price_peaks[-2]
-            last_ind_peak = indicator_peaks[-1]
-            prev_ind_peak = indicator_peaks[-2]
-
-            if (recent_price[last_price_peak] > recent_price[prev_price_peak] and
-                recent_indicator[last_ind_peak] < recent_indicator[prev_ind_peak]):
-                return 'bearish'
-
-        return 'none'
+        recent_price = price.iloc[-lookback:]
+        recent_indicator = indicator.iloc[-lookback:]
+        return divergence_detector.classify(recent_price, recent_indicator)
 
     @staticmethod
     def calculate_ma_slope(ma_data, period=20):

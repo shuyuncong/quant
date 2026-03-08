@@ -1,0 +1,50 @@
+{
+  "format_version": "v1",
+  "signals": [
+    {
+      "signal_id": "000001.SZ-BUY-1",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-17T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "BUY",
+      "action": "BUY",
+      "suggested_position_change": 0.95,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "突破长期均线",
+      "risk_flags": []
+    },
+    {
+      "signal_id": "000001.SZ-SELL-2",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-23T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "SELL",
+      "action": "SELL",
+      "suggested_position_change": 0.0,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "跌破长期均线/止损止盈",
+      "risk_flags": []
+    },
+    {
+      "signal_id": "000001.SZ-BUY-3",
+      "ts_code": "000001.SZ",
+      "stock_name": "000001.SZ",
+      "signal_time": "2025-01-29T00:00:00",
+      "regime": "unknown",
+      "strategy_name": "unknown",
+      "signal_type": "BUY",
+      "action": "BUY",
+      "suggested_position_change": 0.95,
+      "stop_loss_price": null,
+      "stop_profit_price": null,
+      "reason": "突破长期均线",
+      "risk_flags": []
+    }
+  ]
+}
