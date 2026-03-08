@@ -127,15 +127,21 @@ class DataFetcher:
         data_source = runtime.setdefault("data_source", {})
         data = runtime.setdefault("data", {})
 
-        data_source.setdefault("tushare_token", tushare_token or "")
-        data_source["use_cache"] = use_cache if "use_cache" not in data_source else data_source["use_cache"]
-        data_source["cache_dir"] = cache_dir if not data_source.get("cache_dir") else data_source["cache_dir"]
+        if tushare_token is not None:
+            data_source["tushare_token"] = tushare_token
+        else:
+            data_source.setdefault("tushare_token", "")
+
+        # Constructor arguments should win over file config so ad-hoc validation
+        # can explicitly disable cache or redirect cache output.
+        data_source["use_cache"] = use_cache
+        data_source["cache_dir"] = cache_dir or data_source.get("cache_dir") or "./cache"
 
         data.setdefault("provider", "akshare")
         data.setdefault("minute_provider", "pytdx")
         data.setdefault("fallback_provider", "")
         data.setdefault("minute_fallback_provider", "")
-        data.setdefault("cache_dir", data_source["cache_dir"])
+        data["cache_dir"] = data_source["cache_dir"]
         data.setdefault("daily_cache_hours", 24)
         data.setdefault("minute_cache_hours", 6)
         data.setdefault("fundamentals_cache_hours", 168)

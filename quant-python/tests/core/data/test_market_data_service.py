@@ -116,6 +116,17 @@ class MarketDataServiceTest(unittest.TestCase):
         self.assertEqual(stock_list.iloc[0]["name"], "平安银行")
         self.assertEqual(len(minute_df), 1)
 
+    def test_data_fetcher_explicit_runtime_options_override_config(self):
+        fetcher = DataFetcher(
+            use_cache=False,
+            cache_dir="D:/tmp/override-cache",
+            config=self.config,
+            providers={"akshare": self.daily_provider, "pytdx": self.minute_provider},
+        )
+
+        self.assertFalse(fetcher.use_cache)
+        self.assertEqual(fetcher.cache_dir, "D:/tmp/override-cache")
+
 
 if __name__ == "__main__":
     unittest.main()

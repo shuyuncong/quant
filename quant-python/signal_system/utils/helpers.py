@@ -38,10 +38,10 @@ DEFAULT_CONFIG = {
     "strategy": {
         "fundamental": {
             "min_roe": 10,
-            "max_debt_ratio": 50,
+            "max_debt_ratio": 60,
             "max_pe": 30,
             "min_market_cap": 50,
-            "max_market_cap": 500,
+            "max_market_cap": 3000,
         },
         "technical": {
             "ma_period": 250,
@@ -51,9 +51,9 @@ DEFAULT_CONFIG = {
             "ma250_distance_threshold": 0.05,
         },
         "volume": {
-            "min_turnover_rate": 1,
+            "min_turnover_rate": 0.5,
             "max_turnover_rate": 5,
-            "volume_burst_ratio": 1.5,
+            "volume_burst_ratio": 0.8,
         },
         "enabled": {
             "trend_following": True,

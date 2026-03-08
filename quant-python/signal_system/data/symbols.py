@@ -6,7 +6,12 @@ from typing import Tuple
 
 
 def normalize_ts_code(symbol: str) -> str:
-    """Normalize symbol into the internal `000001.SZ` / `600000.SH` format."""
+    """Normalize an A-share symbol into the internal `000001.SZ` style format.
+
+    The current system only targets the mainland A-share universe. In that
+    universe, AKShare stock lists include Beijing exchange codes such as
+    `920003`, so `9`-prefix codes should be treated as `BJ` instead of `SH`.
+    """
     if not symbol:
         return ""
 
@@ -23,9 +28,9 @@ def normalize_ts_code(symbol: str) -> str:
         return f"{code}.{exchange}"
 
     if raw.isdigit():
-        if raw.startswith(("6", "9")):
+        if raw.startswith("6"):
             exchange = "SH"
-        elif raw.startswith(("4", "8")):
+        elif raw.startswith(("4", "8", "9")):
             exchange = "BJ"
         else:
             exchange = "SZ"
