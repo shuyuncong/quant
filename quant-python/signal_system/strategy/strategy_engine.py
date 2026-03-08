@@ -311,6 +311,11 @@ class StrategyEngine:
             logger.error("Failed to get stock list")
             return None
 
+        stock_list = self._apply_watchlist_override(stock_list)
+        if stock_list.empty:
+            logger.error("No stocks remaining after watchlist override")
+            return None
+
         selection_inputs = self.build_selection_inputs(stock_list)
         # 先做成本最低的基本面和换手率预筛，尽量缩小技术分析的输入规模。
         fundamental_result = self.selector.select(selection_inputs, checks=("fundamental",))
@@ -374,6 +379,19 @@ class StrategyEngine:
         logger.info("=" * 50)
 
         return result
+
+    def _apply_watchlist_override(self, stock_list):
+        """Restrict the scan universe when `manual_overrides.watchlist_only` is configured."""
+        watchlist = self.config.get("manual_overrides", {}).get("watchlist_only", [])
+        if not watchlist:
+            return stock_list
+
+        normalized_watchlist = {str(item).strip().upper() for item in watchlist}
+        filtered = stock_list[
+            stock_list["ts_code"].astype(str).str.upper().isin(normalized_watchlist)
+        ].reset_index(drop=True)
+        logger.info("Watchlist override applied: %s -> %s", len(stock_list), len(filtered))
+        return filtered
 
     def _enrich_technical_context(self, stock_info, tech_result, df):
         """把技术分析结果扩展成策略可直接消费的上下文。"""

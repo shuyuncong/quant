@@ -18,12 +18,22 @@ DEFAULT_CONFIG = {
         "cache_dir": "./cache",
     },
     "data": {
-        "provider": "tushare",
-        "fallback_provider": "akshare",
+        "provider": "akshare",
+        "minute_provider": "pytdx",
+        "fallback_provider": "",
+        "minute_fallback_provider": "",
+        "disable_system_proxy": True,
         "cache_dir": "./cache",
         "daily_cache_hours": 24,
         "minute_cache_hours": 6,
         "fundamentals_cache_hours": 168,
+        "pytdx_host": "180.153.18.170",
+        "pytdx_port": 7709,
+        "pytdx_hosts": [
+            "180.153.18.170:7709",
+            "119.147.212.81:7709",
+            "114.80.63.12:7709",
+        ],
     },
     "strategy": {
         "fundamental": {

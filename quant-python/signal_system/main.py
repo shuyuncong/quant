@@ -46,7 +46,8 @@ class SignalSystem:
         self.data_fetcher = DataFetcher(
             tushare_token=tushare_token,
             use_cache=use_cache,
-            cache_dir=cache_dir
+            cache_dir=cache_dir,
+            config=self.config,
         )
 
         self.technical = TechnicalIndicators()

@@ -53,3 +53,4 @@ __pycache__/
 *.pyc
 
 quant-python/backtest/acceptance/output/
+/cache/

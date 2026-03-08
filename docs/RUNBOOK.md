@@ -130,3 +130,23 @@ python quant-python/tests/integration/test_daily_scan_flow.py
 - 是否在仓库根目录执行
 - 当前环境是否安装了 `pandas`
 - 基线输入文件 `sample_price_data.csv` 是否存在
+
+## 7. 数据源网络自检
+
+如果你切到 `AKShare + pytdx` 方案，先跑一次网络自检：
+
+```bash
+python quant-python/signal_system/data/network_diagnostic.py
+```
+
+如需保存 JSON 结果：
+
+```bash
+python quant-python/signal_system/data/network_diagnostic.py --output quant-python/output/network_diagnostic.json
+```
+
+它会检查：
+- 当前代理环境变量
+- 东财 HTTP 链路是否可用
+- `pytdx` 是否可导入
+- 常见 TDX 行情主机 `7709` 端口是否可连
