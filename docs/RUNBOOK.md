@@ -150,3 +150,30 @@ python quant-python/signal_system/data/network_diagnostic.py --output quant-pyth
 - 东财 HTTP 链路是否可用
 - `pytdx` 是否可导入
 - 常见 TDX 行情主机 `7709` 端口是否可连
+
+## 8. 真实数据日扫验收
+
+如果你要验证“当前真实数据链路 + selector + router”是否还能跑出候选池和买点，执行：
+
+```bash
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py
+```
+
+默认行为：
+- 使用固定的 40 只真实样本股
+- 复用当前正式配置
+- 要求至少满足：
+  - `candidate_pool_count >= 1`
+  - `buy_signals_count >= 1`
+
+可选参数：
+
+```bash
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --no-cache
+python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --output quant-python/output/daily_scan_acceptance.json
+```
+
+如果脚本退出码为 `0`，表示这条真实验收链路通过；如果退出码非 `0`，优先检查：
+- 数据源是否还能拿到真实行情
+- 当前 selector 默认阈值是否被改得过严
+- `StrategyEngine` 是否还保留了 `watchlist_only` 的约束入口
