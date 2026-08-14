@@ -7,8 +7,50 @@ from copy import deepcopy
 from datetime import datetime
 import logging
 import os
+import re
 
 import yaml
+
+
+_ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def _expand_env(value):
+    if isinstance(value, dict):
+        return {key: _expand_env(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    def replace(match):
+        name, default = match.group(1), match.group(2) or ''
+        return os.getenv(name, default)
+
+    return _ENV_PATTERN.sub(replace, value)
+
+
+def _resolve_runtime_paths(config, config_path):
+    config_file = os.path.abspath(config_path)
+    config_dir = os.path.dirname(config_file)
+    base_dir = os.path.dirname(config_dir) if os.path.basename(config_dir) == 'config' else config_dir
+    path_locations = [
+        ('market_data', 'cache_dir'),
+        ('data_source', 'cache_dir'),
+        ('data', 'cache_dir'),
+        ('runtime', 'database_path'),
+        ('runtime', 'output_dir'),
+    ]
+    for section, key in path_locations:
+        value = config.get(section, {}).get(key)
+        if value and not os.path.isabs(value):
+            config[section][key] = os.path.normpath(os.path.join(base_dir, value))
+    log_file = config.get('runtime', {}).get('logging', {}).get('file')
+    if log_file and not os.path.isabs(log_file):
+        config['runtime']['logging']['file'] = os.path.normpath(os.path.join(base_dir, log_file))
+    config['_config_path'] = config_file
+    config['_base_dir'] = base_dir
+    return config
 
 
 DEFAULT_CONFIG = {
@@ -190,7 +232,8 @@ def load_config(config_path='config/config.yaml'):
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             user_config = yaml.safe_load(f) or {}
-        config = _deep_merge(deepcopy(DEFAULT_CONFIG), user_config)
+        config = _deep_merge(deepcopy(DEFAULT_CONFIG), _expand_env(user_config))
+        config = _resolve_runtime_paths(config, config_path)
         return _normalize_compatibility_sections(config)
     except Exception as e:
         print(f"加载配置文件失败: {e}")

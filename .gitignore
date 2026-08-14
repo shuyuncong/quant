@@ -50,10 +50,17 @@ build/
 ### Python ###
 __pycache__/
 *.py[cod]
-*.pyc
 
 quant-python/backtest/acceptance/output/
 /cache/
 quant-python/cache/
 quant-python/output/
 quant-python/signal_system/cache_acceptance/
+
+# Python signal monitor runtime data
+quant-python/signal_system/cache/
+quant-python/signal_system/logs/
+quant-python/signal_system/output/
+quant-python/signal_system/data/*.db
+quant-python/signal_system/data/*.db-*
+quant-python/signal_system/**/__pycache__/

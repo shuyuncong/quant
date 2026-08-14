@@ -1,10 +1,22 @@
-# 量化交易信号系统配置文件
+# A股缠论多周期信号监控配置（含量化交易信号系统统一配置）
+
+market_data:
+  provider: "auto"                 # auto=腾讯K线+新浪/东方财富列表；也可选 eastmoney/akshare/tushare
+  tushare_token: "${TUSHARE_TOKEN:-}"
+  adjust: "none"                   # 默认不复权以保证腾讯日线/分钟线口径一致
+  min_listing_trade_days: 120      # 全市场扫描排除上市不足该交易日数的股票
+  minute_timestamp: "end"
+  volume_unit_shares: 100           # AkShare A股成交量通常以“手”为单位
+  use_cache: true
+  cache_dir: "./cache"
+  request_interval_seconds: 0.35
 
 # 兼容旧版 signal_system 的数据源配置
 data_source:
-  tushare_token: "83b68f9509d340d740a27abf45a2d989b1002d303749a0e01b443ce6"
+  tushare_token: "${TUSHARE_TOKEN:-}"
   use_cache: true
   cache_dir: "./cache"
+  request_interval_seconds: 0.35
 
 # 新版统一数据层配置
 data:
@@ -54,6 +66,28 @@ strategy:
 
   minute_frames: [5, 30, 60]
   candidate_pool_size: 30
+
+signal_strategy:
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+    zero_axis_tolerance: 0.005       # DIF/DEA 距0轴不超过收盘价的0.5%
+  chan:
+    min_bi_bars: 4
+    divergence_ratio: 0.90          # 当前同向笔MACD面积小于前一笔的90%
+    fresh_signal_bars: 1            # 只推最新已完成K线确认的结构
+  scoring:
+    buy_threshold: 60
+    sell_threshold: 60
+    timeframe_weights:
+      1m: 1
+      5m: 2
+      15m: 3
+      30m: 4
+      60m: 5
+      120m: 6
+      1d: 8
 
 selector:
   # selector only keeps structure-specific tuning.
@@ -133,30 +167,54 @@ risk_control:
   stop_profit: 0.30
   max_drawdown: 0.15
 
+monitor:
+  watchlist:
+    - "000001.SZ"
+    - "600036.SH"
+  timeframes: ["1m", "5m", "15m", "30m", "60m", "120m", "1d"]
+  bar_limit: 300
+  interval_seconds: 60
+  daily_scan_time: "15:20"
+  candidate_limit: 100
+  candidate_ttl_business_days: 5
+  max_scan_symbols_per_run: 500
+
+scan:
+  universe_mode: "watchlist"        # watchlist / all_a
+
 notification:
+  timeout_seconds: 10
   wechat:
-    enabled: true
-    webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    enabled: false
+    webhook_url: "${WECHAT_WEBHOOK_URL:-}"
+  webhook:
+    enabled: false
+    url: "${SIGNAL_WEBHOOK_URL:-}"
+    headers:
+      Authorization: "${SIGNAL_WEBHOOK_AUTH:-}"
   email:
     enabled: false
     smtp_server: "smtp.qq.com"
     smtp_port: 465
-    sender: "your@email.com"
-    password: "your_password"
-    receiver: "your@email.com"
+    sender: "${SIGNAL_EMAIL_SENDER:-}"
+    password: "${SIGNAL_EMAIL_PASSWORD:-}"
+    receiver: "${SIGNAL_EMAIL_RECEIVER:-}"
   channels: ["wecom", "email"]
   push_market_regime: true
   push_candidate_pool: true
   push_trade_signal: true
 
 runtime:
+  database_path: "./data/signal_monitor.db"
+  output_dir: "./output"
   schedule:
     daily_scan_time: "15:30"
     weekly_review_day: "Friday"
   logging:
     level: "INFO"
-    file: "./logs/signal_system.log"
+    file: "./logs/signal_monitor.log"
   database:
     enabled: false
     type: "sqlite"
     path: "./data/signals.db"
+

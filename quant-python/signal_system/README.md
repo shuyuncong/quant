@@ -1,274 +1,174 @@
-# 量化交易信号系统
+# A股缠论多周期信号监控
 
-一个基于 Python 的量化交易信号生成系统，实现自动化选股、技术分析和信号推送。
+这个程序自动获取 A 股行情，分析分时、1/5/15/30/60/120 分钟和日线，识别缠论中枢与一二三类买卖点，筛选 MACD 0 轴附近金叉/死叉，并通过企业微信、邮件或通用 HTTP Webhook 推送新信号。
 
-## 功能特性
+> 信号用于研究和提醒，不自动下单，也不构成投资建议。“0轴金叉 + 缠论共振”只是筛选排序规则；没有经过包含手续费、滑点和样本外数据的回测，不能声称已经提高真实胜率。
 
-- ✅ **数据获取**: 支持 Tushare 数据源，带缓存机制
-- ✅ **基本面筛选**: 三高一低过滤（负债率、应收账款、财务费用、现金流）
-- ✅ **技术指标**: MACD、均线、RSI、背离检测
-- ✅ **信号生成**: 买入/卖出信号自动生成
-- ✅ **风险控制**: 止损止盈、仓位管理、市场环境判断
-- ✅ **通知推送**: 企业微信、邮件通知
-- ✅ **历史记录**: 信号历史保存
+## 核心能力
 
-## 系统架构
+- 默认直接读取腾讯日线/分钟线，并用新浪/东方财富获取全市场列表与收盘快照，无额外行情 SDK；另保留 AkShare、东方财富 K 线和 Tushare 适配。
+- 1m、5m、15m、30m、60m、120m、1d 多周期分析。
+- 当日 1 分钟分时摘要：涨跌幅、成交量、成交额和 VWAP；没有成交额时明确标为典型价格近似值。
+- 工程化缠论：包含处理、严格分型、笔、中枢、一/二/三类买卖点、MACD 面积背驰。
+- MACD 0 轴附近金叉/死叉，阈值按收盘价归一化，便于不同价格股票比较。
+- 大周期趋势、MA60、量比和缠论共振的可解释买卖双评分。
+- SQLite 事件去重与事务 outbox；每个通知通道独立记录状态，worker 每次只领取当前要发送的一条，失败指数退避。
+- 交易日、午休和收盘调度；120 分钟线不会跨越午休。
 
-```
-signal_system/
-├── config/              # 配置文件
-│   └── config.yaml
-├── data/                # 数据获取模块
-│   └── data_fetcher.py
-├── strategy/            # 策略引擎
-│   ├── indicators.py    # 技术指标
-│   └── strategy_engine.py
-├── notification/        # 通知模块
-│   └── notifier.py
-├── utils/               # 工具函数
-│   └── helpers.py
-├── main.py             # 主程序
-└── requirements.txt    # 依赖包
+## 安装
+
+建议 Python 3.11 或更高版本：
+
+```powershell
+cd D:\development\github\quant\quant-python\signal_system
+python -m pip install -r requirements.txt
 ```
 
-## 快速开始
+核心算法不再依赖 TA-Lib 和 SciPy。默认 `provider: auto` 使用腾讯公开 K 线接口，股票列表/快照在东方财富不可用时自动降级新浪财经。如果要改用 AkShare 或 Tushare，再安装对应可选依赖：
 
-### 1. 安装依赖
-
-```bash
-pip install -r requirements.txt
+```powershell
+python -m pip install -r requirements-akshare.txt
+python -m pip install -r requirements-tushare.txt
 ```
 
-**注意**: TA-Lib 需要单独安装：
-- Windows: 下载 whl 文件 https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib
-- Linux/Mac: `brew install ta-lib` 或从源码编译
+## 配置
 
-### 2. 配置系统
-
-编辑 `config/config.yaml`:
+编辑 [config/config.yaml](config/config.yaml)。先把自选股改成你的股票：
 
 ```yaml
-# 必须配置
-data_source:
-  tushare_token: "你的Tushare_Token"  # 在 https://tushare.pro 注册获取
+monitor:
+  watchlist:
+    - "000001.SZ"
+    - "600036.SH"
+```
 
-# 可选配置
+密钥建议使用环境变量，不要写进 Git：
+
+```powershell
+$env:TUSHARE_TOKEN = "你的Token"
+$env:WECHAT_WEBHOOK_URL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+$env:SIGNAL_WEBHOOK_URL = "https://your-service.example.com/stock-signal"
+$env:SIGNAL_WEBHOOK_AUTH = "Bearer your-token"
+```
+
+启用对应通道：
+
+```yaml
 notification:
   wechat:
     enabled: true
-    webhook_url: "你的企业微信机器人webhook"
-```
-
-### 3. 运行系统
-
-```bash
-# 执行每日扫描（发送通知）
-python main.py
-
-# 执行扫描但不发送通知
-python main.py --no-notify
-
-# 测试通知功能
-python main.py --test-notify
-```
-
-## 配置说明
-
-### 数据源配置
-
-```yaml
-data_source:
-  tushare_token: "你的Token"
-  use_cache: true          # 是否使用缓存
-  cache_dir: "./cache"     # 缓存目录
-```
-
-### 策略参数
-
-```yaml
-strategy:
-  fundamental:
-    min_roe: 10           # 最小ROE (%)
-    max_debt_ratio: 50    # 最大负债率 (%)
-    max_pe: 30            # 最大市盈率
-
-  technical:
-    ma_period: 250        # 年线周期
-    macd_fast: 12
-    macd_slow: 26
-
-  volume:
-    min_turnover_rate: 1  # 最小换手率 (%)
-    max_turnover_rate: 5  # 最大换手率 (%)
-```
-
-### 风控参数
-
-```yaml
-risk_control:
-  position:
-    max_total_position: 0.8      # 最大总仓位
-    max_single_position: 0.25    # 单只股票最大仓位
-
-  stop_loss: 0.08               # 止损比例 8%
-  stop_profit: 0.30             # 止盈比例 30%
-```
-
-## 使用流程
-
-### 1. 首次运行
-
-```bash
-# 测试通知功能
-python main.py --test-notify
-
-# 如果通知成功，执行完整扫描
-python main.py
-```
-
-### 2. 查看结果
-
-- **控制台输出**: 实时显示扫描进度和结果
-- **日志文件**: `logs/signal_system.log`
-- **信号历史**: `output/signals_YYYYMMDD_HHMMSS.yaml`
-
-### 3. 管理持仓
-
-创建 `data/positions.yaml` 文件记录持仓：
-
-```yaml
-- ts_code: "000001.SZ"
-  name: "平安银行"
-  buy_price: 12.50
-  buy_date: "2024-01-15"
-
-- ts_code: "600036.SH"
-  name: "招商银行"
-  buy_price: 35.80
-  buy_date: "2024-01-20"
-```
-
-系统会自动检查持仓的卖出信号。
-
-## 定时任务
-
-### Linux/Mac (crontab)
-
-```bash
-# 每个交易日 15:30 执行
-30 15 * * 1-5 cd /path/to/signal_system && python main.py
-```
-
-### Windows (任务计划程序)
-
-1. 打开"任务计划程序"
-2. 创建基本任务
-3. 触发器: 每天 15:30
-4. 操作: 启动程序 `python.exe`
-5. 参数: `main.py`
-6. 起始于: `D:\path\to\signal_system`
-
-## 通知配置
-
-### 企业微信机器人
-
-1. 创建企业微信群
-2. 添加群机器人
-3. 复制 webhook 地址到配置文件
-
-### 邮件通知
-
-```yaml
-notification:
-  email:
+  webhook:
     enabled: true
-    smtp_server: "smtp.qq.com"
-    smtp_port: 465
-    sender: "your@email.com"
-    password: "授权码"  # QQ邮箱需要使用授权码
-    receiver: "your@email.com"
 ```
 
-## 策略说明
+## 使用
 
-### 选股逻辑
+### 分析指定股票
 
-系统采用"三条腿"原则：
-
-1. **基本面**: ROE>10%, 负债率<50%, PE<30, 市值50-500亿
-2. **技术面**: 年线向上, 回调至年线附近, 底背离
-3. **成交量**: 换手率1-5%, 放量突破
-
-### 买入信号
-
-- 年线向上 + 回调至年线 + 底背离 + 放量
-- MACD金叉 + 年线向上 + 放量
-- 评分机制: 满足条件越多，评分越高
-
-### 卖出信号
-
-- 止损: 亏损超过8%
-- 止盈: 盈利超过30%
-- 顶背离
-- 破年线（年线向下）
-
-### 市场环境判断
-
-- **牛市**: 上证指数年线向上 + 价格在年线上 + MACD>0
-- **熊市**: 上证指数年线向下 + 价格在年线下 + MACD<0
-- **震荡**: 其他情况
-
-不同市场环境采用不同仓位策略。
-
-## 注意事项
-
-1. **数据源**: Tushare 免费版有调用限制，建议使用缓存
-2. **回测**: 本系统为信号提示系统，不包含回测功能
-3. **风险**: 量化信号仅供参考，不构成投资建议
-4. **实盘**: 建议先纸面交易验证策略有效性
-
-## 常见问题
-
-### Q: TA-Lib 安装失败？
-
-A: Windows 用户下载对应版本的 whl 文件安装：
-```bash
-pip install TA_Lib-0.4.24-cp39-cp39-win_amd64.whl
+```powershell
+python main.py analyze --symbols 000001.SZ 600036.SH --no-notify
 ```
 
-### Q: Tushare 调用失败？
+去掉 `--no-notify` 后，新鲜且达到阈值的信号会进入 outbox 并推送。结果同时保存到 `output/analysis_*.json`。
 
-A: 检查：
-1. Token 是否正确
-2. 积分是否足够
-3. 是否超过调用频率限制
+### 扫描 0 轴附近金叉
 
-### Q: 没有收到通知？
+默认只扫描自选股：
 
-A: 检查：
-1. webhook 地址是否正确
-2. 网络是否正常
-3. 运行 `python main.py --test-notify` 测试
+```powershell
+python main.py scan --no-notify
+```
 
-### Q: 如何调整策略参数？
+全市场模式：
 
-A: 编辑 `config/config.yaml`，调整对应参数后重新运行。
+```yaml
+scan:
+  universe_mode: "all_a"
+```
 
-## 后续优化
+```powershell
+python main.py scan
+```
 
-- [ ] 支持更多数据源 (AkShare, 聚宽)
-- [ ] 添加回测功能
-- [ ] Web 界面
-- [ ] 数据库存储
-- [ ] 更多技术指标
-- [ ] 机器学习模型
+首次全市场运行要逐只回填日线历史，默认每轮最多 500 只，并在结果中返回 `coverage`。程序持久化成功股票集合，但每轮仍会重新验证本地历史是否存在、至少 120 根且更新到最近应有交易日；股票列表提供上市日期时会提前排除上市不足 `market_data.min_listing_trade_days` 的股票，降级数据源缺少上市日期时则根据实际历史长度暂缓并在后续交易日复查。只有全部符合条件的活跃股票成功后才标记回填完成；历史保存在 `cache/daily_history/`。之后使用全市场收盘快照做日线增量，零价或非法 OHLC（包括新浪常见的零值停牌表示）不会写成新鲜日线。免费数据源不适合在一分钟内对数千只股票抓七个周期，因此全市场只做日线低频筛选，分钟级监控只处理自选股与候选池。
 
-## 许可证
+### 常驻监控
 
-MIT License
+```powershell
+python main.py monitor
+```
 
-## 免责声明
+程序只在 A 股交易日的 `09:30-11:30`、`13:00-15:00` 执行分钟监控，并在配置的 `daily_scan_time` 执行或补跑日线扫描。先做一次 smoke test：
 
-本系统仅用于学习和研究目的，不构成任何投资建议。
-使用本系统进行实盘交易的风险由使用者自行承担。
-股市有风险，投资需谨慎。
+```powershell
+python main.py monitor --once --no-notify
+```
+
+Windows 任务计划程序可把“启动程序”设为 `powershell.exe`，参数设为：
+
+```text
+-ExecutionPolicy Bypass -File D:\development\github\quant\quant-python\signal_system\scripts\run_monitor.ps1
+```
+
+常驻任务意外退出后，建议让任务计划程序自动重启。
+
+### 测试通知
+
+```powershell
+python main.py test-notify
+```
+
+## 通用 Webhook 合同
+
+请求使用 `POST application/json`，并发送 `Idempotency-Key: <event_id>`。schema 当前为 `quant.signal.v1`：
+
+```json
+{
+  "schema": "quant.signal.v1",
+  "event_id": "e2c4...",
+  "symbol": "000001",
+  "name": "平安银行",
+  "timeframe": "30m",
+  "signal_type": "buy_3+zero_axis_golden_cross",
+  "side": "buy",
+  "price": 10.52,
+  "structure_time": "2026-08-14T14:30:00",
+  "confirmed_at": "2026-08-14T15:00:00",
+  "score": 80,
+  "evidence": {},
+  "risk_notice": "量化信号仅供研究，不构成投资建议；请独立判断并控制风险。"
+}
+```
+
+投递语义是“至少一次”。如果接收端按 `event_id` 或 `Idempotency-Key` 去重，可避免网络超时重试造成重复处理。
+
+## 缠论口径
+
+缠论不同流派的包含、成笔和中枢画法并不完全一致。本项目使用一套可回放、可测试的工程规则：
+
+1. 只处理已收盘 K 线。
+2. 包含方向由最近非包含 K 线高低点同向移动确定。
+3. 顶底分型采用严格比较，分型在右侧 K 线完成后初步确认。
+4. 笔连接交替分型，默认端点至少相隔 4 根处理后 K 线；最后一笔保持 provisional，只有下一笔被接受后前一笔才锁定并可发信号，防止同类新极值重绘。
+5. 三笔共同重叠形成中枢，核心 `ZD/ZG` 在中枢扩展时保持不变。
+6. 一类点使用同向笔创新高/低且 MACD 柱面积衰减；二类点检查一类点后的回试；三类点检查离开中枢后的不回中枢回抽。
+
+完整定义见 [总体设计](../../docs/ai-dev-workflow/chan-signal-monitor/overview-design.md)。算法输出同时带 `structure_time` 和 `confirmed_at`，推送与去重以确认时间为准。
+
+## 测试
+
+```powershell
+python -m unittest discover -s tests -v
+python -m compileall -q .
+```
+
+测试覆盖 MACD 0 轴交叉、午休对齐的 120 分钟聚合、包含/分型、一二三类买卖点、防重绘回放、买卖双评分、SQLite 去重、分通道投递和交易时段判断。
+
+## 运行数据
+
+- `cache/`：行情缓存和日线历史。
+- `data/signal_monitor.db`：事件、outbox、候选池和任务状态。
+- `output/`：每次分析/扫描的 JSON 报告。
+- `logs/signal_monitor.log`：运行日志。
+
+这些目录已加入 `.gitignore`。删除缓存可强制重拉行情；删除数据库会丢失去重、候选池和调度状态，可能导致旧信号再次被视为新事件。
