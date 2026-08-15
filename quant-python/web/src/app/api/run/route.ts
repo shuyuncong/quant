@@ -1,0 +1,35 @@
+import { NextResponse } from "next/server";
+import { startJob, type JobKind } from "@/lib/jobs";
+
+const VALID_KINDS = new Set<JobKind>([
+  "analyze",
+  "scan",
+  "monitor-once",
+  "test-notify",
+  "dispatch-outbox",
+]);
+
+export async function POST(request: Request) {
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
+  }
+  const kind = String(body.kind ?? "") as JobKind;
+  if (!VALID_KINDS.has(kind)) {
+    return NextResponse.json({ error: "不支持的任务类型" }, { status: 422 });
+  }
+  if (kind === "analyze") {
+    const symbols = Array.isArray(body.symbols) ? (body.symbols as unknown[]).map(String) : [];
+    if (symbols.length === 0) {
+      return NextResponse.json({ error: "analyze 需要至少一个股票代码" }, { status: 422 });
+    }
+  }
+  const payload: Record<string, unknown> = {
+    notify: body.notify !== false,
+  };
+  if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
+  const jobId = startJob(kind, payload);
+  return NextResponse.json({ ok: true, jobId }, { status: 202 });
+}

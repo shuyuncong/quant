@@ -351,3 +351,23 @@ class SignalStore:
         with self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) AS count FROM signal_event").fetchone()
         return int(row["count"])
+
+    def outbox_summary(self) -> dict[str, int]:
+        """Return a lightweight summary of the outbox for the web console."""
+        with self._connect() as connection:
+            pending = connection.execute(
+                "SELECT COUNT(*) AS count FROM outbox_delivery WHERE status='pending'"
+            ).fetchone()["count"]
+            delivered = connection.execute(
+                "SELECT COUNT(*) AS count FROM outbox_delivery WHERE status='delivered'"
+            ).fetchone()["count"]
+            failed = connection.execute(
+                "SELECT COUNT(*) AS count FROM outbox_delivery WHERE status='failed'"
+            ).fetchone()["count"]
+            total_events = connection.execute("SELECT COUNT(*) AS count FROM signal_event").fetchone()["count"]
+        return {
+            "pending": int(pending),
+            "delivered": int(delivered),
+            "failed": int(failed),
+            "total_events": int(total_events),
+        }
