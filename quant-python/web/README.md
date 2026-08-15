@@ -21,7 +21,7 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:3000 （也可 `npm run start` 生产模式；默认仅绑定 127.0.0.1）。
+打开 http://localhost:3111 （也可 `npm run start` 生产模式；默认仅绑定 127.0.0.1）。
 
 Web 通过 `quant-python/signal_system/web_bridge.py` 以子进程方式调用现有引擎（分析/扫描/监控/推送/日历/outbox）。请勿删除该文件。
 
