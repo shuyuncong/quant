@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   Clock3,
   Database,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/models", label: "模型配置", icon: BrainCircuit },
   { href: "/schedule", label: "定时任务", icon: Clock3 },
   { href: "/pool", label: "股票池", icon: Database },
+  { href: "/workflow", label: "流程说明", icon: Workflow },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
