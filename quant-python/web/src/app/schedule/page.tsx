@@ -126,25 +126,7 @@ export default function SchedulePage() {
               <Label>仅交易日</Label>
             </div>
           </div>
-          <div className="flex flex-col gap-2 border-t pt-3">
-            <Label>固定时点（可选）</Label>
-            <div className="flex items-center gap-2">
-              {["10:30", "13:30", "14:30"].map((time) => (
-                <Button
-                  key={time}
-                  type="button"
-                  size="sm"
-                  variant={(monitor?.fixed_times ?? []).includes(time) ? "default" : "outline"}
-                  onClick={() => toggleFixedTime(time)}
-                >
-                  {time}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              勾选后盘中检测改为按这些固定时点各执行一次（不再按间隔执行）；全部取消勾选则恢复为间隔执行。
-            </p>
-          </div>
+
         </CardContent>
       </Card>
 
@@ -173,6 +155,25 @@ export default function SchedulePage() {
               />
               <Label>仅交易日</Label>
             </div>
+          </div>
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <Label>固定时点（可选）</Label>
+            <div className="flex items-center gap-2">
+              {["10:30", "13:30", "14:30"].map((time) => (
+                <Button
+                  key={time}
+                  type="button"
+                  size="sm"
+                  variant={(monitor?.fixed_times ?? []).includes(time) ? "default" : "outline"}
+                  onClick={() => toggleFixedTime(time)}
+                >
+                  {time}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              勾选后盘中检测改为按这些固定时点各执行一次（不再按间隔执行）；全部取消勾选则恢复为间隔执行。
+            </p>
           </div>
         </CardContent>
       </Card>
