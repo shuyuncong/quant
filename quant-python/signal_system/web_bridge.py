@@ -287,6 +287,19 @@ def _cmd_outbox_status(config_path: str, payload: dict[str, Any]) -> int:
     return _emit(monitor.store.outbox_summary())
 
 
+def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
+    """返回日线零轴金叉指标股票池（候选股，含 TTL 与容量）。"""
+    monitor = _make_monitor(config_path, payload.get("overrides"))
+    candidates = monitor.store.active_candidates(limit=monitor.candidate_limit)
+    return _emit(
+        {
+            "candidates": candidates,
+            "ttl_business_days": monitor.candidate_ttl,
+            "capacity": monitor.candidate_limit,
+        }
+    )
+
+
 def _cmd_calendar(config_path: str, payload: dict[str, Any]) -> int:
     try:
         monitor = _make_monitor(config_path, payload.get("overrides"))
@@ -313,6 +326,7 @@ COMMANDS = {
     "dispatch-outbox": lambda p, o: _cmd_dispatch(p, o),
     "test-notify": lambda p, o: _cmd_test_notify(p, o),
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
+    "candidates": lambda p, o: _cmd_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),
 }
 

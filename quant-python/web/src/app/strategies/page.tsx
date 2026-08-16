@@ -175,7 +175,15 @@ export default function StrategiesPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>自选股 watchlist（逗号分隔）</Label>
-            <Input value={form.watchlist} onChange={set("watchlist")} placeholder="000001.SZ, 600036.SH" />
+            <Input
+              value={form.watchlist}
+              disabled
+              placeholder="000001.SZ, 600036.SH"
+              className="bg-muted text-muted-foreground"
+            />
+            <p className="text-xs text-muted-foreground">
+              自选股票池由「股票池」页统一维护，增删股票后自动同步到这里，此处不可编辑。
+            </p>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>扫描范围</Label>

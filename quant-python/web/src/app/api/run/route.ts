@@ -29,6 +29,16 @@ export async function POST(request: Request) {
   const payload: Record<string, unknown> = {
     notify: body.notify !== false,
   };
+  if (kind === "scan") {
+    const universeMode = String(body.universe_mode ?? "");
+    if (universeMode && !["watchlist", "all_a"].includes(universeMode)) {
+      return NextResponse.json(
+        { error: "scan 的 universe_mode 仅支持 watchlist / all_a" },
+        { status: 422 }
+      );
+    }
+    if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
+  }
   if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
   const jobId = startJob(kind, payload);
   return NextResponse.json({ ok: true, jobId }, { status: 202 });

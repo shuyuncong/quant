@@ -265,6 +265,7 @@ export function addPoolSymbols(
     const result = insert.run(symbol, item.name ?? "", item.source ?? "manual", now);
     if (result.changes > 0) added += 1;
   }
+  syncWatchlistFromPool(db);
   return added;
 }
 
@@ -274,6 +275,14 @@ export function updatePoolSymbol(symbol: string, name: string, db = getDb()): vo
 
 export function removePoolSymbol(symbol: string, db = getDb()): void {
   db.prepare("DELETE FROM stock_pool WHERE symbol = ?").run(symbol);
+  syncWatchlistFromPool(db);
+}
+
+/** 自选股票池是引擎 watchlist 的唯一来源，增删后同步到配置。 */
+export function syncWatchlistFromPool(db = getDb()): string[] {
+  const symbols = listPool(db).map((row) => row.symbol);
+  setSetting("monitor.watchlist", symbols, db);
+  return symbols;
 }
 
 // ---------- pending imports ----------
