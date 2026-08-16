@@ -26,12 +26,17 @@ export async function POST(request: Request) {
   if (!/^https?:\/\//.test(baseUrl)) {
     return NextResponse.json({ error: "Base URL 必须以 http(s):// 开头" }, { status: 422 });
   }
+  const proxy = String(body.proxy ?? "").trim();
+  if (proxy && !/^https?:\/\//.test(proxy)) {
+    return NextResponse.json({ error: "代理地址必须以 http(s):// 开头" }, { status: 422 });
+  }
   const id = createModel({
     name,
     base_url: baseUrl,
     model,
     api_key: String(body.api_key ?? ""),
     env_key: String(body.env_key ?? "").trim(),
+    proxy,
     enabled: Boolean(body.enabled),
     vision_supported: body.vision_supported !== false,
   });

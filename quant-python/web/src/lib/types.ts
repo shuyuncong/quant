@@ -17,6 +17,7 @@ export interface ModelProfile {
   model: string;
   api_key: string;
   env_key: string;
+  proxy: string;
   enabled: boolean;
   vision_supported: boolean;
   created_at: string;

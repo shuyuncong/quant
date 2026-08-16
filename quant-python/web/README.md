@@ -7,7 +7,7 @@
 - 结果：查看 analyze / scan / monitor 结果，支持详情与 AI 解读。
 - 策略配置：缠论 / MACD / 周期 / 评分阈值 / watchlist / 扫描模式。
 - 推送配置：微信 webhook / 通用 webhook / 邮件通道，支持测试通知。
-- 模型配置：1~N 个 OpenAI 兼容接口（base_url / model / api_key / env_key），可测试连通性。
+- 模型配置：1~N 个 OpenAI 兼容接口（base_url / model / api_key / env_key / 代理地址），可测试连通性。
 - 定时任务：每日扫描时间、监控间隔、仅交易日，Web 进程内调度。
 - 股票池：增删改查；文本导入（粘贴解析）；图片导入（视觉模型识别后页面确认入库）。
 

@@ -9,6 +9,7 @@ const profile: ModelProfile = {
   model: "gpt-test",
   api_key: "sk-test",
   env_key: "",
+  proxy: "",
   enabled: true,
   vision_supported: true,
   created_at: "",
@@ -77,6 +78,17 @@ describe("interpretReport", () => {
 });
 
 describe("testProfile", () => {
+  it("uses proxy dispatcher when proxy is configured", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse({ choices: [{ message: { content: "OK" } }] })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await testProfile({ ...profile, proxy: "http://127.0.0.1:7890" });
+    expect(result.ok).toBe(true);
+    const init = fetchMock.mock.calls[0][1] as RequestInit | undefined;
+    expect((init as { dispatcher?: unknown })?.dispatcher).toBeDefined();
+  });
+
   it("returns failure detail on HTTP error", async () => {
     vi.stubGlobal(
       "fetch",

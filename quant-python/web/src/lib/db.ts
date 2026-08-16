@@ -33,6 +33,7 @@ function migrate(db: Database.Database): void {
       env_key TEXT NOT NULL DEFAULT '',
       enabled INTEGER NOT NULL DEFAULT 0,
       vision_supported INTEGER NOT NULL DEFAULT 1,
+      proxy TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -79,6 +80,11 @@ function migrate(db: Database.Database): void {
       updated_at TEXT NOT NULL
     );
   `);
+  try {
+    db.exec("ALTER TABLE model_profiles ADD COLUMN proxy TEXT NOT NULL DEFAULT ''");
+  } catch {
+    /* column already exists on databases created with the new schema */
+  }
   const count = db.prepare("SELECT COUNT(*) AS count FROM schedule").get() as { count: number };
   if (count.count === 0) {
     const now = nowIso();
@@ -157,6 +163,7 @@ function rowToModel(row: Record<string, unknown>): ModelProfile {
     model: String(row.model ?? ""),
     api_key: String(row.api_key ?? ""),
     env_key: String(row.env_key ?? ""),
+    proxy: String(row.proxy ?? ""),
     enabled: Boolean(row.enabled),
     vision_supported: Boolean(row.vision_supported),
     created_at: String(row.created_at ?? ""),
@@ -175,14 +182,14 @@ export function getModel(id: number, db = getDb()): ModelProfile | null {
 }
 
 export function createModel(
-  input: { name: string; base_url: string; model: string; api_key?: string; env_key?: string; enabled?: boolean; vision_supported?: boolean },
+  input: { name: string; base_url: string; model: string; api_key?: string; env_key?: string; proxy?: string; enabled?: boolean; vision_supported?: boolean },
   db = getDb()
 ): number {
   const now = nowIso();
   const result = db
     .prepare(
-      `INSERT INTO model_profiles (name, base_url, model, api_key, env_key, enabled, vision_supported, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO model_profiles (name, base_url, model, api_key, env_key, proxy, enabled, vision_supported, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.name,
@@ -190,6 +197,7 @@ export function createModel(
       input.model,
       input.api_key ?? "",
       input.env_key ?? "",
+      input.proxy ?? "",
       input.enabled ? 1 : 0,
       input.vision_supported !== false ? 1 : 0,
       now,
@@ -200,20 +208,21 @@ export function createModel(
 
 export function updateModel(
   id: number,
-  input: Partial<{ name: string; base_url: string; model: string; api_key: string; env_key: string; enabled: boolean; vision_supported: boolean }>,
+  input: Partial<{ name: string; base_url: string; model: string; api_key: string; env_key: string; proxy: string; enabled: boolean; vision_supported: boolean }>,
   db = getDb()
 ): void {
   const current = getModel(id, db);
   if (!current) return;
   const merged = { ...current, ...input, updated_at: nowIso() };
   db.prepare(
-    `UPDATE model_profiles SET name=?, base_url=?, model=?, api_key=?, env_key=?, enabled=?, vision_supported=?, updated_at=? WHERE id=?`
+    `UPDATE model_profiles SET name=?, base_url=?, model=?, api_key=?, env_key=?, proxy=?, enabled=?, vision_supported=?, updated_at=? WHERE id=?`
   ).run(
     merged.name,
     merged.base_url,
     merged.model,
     merged.api_key,
     merged.env_key,
+    merged.proxy,
     merged.enabled ? 1 : 0,
     merged.vision_supported ? 1 : 0,
     merged.updated_at,

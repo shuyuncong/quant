@@ -39,6 +39,7 @@ interface ModelItem {
   model: string;
   api_key: string;
   env_key: string;
+  proxy: string;
   enabled: boolean;
   vision_supported: boolean;
   env_present?: boolean;
@@ -52,6 +53,7 @@ interface ModelForm {
   model: string;
   api_key: string;
   env_key: string;
+  proxy: string;
   enabled: boolean;
   vision_supported: boolean;
 }
@@ -62,6 +64,7 @@ const EMPTY_FORM: ModelForm = {
   model: "",
   api_key: "",
   env_key: "",
+  proxy: "",
   enabled: true,
   vision_supported: true,
 };
@@ -103,6 +106,7 @@ export default function ModelsPage() {
       model: model.model,
       api_key: model.api_key === "****" ? "****" : "",
       env_key: model.env_key,
+      proxy: model.proxy,
       enabled: model.enabled,
       vision_supported: model.vision_supported,
     });
@@ -264,6 +268,10 @@ export default function ModelsPage() {
             <div className="flex flex-col gap-1.5">
               <Label>环境变量名（可选，存在时优先于页面 Key）</Label>
               <Input value={form.env_key} onChange={(event) => setForm((prev) => ({ ...prev, env_key: event.target.value }))} placeholder="DEEPSEEK_API_KEY" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>代理地址（可选，通过代理访问模型接口）</Label>
+              <Input value={form.proxy} onChange={(event) => setForm((prev) => ({ ...prev, proxy: event.target.value }))} placeholder="http://127.0.0.1:7890" />
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">

@@ -27,6 +27,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (typeof body.model === "string" && body.model.trim()) patch.model = body.model.trim();
   if (typeof body.api_key === "string" && body.api_key !== "****") patch.api_key = body.api_key;
   if (typeof body.env_key === "string") patch.env_key = body.env_key.trim();
+  if (typeof body.proxy === "string") patch.proxy = body.proxy.trim();
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
   if (typeof body.vision_supported === "boolean") patch.vision_supported = body.vision_supported;
   updateModel(modelId, patch);

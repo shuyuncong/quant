@@ -1,6 +1,7 @@
 import { getModel, listModels } from "./db";
 import type { ModelProfile } from "./types";
 import { normalizeSymbol } from "./symbols";
+import { ProxyAgent } from "undici";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -46,6 +47,7 @@ async function chatCompletion(
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
+      ...(dispatcher ? { dispatcher } : {}),
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -60,6 +62,7 @@ async function chatCompletion(
     if (!content) throw new Error("模型返回内容为空");
     return content;
   };
+  const dispatcher = profile.proxy?.trim() ? new ProxyAgent(profile.proxy.trim()) : undefined;
   try {
     return await doFetch();
   } catch (error) {
@@ -68,6 +71,8 @@ async function chatCompletion(
       return doFetch();
     }
     throw error;
+  } finally {
+    if (dispatcher) dispatcher.close().catch(() => undefined);
   }
 }
 
