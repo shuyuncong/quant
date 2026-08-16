@@ -27,7 +27,7 @@ class SignalNotifier:
 
     def active_channels(self) -> list[str]:
         result = []
-        for name in ("wechat", "email", "webhook"):
+        for name in ("wechat", "email", "webhook", "bark"):
             if self.config.get(name, {}).get("enabled", False):
                 result.append(name)
         return result
@@ -108,6 +108,41 @@ class SignalNotifier:
         headers.setdefault("Idempotency-Key", payload["event_id"])
         return self._post_json(url, payload, headers=headers)
 
+    def _send_bark(self, payload: dict[str, Any]) -> tuple[bool, str]:
+        config = self.config.get("bark", {})
+        device_key = str(config.get("device_key", ""))
+        if not device_key:
+            return False, "Bark device_key 未配置"
+        url = str(config.get("url", "") or "https://api.day.app/push")
+        side = "买入观察" if payload["side"] == "buy" else "卖出观察"
+        title = f"{side} {payload.get('name', '')} {payload['symbol']} {payload['timeframe']}".strip()
+        reasons = payload.get("evidence", {}).get("score_reasons", [])
+        body = (
+            f"信号: {payload['signal_type']}\n"
+            f"价格: {payload['price']:.3f}\n"
+            f"评分: {payload['score']}\n"
+            f"确认: {payload['confirmed_at']}\n"
+            f"依据: {('、'.join(reasons) if reasons else '见结构化 evidence')}"
+        )
+        body_data = {
+            "device_key": device_key,
+            "title": title,
+            "body": body,
+            "group": "chan-signal",
+            "level": "active",
+        }
+
+        def validate(response_body: bytes) -> tuple[bool, str]:
+            try:
+                result = json.loads(response_body.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                return False, f"Bark 响应无法解析: {exc}"
+            if result.get("code") == 200:
+                return True, "ok"
+            return False, f"Bark 错误 code={result.get('code')}: {result.get('message', '')}"
+
+        return self._post_json(url, body_data, response_validator=validate)
+
     def _send_email(self, payload: dict[str, Any]) -> tuple[bool, str]:
         config = self.config.get("email", {})
         required = ["smtp_server", "smtp_port", "sender", "password", "receiver"]
@@ -138,6 +173,8 @@ class SignalNotifier:
             return self._send_wechat(payload)
         if channel == "webhook":
             return self._send_webhook(payload)
+        if channel == "bark":
+            return self._send_bark(payload)
         if channel == "email":
             return self._send_email(payload)
         return False, f"未知通知通道: {channel}"

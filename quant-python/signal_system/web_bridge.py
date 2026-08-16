@@ -50,6 +50,7 @@ SECRET_PATHS: list[tuple[str, ...]] = [
     ("notification", "email", "sender"),
     ("notification", "email", "password"),
     ("notification", "email", "receiver"),
+    ("notification", "bark", "device_key"),
 ]
 
 ENV_MARKER = "__env__"

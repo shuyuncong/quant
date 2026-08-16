@@ -199,7 +199,11 @@ notification:
     sender: "${SIGNAL_EMAIL_SENDER:-}"
     password: "${SIGNAL_EMAIL_PASSWORD:-}"
     receiver: "${SIGNAL_EMAIL_RECEIVER:-}"
-  channels: ["wecom", "email"]
+  bark:
+    enabled: false
+    url: "https://api.day.app/push"
+    device_key: "${SIGNAL_BARK_DEVICE_KEY:-}"
+  channels: ["wecom", "email", "bark"]
   push_market_regime: true
   push_candidate_pool: true
   push_trade_signal: true
@@ -217,4 +221,3 @@ runtime:
     enabled: false
     type: "sqlite"
     path: "./data/signals.db"
-

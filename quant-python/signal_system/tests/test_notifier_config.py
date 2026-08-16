@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import json
 from unittest.mock import MagicMock, patch
 
 
@@ -28,6 +29,16 @@ class _Response:
 class _WechatErrorResponse(_Response):
     def read(self, size):
         return b'{"errcode":40014,"errmsg":"invalid access token"}'
+
+
+class _BarkOkResponse(_Response):
+    def read(self, size):
+        return b'{"code":200,"message":"success"}'
+
+
+class _BarkErrorResponse(_Response):
+    def read(self, size):
+        return b'{"code":400,"message":"device key not found"}'
 
 
 class NotifierAndConfigTests(unittest.TestCase):
@@ -116,6 +127,78 @@ class NotifierAndConfigTests(unittest.TestCase):
             success, detail = notifier.send("wechat", payload)
         self.assertFalse(success)
         self.assertIn("40014", detail)
+
+    def test_bark_uses_official_push_contract(self):
+        notifier = SignalNotifier(
+            {
+                "notification": {
+                    "bark": {
+                        "enabled": True,
+                        "url": "https://api.day.app/push",
+                        "device_key": "test-device-key",
+                    }
+                }
+            }
+        )
+        opener = MagicMock()
+        opener.open.return_value = _BarkOkResponse()
+        payload = {
+            "schema": "quant.signal.v1",
+            "event_id": "event-bark-1",
+            "side": "buy",
+            "symbol": "000001",
+            "name": "平安银行",
+            "timeframe": "5m",
+            "signal_type": "buy_3",
+            "price": 11.11,
+            "score": 70,
+            "confirmed_at": "2025-01-01T10:00:00",
+            "risk_notice": "test",
+            "evidence": {"score_reasons": ["MACD 金叉 +30"]},
+        }
+        with patch("notification.signal_notifier.build_opener", return_value=opener):
+            success, _ = notifier.send("bark", payload)
+        self.assertTrue(success)
+        request = opener.open.call_args.args[0]
+        self.assertEqual("https://api.day.app/push", request.full_url)
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual("test-device-key", body["device_key"])
+        self.assertEqual("chan-signal", body["group"])
+        self.assertEqual("买入观察 平安银行 000001 5m", body["title"])
+        self.assertIn("MACD 金叉 +30", body["body"])
+
+    def test_bark_application_error_is_failure(self):
+        notifier = SignalNotifier(
+            {
+                "notification": {
+                    "bark": {
+                        "enabled": True,
+                        "url": "https://api.day.app/push",
+                        "device_key": "test-device-key",
+                    }
+                }
+            }
+        )
+        opener = MagicMock()
+        opener.open.return_value = _BarkErrorResponse()
+        payload = {
+            "schema": "quant.signal.v1",
+            "event_id": "event-bark-2",
+            "side": "sell",
+            "symbol": "000001",
+            "name": "平安银行",
+            "timeframe": "1d",
+            "signal_type": "zero_axis_death_cross",
+            "price": 11.0,
+            "score": 65,
+            "confirmed_at": "2025-01-01T10:00:00",
+            "risk_notice": "test",
+            "evidence": {},
+        }
+        with patch("notification.signal_notifier.build_opener", return_value=opener):
+            success, detail = notifier.send("bark", payload)
+        self.assertFalse(success)
+        self.assertIn("400", detail)
 
 
 if __name__ == "__main__":

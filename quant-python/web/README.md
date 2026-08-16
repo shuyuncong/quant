@@ -31,7 +31,7 @@ Web 通过 `quant-python/signal_system/web_bridge.py` 以子进程方式调用�
 
 - 密钥可在页面“模型配置 / 推送配置”中填写并存入本地 SQLite，也可绑定环境变量名；
 - 绑定环境变量后，运行时以环境变量值优先，配置回显统一脱敏（****）；
-- 常用环境变量：`TUSHARE_TOKEN`、`WECHAT_WEBHOOK_URL`、`SIGNAL_WEBHOOK_URL`、`SIGNAL_WEBHOOK_AUTH`、`SIGNAL_EMAIL_SENDER`、`SIGNAL_EMAIL_PASSWORD`、`SIGNAL_EMAIL_RECEIVER`。
+- 常用环境变量：`TUSHARE_TOKEN`、`WECHAT_WEBHOOK_URL`、`SIGNAL_WEBHOOK_URL`、`SIGNAL_WEBHOOK_AUTH`、`SIGNAL_EMAIL_SENDER`、`SIGNAL_EMAIL_PASSWORD`、`SIGNAL_EMAIL_RECEIVER`、`SIGNAL_BARK_DEVICE_KEY`。
 
 ## 安全说明
 

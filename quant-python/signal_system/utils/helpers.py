@@ -196,7 +196,12 @@ DEFAULT_CONFIG = {
             "password": "your_password",
             "receiver": "your@email.com",
         },
-        "channels": ["wecom", "email"],
+        "bark": {
+            "enabled": False,
+            "url": "https://api.day.app/push",
+            "device_key": "",
+        },
+        "channels": ["wecom", "email", "bark"],
         "push_market_regime": True,
         "push_candidate_pool": True,
         "push_trade_signal": True,

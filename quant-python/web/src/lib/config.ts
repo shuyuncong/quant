@@ -10,6 +10,7 @@ export const SECRET_PATHS = [
   "notification.email.sender",
   "notification.email.password",
   "notification.email.receiver",
+  "notification.bark.device_key",
 ] as const;
 
 export const SECRET_ENV_KEYS: Record<string, string> = {
@@ -21,6 +22,7 @@ export const SECRET_ENV_KEYS: Record<string, string> = {
   "notification.email.sender": "SIGNAL_EMAIL_SENDER",
   "notification.email.password": "SIGNAL_EMAIL_PASSWORD",
   "notification.email.receiver": "SIGNAL_EMAIL_RECEIVER",
+  "notification.bark.device_key": "SIGNAL_BARK_DEVICE_KEY",
 };
 
 export function isSecretPath(path: string): boolean {
@@ -177,6 +179,9 @@ const NOTIFICATION_SCHEMA: Record<string, FieldDef> = {
   "notification.email.sender": { type: "string" },
   "notification.email.password": { type: "string" },
   "notification.email.receiver": { type: "string" },
+  "notification.bark.enabled": { type: "boolean" },
+  "notification.bark.url": { type: "string" },
+  "notification.bark.device_key": { type: "string" },
 };
 
 export type ConfigSection = "strategies" | "notification";

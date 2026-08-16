@@ -28,6 +28,9 @@ interface NotificationForm {
   email_password: string;
   email_receiver: string;
   timeout_seconds: string;
+  bark_enabled: boolean;
+  bark_url: string;
+  bark_device_key: string;
 }
 
 const DEFAULT_FORM: NotificationForm = {
@@ -43,6 +46,9 @@ const DEFAULT_FORM: NotificationForm = {
   email_password: "",
   email_receiver: "",
   timeout_seconds: "10",
+  bark_enabled: false,
+  bark_url: "https://api.day.app/push",
+  bark_device_key: "",
 };
 
 export default function NotificationsPage() {
@@ -70,6 +76,9 @@ export default function NotificationsPage() {
         email_password: String(n.email?.password ?? ""),
         email_receiver: String(n.email?.receiver ?? ""),
         timeout_seconds: String(n.timeout_seconds ?? "10"),
+        bark_enabled: Boolean(n.bark?.enabled),
+        bark_url: String(n.bark?.url ?? "https://api.day.app/push"),
+        bark_device_key: String(n.bark?.device_key ?? ""),
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载推送配置失败");
@@ -99,6 +108,9 @@ export default function NotificationsPage() {
       "notification.email.password": form.email_password || "****",
       "notification.email.receiver": form.email_receiver || "****",
       "notification.timeout_seconds": Number(form.timeout_seconds),
+      "notification.bark.enabled": form.bark_enabled,
+      "notification.bark.url": form.bark_url || "https://api.day.app/push",
+      "notification.bark.device_key": form.bark_device_key || "****",
     };
     try {
       const response = await fetch("/api/config/notification", {
@@ -238,6 +250,23 @@ export default function NotificationsPage() {
         </>
       )}
 
+      {channelCard(
+        "Bark（iOS）",
+        "推送到 iPhone 的 Bark App（官方服务器 api.day.app）。",
+        form.bark_enabled,
+        (value) => set("bark_enabled", value),
+        <>
+          <div className="flex flex-col gap-1.5">
+            <Label>服务器 URL</Label>
+            <Input value={form.bark_url} onChange={(event) => set("bark_url", event.target.value)} placeholder="https://api.day.app/push" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Device Key</Label>
+            <Input value={form.bark_device_key} onChange={(event) => set("bark_device_key", event.target.value)} placeholder="Bark App 首页的 device key" />
+          </div>
+        </>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">通用</CardTitle>
@@ -255,7 +284,7 @@ export default function NotificationsPage() {
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <BellRing className="size-4" />
-        环境变量（可选）：WECHAT_WEBHOOK_URL、SIGNAL_WEBHOOK_URL、SIGNAL_WEBHOOK_AUTH、SIGNAL_EMAIL_SENDER、SIGNAL_EMAIL_PASSWORD、SIGNAL_EMAIL_RECEIVER
+        环境变量（可选）：WECHAT_WEBHOOK_URL、SIGNAL_WEBHOOK_URL、SIGNAL_WEBHOOK_AUTH、SIGNAL_EMAIL_SENDER、SIGNAL_EMAIL_PASSWORD、SIGNAL_EMAIL_RECEIVER、SIGNAL_BARK_DEVICE_KEY
       </div>
     </div>
   );
