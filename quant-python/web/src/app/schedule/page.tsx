@@ -142,7 +142,7 @@ export default function SchedulePage() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              勾选后在 10:30 / 13:30 / 14:30 各额外执行一次盘中检测；间隔执行仍然生效。
+              勾选后盘中检测改为按这些固定时点各执行一次（不再按间隔执行）；全部取消勾选则恢复为间隔执行。
             </p>
           </div>
         </CardContent>
@@ -151,7 +151,7 @@ export default function SchedulePage() {
       <Card>
         <CardHeader>
           <CardTitle>盘中监控</CardTitle>
-          <CardDescription>交易时段（9:30-11:30、13:00-15:00）按间隔运行监控循环并推送。</CardDescription>
+          <CardDescription>交易时段（9:30-11:30、13:00-15:00）运行监控循环并推送；执行方式为「间隔」或「固定时点」二选一。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center gap-6">

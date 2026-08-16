@@ -122,7 +122,7 @@ export async function estimateNextRun(
       if (!earliest || target.getTime() < earliest.getTime()) earliest = target;
     }
     if (earliest) {
-      // 配置了固定时点时，优先展示下一个固定时点（间隔执行仍然生效）
+      // 配置了固定时点时，按固定时点模式展示下一个执行时点
       return earliest.toISOString();
     }
   }
@@ -148,19 +148,11 @@ async function tick(): Promise<void> {
         }
       } else if (row.kind === "monitor_cycle") {
         if (!calendar.is_trading_session) continue;
-        const elapsed = Date.now() - lastMonitorRunAt;
-        if (elapsed >= row.interval_seconds * 1000) {
-          const running = listJobs(20).some(
-            (job) => ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) && job.status === "running"
-          );
-          if (!running) {
-            lastMonitorRunAt = Date.now();
-            startJob("monitor-cycle", { notify: true });
-          }
-        }
-        const dayOk = !row.trading_days_only || calendar.is_trading_day;
-        if (dayOk) {
-          const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
+        const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
+        if (fixedTimes.length > 0) {
+          // 固定时点模式：只在勾选的时点各执行一次，不再按间隔执行
+          const dayOk = !row.trading_days_only || calendar.is_trading_day;
+          if (!dayOk) continue;
           for (const fixed of fixedTimes) {
             if (fixed === hhmm) {
               const key = `${today}:${fixed}`;
@@ -174,6 +166,18 @@ async function tick(): Promise<void> {
                 lastFixedMonitorRun = key;
                 startJob("monitor-cycle", { notify: true });
               }
+            }
+          }
+        } else {
+          // 间隔模式：交易时段内按 interval_seconds 周期执行
+          const elapsed = Date.now() - lastMonitorRunAt;
+          if (elapsed >= row.interval_seconds * 1000) {
+            const running = listJobs(20).some(
+              (job) => ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) && job.status === "running"
+            );
+            if (!running) {
+              lastMonitorRunAt = Date.now();
+              startJob("monitor-cycle", { notify: true });
             }
           }
         }
