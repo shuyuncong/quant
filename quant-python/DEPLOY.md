@@ -1,5 +1,7 @@
 # 部署指南
 
+> Oracle Cloud 服务器落地部署（Nginx 反代 + HTTPS + rclone 备份）见 [DEPLOY-ORACLE.md](DEPLOY-ORACLE.md)。
+
 本系统由两部分组成，必须一起部署：
 
 - Web 控制台（`web/`）：Next.js 16 + Node.js 22，负责页面、配置、定时调度（node-cron）
@@ -15,7 +17,7 @@ Web 进程通过子进程调用 `signal_system/web_bridge.py`，因此部署机�
 
 ```bash
 # 1. 拉取代码
-git clone <你的仓库地址> quant && cd quant/quant-python
+git clone https://github.com/shuyuncong/quant.git quant && cd quant/quant-python
 
 # 2.（可选）写环境变量，也可以在 Web 页面里配置
 cp web/.env.example .env
@@ -115,7 +117,26 @@ sudo systemctl status quant-web
 
 ## 迁移现有数据
 
-把旧机器上的 `web/data/app.db`（或 `WEB_DATA_DIR` 下的 `app.db`）与 `signal_system/output/` 拷贝到新机器对应位置即可，无需重新配置。
+把旧机器（或本机开发环境）上的 `web/data/app.db`（或 `WEB_DATA_DIR` 下的 `app.db`）与 `signal_system/output/` 拷贝到服务器即可，无需重新配置。
+
+以本机开发环境迁移到 Docker 部署的服务器为例：
+
+```bash
+# 在本机执行：先把数据传到服务器（SQLite WAL 模式下 app.db / -shm / -wal 三个文件要一起拷）
+scp quant-python/web/data/app.db* 用户@服务器IP:/tmp/
+scp -r quant-python/signal_system/output 用户@服务器IP:/tmp/
+
+# 在服务器执行：停容器 → 拷入数据卷 → 重新启动
+cd quant/quant-python
+docker compose stop
+docker cp /tmp/app.db quant-web:/app/data/app.db
+docker cp /tmp/output quant-web:/app/signal_system/output
+docker compose up -d
+```
+
+> 提示：SQLite 使用 WAL 模式，直接拷贝时请把 `app.db`、`app.db-shm`、`app.db-wal` 一并拷贝，避免丢失最近写入的数据；拷贝前最好先正常停止旧实例。
+
+裸机部署则直接把文件放到 `WEB_DATA_DIR`（默认 `web/data`）和 `signal_system/output/` 对应位置即可。
 
 ## 常见问题
 
