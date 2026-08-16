@@ -22,6 +22,7 @@ interface ScheduleData {
     kind: "daily_scan" | "monitor_cycle";
     time: string;
     interval_seconds: number;
+    fixed_times: string[];
     trading_days_only: boolean;
     enabled: boolean;
   }>;
@@ -54,6 +55,12 @@ export default function SchedulePage() {
     setData((prev) =>
       prev ? { ...prev, rows: prev.rows.map((row) => (row.kind === kind ? { ...row, ...patch } : row)) } : prev
     );
+  };
+
+  const toggleFixedTime = (time: string) => {
+    const current = data?.rows.find((row) => row.kind === "monitor_cycle")?.fixed_times ?? [];
+    const next = current.includes(time) ? current.filter((item) => item !== time) : [...current, time].sort();
+    patchRow("monitor_cycle", { fixed_times: next });
   };
 
   const save = async () => {
@@ -118,6 +125,25 @@ export default function SchedulePage() {
               />
               <Label>仅交易日</Label>
             </div>
+          </div>
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <Label>固定时点（可选）</Label>
+            <div className="flex items-center gap-2">
+              {["10:30", "13:30", "14:30"].map((time) => (
+                <Button
+                  key={time}
+                  type="button"
+                  size="sm"
+                  variant={(monitor?.fixed_times ?? []).includes(time) ? "default" : "outline"}
+                  onClick={() => toggleFixedTime(time)}
+                >
+                  {time}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              勾选后在 10:30 / 13:30 / 14:30 各额外执行一次盘中检测；间隔执行仍然生效。
+            </p>
           </div>
         </CardContent>
       </Card>

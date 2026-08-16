@@ -72,6 +72,7 @@ export async function getCalendar(force = false): Promise<CalendarInfo> {
 
 let lastMonitorRunAt = 0;
 let lastDailyDate = "";
+let lastFixedMonitorRun = "";
 
 export async function estimateNextRun(
   row: ScheduleRow,
@@ -90,20 +91,42 @@ export async function estimateNextRun(
     return target.toISOString();
   }
   // monitor_cycle
+  let intervalEstimate: string | null = null;
   if (calendar.is_trading_session) {
-    return new Date(now.getTime() + row.interval_seconds * 1000).toISOString();
-  }
-  const next = new Date(now);
-  if (now.getHours() < 13) {
-    next.setHours(13, 0, 0, 0);
+    intervalEstimate = new Date(now.getTime() + row.interval_seconds * 1000).toISOString();
   } else {
-    next.setDate(next.getDate() + 1);
-    next.setHours(9, 30, 0, 0);
+    const next = new Date(now);
+    if (now.getHours() < 13) {
+      next.setHours(13, 0, 0, 0);
+    } else {
+      next.setDate(next.getDate() + 1);
+      next.setHours(9, 30, 0, 0);
+    }
+    if (row.trading_days_only) {
+      while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+    }
+    intervalEstimate = next.toISOString();
   }
-  if (row.trading_days_only) {
-    while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+  const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
+  if (fixedTimes.length > 0) {
+    let earliest: Date | null = null;
+    for (const fixed of fixedTimes) {
+      const [hour, minute] = fixed.split(":").map(Number);
+      if (Number.isNaN(hour) || Number.isNaN(minute)) continue;
+      const target = new Date(now);
+      target.setHours(hour, minute, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      if (row.trading_days_only) {
+        while (target.getDay() === 0 || target.getDay() === 6) target.setDate(target.getDate() + 1);
+      }
+      if (!earliest || target.getTime() < earliest.getTime()) earliest = target;
+    }
+    if (earliest) {
+      // 配置了固定时点时，优先展示下一个固定时点（间隔执行仍然生效）
+      return earliest.toISOString();
+    }
   }
-  return next.toISOString();
+  return intervalEstimate;
 }
 
 async function tick(): Promise<void> {
@@ -133,6 +156,25 @@ async function tick(): Promise<void> {
           if (!running) {
             lastMonitorRunAt = Date.now();
             startJob("monitor-cycle", { notify: true });
+          }
+        }
+        const dayOk = !row.trading_days_only || calendar.is_trading_day;
+        if (dayOk) {
+          const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
+          for (const fixed of fixedTimes) {
+            if (fixed === hhmm) {
+              const key = `${today}:${fixed}`;
+              if (lastFixedMonitorRun === key) continue;
+              const running = listJobs(20).some(
+                (job) =>
+                  ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) &&
+                  job.status === "running"
+              );
+              if (!running) {
+                lastFixedMonitorRun = key;
+                startJob("monitor-cycle", { notify: true });
+              }
+            }
           }
         }
       }

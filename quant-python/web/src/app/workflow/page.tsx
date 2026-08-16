@@ -46,7 +46,7 @@ const STEPS = [
     title: "第 4 步：缠论多周期买卖点分析",
     entry: "「结果」页手动触发 / 盘中监控循环",
     description:
-      "交易时段内监控循环会定时对「自选池 + 指标股票池」做 1m/5m/15m/30m/60m/120m/1d 多周期缠论分析，识别一买、二买、三买等买卖点并打分。",
+      "交易时段内监控循环会定时对「自选池 + 指标股票池」做 1m/5m/15m/30m/60m/120m/1d 多周期缠论分析，识别一买、二买、三买等买卖点并打分。执行方式支持按间隔（如每 60 秒）或固定时点（10:30 / 13:30 / 14:30，可在定时任务页勾选）。",
   },
   {
     icon: BellRing,
@@ -68,7 +68,7 @@ const CONFIG_PAGES = [
   { page: "策略配置", path: "/strategies", purpose: "缠论参数、MACD 参数、扫描范围（自选/全市场）、监控周期" },
   { page: "推送配置", path: "/notifications", purpose: "Bark、企业微信、邮件、Webhook 开关与密钥" },
   { page: "模型配置", path: "/models", purpose: "LLM 接口（地址/模型/Key/代理），用于 AI 解读与图片识别" },
-  { page: "定时任务", path: "/schedule", purpose: "每日扫描时间、盘中监控间隔、是否仅交易日" },
+  { page: "定时任务", path: "/schedule", purpose: "每日扫描时间、盘中监控间隔/固定时点、是否仅交易日" },
   { page: "股票池", path: "/pool", purpose: "自选股导入、指标股票池（候选）查看与手动筛选" },
 ];
 

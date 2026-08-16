@@ -75,6 +75,7 @@ function migrate(db: Database.Database): void {
       kind TEXT NOT NULL UNIQUE,
       time TEXT NOT NULL DEFAULT '15:20',
       interval_seconds INTEGER NOT NULL DEFAULT 60,
+      fixed_times TEXT NOT NULL DEFAULT '[]',
       trading_days_only INTEGER NOT NULL DEFAULT 1,
       enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
@@ -82,6 +83,11 @@ function migrate(db: Database.Database): void {
   `);
   try {
     db.exec("ALTER TABLE model_profiles ADD COLUMN proxy TEXT NOT NULL DEFAULT ''");
+  } catch {
+    /* column already exists on databases created with the new schema */
+  }
+  try {
+    db.exec("ALTER TABLE schedule ADD COLUMN fixed_times TEXT NOT NULL DEFAULT '[]'");
   } catch {
     /* column already exists on databases created with the new schema */
   }
@@ -406,11 +412,19 @@ export function listNotesByJob(jobId: number, db = getDb()): AnalysisNote[] {
 
 // ---------- schedule ----------
 function rowToSchedule(row: Record<string, unknown>): ScheduleRow {
+  let fixedTimes: string[] = [];
+  try {
+    const parsed = JSON.parse(String(row.fixed_times ?? "[]"));
+    if (Array.isArray(parsed)) fixedTimes = parsed.filter((item) => typeof item === "string");
+  } catch {
+    fixedTimes = [];
+  }
   return {
     id: Number(row.id),
     kind: String(row.kind) as ScheduleRow["kind"],
     time: String(row.time ?? "15:20"),
     interval_seconds: Number(row.interval_seconds ?? 60),
+    fixed_times: fixedTimes,
     trading_days_only: Boolean(row.trading_days_only),
     enabled: Boolean(row.enabled),
     updated_at: String(row.updated_at ?? ""),
@@ -424,19 +438,26 @@ export function getScheduleRows(db = getDb()): ScheduleRow[] {
 
 export function upsertScheduleRow(
   kind: "daily_scan" | "monitor_cycle",
-  input: Partial<{ time: string; interval_seconds: number; trading_days_only: boolean; enabled: boolean }>,
+  input: Partial<{
+    time: string;
+    interval_seconds: number;
+    fixed_times: string[];
+    trading_days_only: boolean;
+    enabled: boolean;
+  }>,
   db = getDb()
 ): void {
   const current = getScheduleRows(db).find((row) => row.kind === kind);
   const now = nowIso();
   if (!current) {
     db.prepare(
-      `INSERT INTO schedule (kind, time, interval_seconds, trading_days_only, enabled, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO schedule (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       kind,
       input.time ?? "15:20",
       input.interval_seconds ?? 60,
+      JSON.stringify(input.fixed_times ?? []),
       input.trading_days_only !== false ? 1 : 0,
       input.enabled ? 1 : 0,
       now
@@ -444,10 +465,11 @@ export function upsertScheduleRow(
     return;
   }
   db.prepare(
-    `UPDATE schedule SET time=?, interval_seconds=?, trading_days_only=?, enabled=?, updated_at=? WHERE kind=?`
+    `UPDATE schedule SET time=?, interval_seconds=?, fixed_times=?, trading_days_only=?, enabled=?, updated_at=? WHERE kind=?`
   ).run(
     input.time ?? current.time,
     input.interval_seconds ?? current.interval_seconds,
+    JSON.stringify(input.fixed_times ?? current.fixed_times),
     input.trading_days_only !== undefined ? (input.trading_days_only ? 1 : 0) : (current.trading_days_only ? 1 : 0),
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (current.enabled ? 1 : 0),
     now,

@@ -45,6 +45,7 @@ export interface ScheduleRow {
   kind: "daily_scan" | "monitor_cycle";
   time: string;
   interval_seconds: number;
+  fixed_times: string[];
   trading_days_only: boolean;
   enabled: boolean;
   updated_at: string;

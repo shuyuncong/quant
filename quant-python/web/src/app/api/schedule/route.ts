@@ -42,6 +42,19 @@ export async function PUT(request: Request) {
       }
       input.interval_seconds = interval;
     }
+    if (row.fixed_times !== undefined) {
+      const fixedTimes = row.fixed_times;
+      if (
+        !Array.isArray(fixedTimes) ||
+        fixedTimes.some((item) => typeof item !== "string" || !/^\d{2}:\d{2}$/.test(item))
+      ) {
+        return NextResponse.json(
+          { error: "fixed_times 应为 HH:MM 字符串数组" },
+          { status: 422 }
+        );
+      }
+      input.fixed_times = fixedTimes;
+    }
     if (typeof row.trading_days_only === "boolean") input.trading_days_only = row.trading_days_only;
     if (typeof row.enabled === "boolean") input.enabled = row.enabled;
     upsertScheduleRow(kind, input);

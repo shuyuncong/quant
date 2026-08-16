@@ -8,6 +8,7 @@ function row(overrides: Partial<ScheduleRow>): ScheduleRow {
     kind: "daily_scan",
     time: "15:30",
     interval_seconds: 60,
+    fixed_times: [],
     trading_days_only: true,
     enabled: true,
     updated_at: "",
@@ -44,6 +45,26 @@ describe("estimateNextRun", () => {
       now
     );
     expect(next).toBe(new Date(2026, 7, 14, 10, 5, 0).toISOString());
+  });
+
+  it("monitor cycle with fixed times returns nearest fixed time", async () => {
+    const now = new Date(2026, 7, 14, 10, 0, 0);
+    const next = await estimateNextRun(
+      row({ kind: "monitor_cycle", interval_seconds: 300, fixed_times: ["10:30", "14:30"] }),
+      { is_trading_day: true, is_trading_session: true, now: now.toISOString() },
+      now
+    );
+    expect(next).toBe(new Date(2026, 7, 14, 10, 30, 0).toISOString());
+  });
+
+  it("monitor cycle fixed time rolls to next day when passed", async () => {
+    const now = new Date(2026, 7, 14, 15, 0, 0);
+    const next = await estimateNextRun(
+      row({ kind: "monitor_cycle", interval_seconds: 300, fixed_times: ["10:30", "13:30", "14:30"] }),
+      { is_trading_day: true, is_trading_session: true, now: now.toISOString() },
+      now
+    );
+    expect(next).toBe(new Date(2026, 7, 17, 10, 30, 0).toISOString()); // next Monday
   });
 
   it("disabled row returns null", async () => {
