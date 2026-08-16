@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+web/node_modules
+web/.next
+web/data
+web/*.log
+signal_system/.ruff_cache
+signal_system/cache
+signal_system/logs
+signal_system/output

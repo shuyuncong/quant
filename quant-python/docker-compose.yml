@@ -1,0 +1,36 @@
+services:
+  quant-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quant-web:latest
+    container_name: quant-web
+    restart: unless-stopped
+    ports:
+      - "3111:3111"
+    environment:
+      TZ: Asia/Shanghai
+      PYTHON_BIN: python3
+      WEB_DATA_DIR: /app/data
+      TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
+      WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
+      SIGNAL_WEBHOOK_URL: "${SIGNAL_WEBHOOK_URL:-}"
+      SIGNAL_WEBHOOK_AUTH: "${SIGNAL_WEBHOOK_AUTH:-}"
+      SIGNAL_EMAIL_SENDER: "${SIGNAL_EMAIL_SENDER:-}"
+      SIGNAL_EMAIL_PASSWORD: "${SIGNAL_EMAIL_PASSWORD:-}"
+      SIGNAL_EMAIL_RECEIVER: "${SIGNAL_EMAIL_RECEIVER:-}"
+      SIGNAL_BARK_DEVICE_KEY: "${SIGNAL_BARK_DEVICE_KEY:-}"
+    volumes:
+      # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
+      - quant-data:/app/data
+      # 分析/扫描结果 JSON
+      - quant-output:/app/signal_system/output
+      # 行情缓存与日志（可清空，丢失后会自动重建）
+      - quant-cache:/app/signal_system/cache
+      - quant-logs:/app/signal_system/logs
+
+volumes:
+  quant-data:
+  quant-output:
+  quant-cache:
+  quant-logs:

@@ -22,7 +22,8 @@ export function runBridge(
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn("python", ["-B", bridgeScript, command, "--payload", "-"], {
+      const pythonBin = process.env.PYTHON_BIN?.trim() || "python";
+      child = spawn(pythonBin, ["-B", bridgeScript, command, "--payload", "-"], {
         cwd: signalSystemDir,
         windowsHide: true,
         env: { ...process.env, PYTHONIOENCODING: "utf-8", ...options.env },
