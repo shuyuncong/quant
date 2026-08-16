@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  fetch as undiciFetch,
+  type RequestInit as UndiciRequestInit,
+  type Response as UndiciResponse,
+} from "undici";
 import { interpretReport, recognizeSymbols, resolveApiKey, testProfile } from "../llm";
 import type { ModelProfile } from "../types";
+
+vi.mock("undici", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("undici")>();
+  return { ...actual, fetch: vi.fn() };
+});
 
 const profile: ModelProfile = {
   id: 1,
@@ -16,17 +26,17 @@ const profile: ModelProfile = {
   updated_at: "",
 };
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(payload: unknown, status = 200): UndiciResponse {
   return {
     ok: status >= 200 && status < 300,
     status,
     json: async () => payload,
     text: async () => JSON.stringify(payload),
-  } as Response;
+  } as unknown as UndiciResponse;
 }
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("resolveApiKey", () => {
@@ -42,7 +52,7 @@ describe("resolveApiKey", () => {
 
 describe("recognizeSymbols", () => {
   it("parses fenced JSON and normalizes symbols", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: unknown) =>
       jsonResponse({
         choices: [
           {
@@ -53,7 +63,7 @@ describe("recognizeSymbols", () => {
         ],
       })
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(undiciFetch).mockImplementation(fetchMock);
     const items = await recognizeSymbols(profile, "data:image/png;base64,AAAA");
     expect(items).toEqual([
       { symbol: "600036.SH", name: "招商银行" },
@@ -70,7 +80,7 @@ describe("interpretReport", () => {
       .mockResolvedValueOnce(
         jsonResponse({ choices: [{ message: { content: "信号偏强，注意风险。" } }] })
       );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(undiciFetch).mockImplementation(fetchMock);
     const content = await interpretReport(profile, "report text");
     expect(content).toContain("风险");
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -79,10 +89,10 @@ describe("interpretReport", () => {
 
 describe("testProfile", () => {
   it("uses proxy dispatcher when proxy is configured", async () => {
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+    const fetchMock = vi.fn(async (_input: unknown, _init?: UndiciRequestInit) =>
       jsonResponse({ choices: [{ message: { content: "OK" } }] })
     );
-    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(undiciFetch).mockImplementation(fetchMock);
     const result = await testProfile({ ...profile, proxy: "http://127.0.0.1:7890" });
     expect(result.ok).toBe(true);
     const init = fetchMock.mock.calls[0][1] as RequestInit | undefined;
@@ -90,9 +100,8 @@ describe("testProfile", () => {
   });
 
   it("returns failure detail on HTTP error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => jsonResponse({ error: { message: "invalid key" } }, 401))
+    vi.mocked(undiciFetch).mockImplementation(async () =>
+      jsonResponse({ error: { message: "invalid key" } }, 401)
     );
     const result = await testProfile(profile);
     expect(result.ok).toBe(false);

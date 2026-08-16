@@ -1,7 +1,7 @@
 import { getModel, listModels } from "./db";
 import type { ModelProfile } from "./types";
 import { normalizeSymbol } from "./symbols";
-import { ProxyAgent } from "undici";
+import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -39,7 +39,7 @@ async function chatCompletion(
     temperature: 0.2,
   };
   const doFetch = async () => {
-    const response = await fetch(url, {
+    const response = await undiciFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
