@@ -162,7 +162,9 @@ def _emit_error(message: str, code: int = 1) -> int:
     return code
 
 
-def _cmd_config(config_path: str, overrides: dict[str, Any]) -> int:
+def _cmd_config(config_path: str, payload: dict[str, Any]) -> int:
+    raw = payload.get("overrides")
+    overrides = raw if isinstance(raw, dict) else payload
     base = load_config(config_path)
     if base is None:
         return _emit_error(f"配置文件加载失败: {config_path}", 1)

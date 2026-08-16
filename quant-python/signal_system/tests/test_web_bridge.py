@@ -5,6 +5,9 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import io
+import contextlib
+import json
 from unittest import mock
 
 
@@ -48,6 +51,28 @@ class ConfigTests(unittest.TestCase):
         }
         result = web_bridge._cmd_config(web_bridge._default_config_path(), overrides)
         self.assertEqual(result, 0)
+
+    def test_config_accepts_web_payload_shape(self):
+        payload = {
+            "overrides": {
+                "notification": {
+                    "bark": {
+                        "enabled": True,
+                        "url": "https://api.day.app/push",
+                        "device_key": "secret-key",
+                    }
+                }
+            }
+        }
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            result = web_bridge._cmd_config(web_bridge._default_config_path(), payload)
+        self.assertEqual(result, 0)
+        data = json.loads(buffer.getvalue())["data"]
+        bark = data["config"]["notification"]["bark"]
+        self.assertTrue(bark["enabled"])
+        self.assertEqual(bark["device_key"], "****")
+        self.assertEqual(data["secret_sources"]["notification.bark.device_key"], "db")
 
     def test_env_marker_resolved(self):
         overrides = {
