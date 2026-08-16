@@ -21,6 +21,11 @@ export function pickVisionModel(): ModelProfile | null {
   return enabledModels().find((model) => model.vision_supported) ?? null;
 }
 
+/** 任选一个已启用且有 API Key 的模型用于文本类任务（AI 解读等）。 */
+export function pickChatModel(): ModelProfile | null {
+  return enabledModels()[0] ?? null;
+}
+
 function stripJsonFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
 }

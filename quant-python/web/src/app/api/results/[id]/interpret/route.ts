@@ -3,7 +3,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig } from "@/lib/config";
 import { addNote, getDb } from "@/lib/db";
-import { interpretReport, pickVisionModel } from "@/lib/llm";
+import { interpretReport, pickChatModel } from "@/lib/llm";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,7 +15,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!full.startsWith(path.resolve(outputDir)) || !fs.existsSync(full)) {
       return NextResponse.json({ error: "结果不存在" }, { status: 404 });
     }
-    const profile = pickVisionModel();
+    const profile = pickChatModel();
     if (!profile) {
       return NextResponse.json(
         { error: "未配置可用的模型（需启用且配置 API Key），无法生成 AI 解读" },
