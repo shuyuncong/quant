@@ -39,6 +39,7 @@ class SignalMonitor:
         self.max_scan_symbols = int(monitor.get("max_scan_symbols_per_run", 500))
         self.daily_scan_time = str(monitor.get("daily_scan_time", "15:20"))
         self.min_daily_bars = int(config.get("market_data", {}).get("min_listing_trade_days", 120))
+        self._name_map: dict[str, str] | None = None
 
     def _save_report(self, prefix: str, report: dict[str, Any]) -> Path:
         timestamp = now_shanghai().strftime("%Y%m%d_%H%M%S")
@@ -46,6 +47,33 @@ class SignalMonitor:
         with path.open("w", encoding="utf-8") as handle:
             json.dump(report, handle, ensure_ascii=False, indent=2, default=str)
         return path
+
+    def _resolve_names(
+        self, symbols: list[str], known: dict[str, str] | None = None
+    ) -> dict[str, str]:
+        """Fill in missing stock names from the (cached) A-share list."""
+        known = known or {}
+        resolved = {normalize_symbol(key): value for key, value in known.items()}
+        missing = [
+            normalize_symbol(symbol) for symbol in symbols if not resolved.get(normalize_symbol(symbol))
+        ]
+        if not missing:
+            return resolved
+        if self._name_map is None:
+            try:
+                stock_list = self.market.get_stock_list()
+                self._name_map = {
+                    normalize_symbol(str(row.get("code", ""))): str(row.get("name", ""))
+                    for _, row in stock_list.iterrows()
+                }
+            except Exception as exc:
+                logger.warning("获取股票名称失败，报告中的名称可能为空: %s", exc)
+                self._name_map = {}
+        for symbol in missing:
+            name = self._name_map.get(symbol)
+            if name:
+                resolved[symbol] = name
+        return resolved
 
     def dispatch_outbox(self) -> dict[str, int]:
         summary = {"delivered": 0, "failed": 0}
@@ -92,6 +120,7 @@ class SignalMonitor:
         names: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         names = names or {}
+        names = self._resolve_names(symbols, names)
         results: list[dict[str, Any]] = []
         new_event_count = 0
         stale_event_count = 0
@@ -204,9 +233,10 @@ class SignalMonitor:
         names: dict[str, str] = {}
         events_to_enqueue = []
         successful_symbols: set[str] = set()
+        batch_names = self._resolve_names([normalize_symbol(str(row["code"])) for row in batch])
         for row in batch:
             symbol = normalize_symbol(row["code"])
-            name = str(row.get("name", ""))
+            name = str(row.get("name", "")) or batch_names.get(symbol, "")
             names[symbol] = name
             try:
                 daily = self.market.get_bars(symbol, "1d", limit=300)
@@ -310,7 +340,7 @@ class SignalMonitor:
         candidates = self.store.active_candidates(limit=self.candidate_limit)
         names = {normalize_symbol(item["symbol"]): item.get("name", "") for item in candidates}
         ordered = list(dict.fromkeys(self.watchlist + list(names)))
-        return ordered, names
+        return ordered, self._resolve_names(ordered, names)
 
     def is_trading_day(self, current: datetime | None = None) -> bool:
         current = current or now_shanghai()
