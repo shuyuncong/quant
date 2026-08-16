@@ -68,6 +68,7 @@ function migrate(db: Database.Database): void {
       symbol TEXT NOT NULL DEFAULT '',
       content TEXT NOT NULL,
       model TEXT NOT NULL DEFAULT '',
+      result_path TEXT,
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS schedule (
@@ -88,6 +89,11 @@ function migrate(db: Database.Database): void {
   }
   try {
     db.exec("ALTER TABLE schedule ADD COLUMN fixed_times TEXT NOT NULL DEFAULT '[]'");
+  } catch {
+    /* column already exists on databases created with the new schema */
+  }
+  try {
+    db.exec("ALTER TABLE analysis_notes ADD COLUMN result_path TEXT");
   } catch {
     /* column already exists on databases created with the new schema */
   }
@@ -392,14 +398,18 @@ function rowToNote(row: Record<string, unknown>): AnalysisNote {
     symbol: String(row.symbol ?? ""),
     content: String(row.content ?? ""),
     model: String(row.model ?? ""),
+    result_path: row.result_path == null ? null : String(row.result_path),
     created_at: String(row.created_at ?? ""),
   };
 }
 
-export function addNote(input: { job_id: number | null; symbol?: string; content: string; model?: string }, db = getDb()): number {
+export function addNote(
+  input: { job_id: number | null; symbol?: string; content: string; model?: string; result_path?: string | null },
+  db = getDb()
+): number {
   const result = db
-    .prepare("INSERT INTO analysis_notes (job_id, symbol, content, model, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(input.job_id, input.symbol ?? "", input.content, input.model ?? "", nowIso());
+    .prepare("INSERT INTO analysis_notes (job_id, symbol, content, model, result_path, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(input.job_id, input.symbol ?? "", input.content, input.model ?? "", input.result_path ?? null, nowIso());
   return Number(result.lastInsertRowid);
 }
 
@@ -409,6 +419,26 @@ export function listNotesByJob(jobId: number, db = getDb()): AnalysisNote[] {
     .all(jobId) as Array<Record<string, unknown>>;
   return rows.map(rowToNote);
 }
+
+export interface NoteWithJob extends AnalysisNote {
+  job_kind: string | null;
+}
+
+export function listNotes(limit = 200, db = getDb()): NoteWithJob[] {
+  const rows = db
+    .prepare(
+      `SELECT n.*, j.kind AS job_kind
+       FROM analysis_notes n
+       LEFT JOIN jobs j ON j.id = n.job_id
+       ORDER BY n.id DESC LIMIT ?`
+    )
+    .all(limit) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    ...rowToNote(row),
+    job_kind: row.job_kind == null ? null : String(row.job_kind),
+  }));
+}
+
 
 // ---------- schedule ----------
 function rowToSchedule(row: Record<string, unknown>): ScheduleRow {

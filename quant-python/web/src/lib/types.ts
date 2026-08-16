@@ -57,5 +57,6 @@ export interface AnalysisNote {
   symbol: string;
   content: string;
   model: string;
+  result_path: string | null;
   created_at: string;
 }

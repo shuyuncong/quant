@@ -29,7 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .prepare("SELECT id FROM jobs WHERE result_path = ? ORDER BY id DESC LIMIT 1")
       .get(full) as { id: number } | undefined;
     const noteId = addNote(
-      { job_id: job?.id ?? null, symbol: "", content, model: profile.name },
+      { job_id: job?.id ?? null, symbol: "", content, model: profile.name, result_path: full },
       db
     );
     return NextResponse.json({ ok: true, note_id: noteId, content, model: profile.name });

@@ -9,12 +9,14 @@ import {
   BrainCircuit,
   Clock3,
   Database,
+  MessageSquareText,
   Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/results", label: "结果", icon: BarChart3 },
+  { href: "/interpretations", label: "AI 解读", icon: MessageSquareText },
   { href: "/strategies", label: "策略配置", icon: Activity },
   { href: "/notifications", label: "推送配置", icon: Bell },
   { href: "/models", label: "模型配置", icon: BrainCircuit },

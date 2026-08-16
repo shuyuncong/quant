@@ -1,7 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import { runBridge } from "./bridge";
 import { buildOverrides } from "./config";
-import { createJob, getJob, updateJob } from "./db";
+import { addNote, createJob, getJob, updateJob } from "./db";
 import { nowIso } from "./db";
+import { interpretReport, pickChatModel } from "./llm";
+import { signalSystemDir } from "./paths";
 
 export type JobKind =
   | "analyze"
@@ -11,6 +15,30 @@ export type JobKind =
   | "monitor-cycle"
   | "test-notify"
   | "dispatch-outbox";
+
+
+// job kinds that produce a report file worth interpreting
+const AUTO_INTERPRET_KINDS: JobKind[] = [
+  "analyze",
+  "scan",
+  "daily-scan",
+  "monitor-once",
+  "monitor-cycle",
+];
+
+function resolveReportPath(resultPath: string): string {
+  return path.isAbsolute(resultPath) ? resultPath : path.resolve(signalSystemDir, resultPath);
+}
+
+/** Read the generated report, call the chat model, and persist the interpretation. */
+async function autoInterpret(jobId: number, resultPath: string): Promise<void> {
+  const profile = pickChatModel();
+  if (!profile) return; // 未启用或未配置 API Key 的模型时跳过自动解读
+  const full = resolveReportPath(resultPath);
+  const reportText = fs.readFileSync(full, "utf8");
+  const content = await interpretReport(profile, reportText);
+  addNote({ job_id: jobId, result_path: resultPath, content, model: profile.name });
+}
 
 const KIND_TO_COMMAND: Record<JobKind, string> = {
   analyze: "analyze",
@@ -61,11 +89,17 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
     .then((outcome) => {
       if (outcome.ok) {
         const report = (outcome.data as { report?: { output_file?: string } } | undefined)?.report;
+        const resultPath = report?.output_file ?? null;
         updateJob(jobId, {
           status: "success",
-          result_path: report?.output_file ?? null,
+          result_path: resultPath,
           finished_at: nowIso(),
         });
+        if (resultPath && AUTO_INTERPRET_KINDS.includes(kind)) {
+          autoInterpret(jobId, resultPath).catch((error) => {
+            console.error(`[auto-interpret] job #${jobId} failed:`, error);
+          });
+        }
       } else {
         updateJob(jobId, { status: "failed", error: outcome.error || "执行失败", finished_at: nowIso() });
       }
