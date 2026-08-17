@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pandas as pd
 
@@ -205,6 +205,92 @@ class MarketDataTests(unittest.TestCase):
             self.assertFalse(
                 client.daily_history_is_usable("000001", date(2025, 1, 3), min_bars=120)
             )
+
+    def test_multi_timeframe_prefers_direct_target_periods(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+
+            def bars(_symbol, timeframe, limit=300):
+                size = limit
+                frame = self._minute_frame().iloc[: min(size, 240)].copy()
+                if size > len(frame):
+                    frame = pd.concat([frame] * ((size // len(frame)) + 1), ignore_index=True).iloc[:size]
+                return frame.reset_index(drop=True)
+
+            client.get_bars = MagicMock(side_effect=bars)
+            result, errors = client.get_multi_timeframe_bars(
+                "000001.SZ", ["1m", "5m", "15m"], limit=300
+            )
+            self.assertEqual({}, errors)
+            self.assertEqual(300, len(result["5m"]))
+            self.assertEqual(300, len(result["15m"]))
+            self.assertTrue(result["15m"].attrs["history_complete"])
+            self.assertEqual("direct", result["15m"].attrs["source_mode"])
+            requested = [call.args[1] for call in client.get_bars.call_args_list]
+            self.assertEqual(["1m", "5m", "15m"], requested)
+
+    def test_multi_timeframe_marks_partial_direct_history_with_warning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client.get_bars = MagicMock(return_value=self._minute_frame().iloc[:120].copy())
+
+            result, errors = client.get_multi_timeframe_bars(
+                "000001.SZ", ["5m"], limit=300
+            )
+
+            self.assertEqual({}, errors)
+            self.assertFalse(result["5m"].attrs["history_complete"])
+            self.assertEqual(
+                "行情历史不足: 仅获取 120/300 根",
+                result["5m"].attrs["source_warning"],
+            )
+
+    def test_multi_timeframe_resamples_one_minute_only_as_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            minute = pd.concat([self._minute_frame()] * 3, ignore_index=True)
+
+            def bars(_symbol, timeframe, limit=300):
+                if timeframe == "5m":
+                    raise RuntimeError("5m provider unavailable")
+                if timeframe == "1m":
+                    return minute.tail(limit).reset_index(drop=True)
+                raise AssertionError(timeframe)
+
+            client.get_bars = MagicMock(side_effect=bars)
+            result, errors = client.get_multi_timeframe_bars("000001.SZ", ["5m"], limit=300)
+            self.assertNotIn("5m", errors)
+            self.assertGreaterEqual(len(result["5m"]), 40)
+            self.assertFalse(result["5m"].attrs["history_complete"])
+            self.assertEqual("resampled_1m_fallback", result["5m"].attrs["source_mode"])
+
+    def test_fallback_refetches_longer_one_minute_history_after_short_initial_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            sessions = [
+                self._minute_frame().assign(
+                    datetime=lambda frame, offset=offset: frame["datetime"] + pd.Timedelta(days=offset)
+                )
+                for offset in range(5)
+            ]
+            minute = pd.concat(sessions, ignore_index=True)
+
+            def bars(_symbol, timeframe, limit=300):
+                if timeframe == "15m":
+                    raise RuntimeError("15m provider unavailable")
+                if timeframe == "1m":
+                    return minute.tail(limit).reset_index(drop=True)
+                raise AssertionError(timeframe)
+
+            client.get_bars = MagicMock(side_effect=bars)
+            result, errors = client.get_multi_timeframe_bars(
+                "000001.SZ", ["1m", "15m"], limit=300
+            )
+
+            self.assertEqual({}, errors)
+            self.assertGreaterEqual(len(result["15m"]), 40)
+            self.assertEqual(["1m", "15m", "1m"], [call.args[1] for call in client.get_bars.call_args_list])
+            self.assertEqual([300, 300, 600], [call.kwargs["limit"] for call in client.get_bars.call_args_list])
 
 
 if __name__ == "__main__":

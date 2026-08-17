@@ -31,6 +31,9 @@ interface NotificationForm {
   bark_enabled: boolean;
   bark_url: string;
   bark_device_key: string;
+  push_trade_signal: boolean;
+  push_candidate_pool: boolean;
+  push_ai_analysis: boolean;
 }
 
 const DEFAULT_FORM: NotificationForm = {
@@ -49,6 +52,9 @@ const DEFAULT_FORM: NotificationForm = {
   bark_enabled: false,
   bark_url: "https://api.day.app/push",
   bark_device_key: "",
+  push_trade_signal: true,
+  push_candidate_pool: true,
+  push_ai_analysis: true,
 };
 
 export default function NotificationsPage() {
@@ -79,6 +85,9 @@ export default function NotificationsPage() {
         bark_enabled: Boolean(n.bark?.enabled),
         bark_url: String(n.bark?.url ?? "https://api.day.app/push"),
         bark_device_key: String(n.bark?.device_key ?? ""),
+        push_trade_signal: n.push_trade_signal !== false,
+        push_candidate_pool: n.push_candidate_pool !== false,
+        push_ai_analysis: n.push_ai_analysis !== false,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载推送配置失败");
@@ -111,6 +120,9 @@ export default function NotificationsPage() {
       "notification.bark.enabled": form.bark_enabled,
       "notification.bark.url": form.bark_url || "https://api.day.app/push",
       "notification.bark.device_key": form.bark_device_key || "****",
+      "notification.push_trade_signal": form.push_trade_signal,
+      "notification.push_candidate_pool": form.push_candidate_pool,
+      "notification.push_ai_analysis": form.push_ai_analysis,
     };
     try {
       const response = await fetch("/api/config/notification", {
@@ -270,15 +282,30 @@ export default function NotificationsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">通用</CardTitle>
-          <CardDescription>请求超时（秒）</CardDescription>
+          <CardDescription>控制推送内容和请求超时。</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Input
-            type="number"
-            className="w-32"
-            value={form.timeout_seconds}
-            onChange={(event) => set("timeout_seconds", event.target.value)}
-          />
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <div><Label>缠论交易信号</Label><p className="text-xs text-muted-foreground">推送一、二、三类买卖点及强共振标记。</p></div>
+            <Switch checked={form.push_trade_signal} onCheckedChange={(value) => set("push_trade_signal", value)} />
+          </div>
+          <div className="flex items-center justify-between border-b pb-3">
+            <div><Label>MACD 金叉候选</Label><p className="text-xs text-muted-foreground">推送日线金叉位置、确认条件和风险。</p></div>
+            <Switch checked={form.push_candidate_pool} onCheckedChange={(value) => set("push_candidate_pool", value)} />
+          </div>
+          <div className="flex items-center justify-between border-b pb-3">
+            <div><Label>AI 自动解读</Label><p className="text-xs text-muted-foreground">保存解读后再推送摘要；完整内容保留在解读页。</p></div>
+            <Switch checked={form.push_ai_analysis} onCheckedChange={(value) => set("push_ai_analysis", value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>请求超时（秒）</Label>
+            <Input
+              type="number"
+              className="w-32"
+              value={form.timeout_seconds}
+              onChange={(event) => set("timeout_seconds", event.target.value)}
+            />
+          </div>
         </CardContent>
       </Card>
 

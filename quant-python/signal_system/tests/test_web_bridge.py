@@ -126,5 +126,22 @@ class OutboxSummaryTests(unittest.TestCase):
         self.assertEqual(summary["total_events"], 0)
 
 
+class SummaryNotificationTests(unittest.TestCase):
+    def test_notify_summary_requires_content(self):
+        result = web_bridge._cmd_notify_summary(web_bridge._default_config_path(), {})
+        self.assertEqual(2, result)
+
+    def test_notify_summary_delegates_to_monitor(self):
+        monitor = mock.MagicMock()
+        monitor.notify_ai_analysis.return_value = {"enqueued": 1}
+        with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+            result = web_bridge._cmd_notify_summary(
+                web_bridge._default_config_path(),
+                {"title": "AI", "content": "内容", "report_path": "a.json"},
+            )
+        self.assertEqual(0, result)
+        monitor.notify_ai_analysis.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

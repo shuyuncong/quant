@@ -16,6 +16,7 @@ DEFAULT_ORDER = ["1m", "5m", "15m", "30m", "60m", "120m", "1d"]
 DEFAULT_WEIGHTS = {"1m": 1, "5m": 2, "15m": 3, "30m": 4, "60m": 5, "120m": 6, "1d": 8}
 CHAN_BUY_POINTS = {"buy_1": 20, "buy_2": 25, "buy_3": 30}
 CHAN_SELL_POINTS = {"sell_1": 20, "sell_2": 25, "sell_3": 30}
+GOLDEN_CROSS_POINTS = {"above": 50, "near": 30, "below": 10}
 
 
 class MultiTimeframeAnalyzer:
@@ -28,12 +29,15 @@ class MultiTimeframeAnalyzer:
         self.slow = int(macd.get("slow", 26))
         self.signal = int(macd.get("signal", 9))
         self.zero_axis_tolerance = float(macd.get("zero_axis_tolerance", 0.005))
+        self.moderate_volume_min = float(macd.get("moderate_volume_min", 1.0))
+        self.moderate_volume_max = float(macd.get("moderate_volume_max", 2.0))
         self.min_bi_bars = int(chan.get("min_bi_bars", 4))
         self.divergence_ratio = float(chan.get("divergence_ratio", 0.9))
         self.fresh_signal_bars = int(chan.get("fresh_signal_bars", 1))
         self.buy_threshold = int(scoring.get("buy_threshold", 60))
         self.sell_threshold = int(scoring.get("sell_threshold", 60))
         self.timeframe_weights = {**DEFAULT_WEIGHTS, **scoring.get("timeframe_weights", {})}
+        self.context_bars = max(10, int(strategy.get("llm_context_bars", 48)))
         self.volume_unit_shares = float(config.get("market_data", {}).get("volume_unit_shares", 100))
 
     def _fresh_signals(self, signals: list[dict[str, Any]], frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -72,6 +76,7 @@ class MultiTimeframeAnalyzer:
         }
 
     def _base_report(self, timeframe: str, frame: pd.DataFrame) -> tuple[TimeframeReport, pd.DataFrame]:
+        source_meta = dict(frame.attrs)
         closed = frame[frame["is_closed"]].copy().reset_index(drop=True)
         enriched, indicators = analyze_macd(
             closed,
@@ -79,9 +84,41 @@ class MultiTimeframeAnalyzer:
             slow=self.slow,
             signal=self.signal,
             zero_axis_tolerance=self.zero_axis_tolerance,
+            moderate_volume_min=self.moderate_volume_min,
+            moderate_volume_max=self.moderate_volume_max,
         )
+        source_indicators = {
+            "bar_count": len(closed),
+            "requested_bar_count": int(source_meta.get("requested_bars", len(closed))),
+            "history_complete": bool(source_meta.get("history_complete", True)),
+            "source_mode": source_meta.get("source_mode", "unknown"),
+            "source_warning": source_meta.get("source_warning")
+            or source_meta.get("direct_error"),
+        }
         if indicators.get("status") != "ok":
-            return TimeframeReport(timeframe=timeframe, status="insufficient_data"), enriched
+            source_indicators["analysis_warning"] = "MACD 数据不足，无法完成指标计算"
+            latest_time = (
+                pd.Timestamp(closed["datetime"].iloc[-1]).isoformat()
+                if not closed.empty and "datetime" in closed.columns
+                else None
+            )
+            latest_price = (
+                float(closed["close"].iloc[-1])
+                if not closed.empty and "close" in closed.columns
+                else None
+            )
+            return (
+                TimeframeReport(
+                    timeframe=timeframe,
+                    status="insufficient_data",
+                    latest_time=latest_time,
+                    latest_price=latest_price,
+                    indicators=source_indicators,
+                    recent_bars=self._recent_bars(enriched),
+                ),
+                enriched,
+            )
+        indicators.update(source_indicators)
         chan = analyze_chan(
             enriched,
             min_bi_bars=self.min_bi_bars,
@@ -95,6 +132,8 @@ class MultiTimeframeAnalyzer:
             "stroke_count": len(chan["strokes"]),
             "center_count": len(chan["centers"]),
             "latest_center": chan["centers"][-1] if chan["centers"] else None,
+            "latest_centers": chan["centers"][-5:],
+            "latest_strokes": chan["strokes"][-20:],
             "latest_signals": chan["signals"][-10:],
             "fresh_signals": fresh,
         }
@@ -108,9 +147,31 @@ class MultiTimeframeAnalyzer:
                 latest_price=float(enriched["close"].iloc[-1]),
                 indicators=indicators,
                 chan=compact_chan,
+                recent_bars=self._recent_bars(enriched),
             ),
             enriched,
         )
+
+    def _recent_bars(self, frame: pd.DataFrame) -> list[dict[str, Any]]:
+        columns = [
+            column
+            for column in ("datetime", "open", "high", "low", "close", "volume", "dif", "dea", "hist")
+            if column in frame.columns
+        ]
+        records: list[dict[str, Any]] = []
+        for raw in frame[columns].tail(self.context_bars).to_dict("records"):
+            item: dict[str, Any] = {}
+            for key, value in raw.items():
+                if pd.isna(value):
+                    item[key] = None
+                elif key == "datetime":
+                    item[key] = pd.Timestamp(value).isoformat()
+                elif isinstance(value, (int, float)):
+                    item[key] = round(float(value), 6)
+                else:
+                    item[key] = value
+            records.append(item)
+        return records
 
     @staticmethod
     def _higher_report(timeframe: str, reports: dict[str, TimeframeReport]) -> TimeframeReport | None:
@@ -130,9 +191,16 @@ class MultiTimeframeAnalyzer:
         reasons: list[str] = []
         score = 0
         if side == "buy":
-            if indicators.get("zero_axis_golden_cross"):
-                score += 30
-                reasons.append("MACD 0轴附近金叉 +30")
+            golden_cross = indicators.get("golden_cross") or indicators.get("zero_axis_golden_cross")
+            if golden_cross:
+                zone = str(indicators.get("golden_cross_zone", "near"))
+                points = GOLDEN_CROSS_POINTS.get(zone, GOLDEN_CROSS_POINTS["near"])
+                score += points
+                reasons.append(f"MACD {indicators.get('golden_cross_zone_label', '0轴附近金叉')} +{points}")
+                confirmation_points = min(15, int(indicators.get("confirmation_count", 0)) * 5)
+                if confirmation_points:
+                    score += confirmation_points
+                    reasons.append(f"金叉确认条件 {indicators.get('confirmation_count')} 项 +{confirmation_points}")
             buy_types = [item["signal_type"] for item in fresh if item["side"] == "buy"]
             if buy_types:
                 best = max(buy_types, key=lambda item: CHAN_BUY_POINTS.get(item, 0))
@@ -183,6 +251,84 @@ class MultiTimeframeAnalyzer:
                 reasons.append("存在冲突买点 -30")
         return max(0, score), reasons
 
+    def _events(
+        self,
+        symbol: str,
+        name: str,
+        report: TimeframeReport,
+        side: str,
+        score: int,
+        score_reasons: list[str],
+    ) -> list[SignalEvent]:
+        indicators = report.indicators
+        fresh = [item for item in report.chan.get("fresh_signals", []) if item["side"] == side]
+        cross = (
+            indicators.get("golden_cross") or indicators.get("zero_axis_golden_cross")
+            if side == "buy"
+            else indicators.get("zero_axis_death_cross")
+        )
+        if not cross and not fresh:
+            return []
+        threshold = self.buy_threshold if side == "buy" else self.sell_threshold
+        strong_signal = score >= threshold
+        if not fresh and not strong_signal:
+            return []
+        cross_component = None
+        if cross:
+            cross_component = (
+                f"macd_golden_cross_{indicators.get('golden_cross_zone', 'near')}"
+                if side == "buy"
+                else "zero_axis_death_cross"
+            )
+
+        events: list[SignalEvent] = []
+        sources = fresh or [None]
+        for chan_signal in sources:
+            signal_type = (
+                str(chan_signal["signal_type"])
+                if chan_signal
+                else str(cross_component)
+            )
+            confirmed_at = (
+                str(chan_signal["confirmed_at"])
+                if chan_signal
+                else str(report.latest_time or now_shanghai().isoformat(timespec="seconds"))
+            )
+            structure_time = (
+                str(chan_signal["structure_time"])
+                if chan_signal
+                else str(report.latest_time or confirmed_at)
+            )
+            components = [signal_type]
+            if cross_component and cross_component != signal_type:
+                components.append(cross_component)
+            evidence = {
+                "components": components,
+                "score_reasons": score_reasons,
+                "indicators": indicators,
+                "chan_signal": chan_signal,
+                "latest_center": report.chan.get("latest_center"),
+                "timeframe_weight": self.timeframe_weights.get(report.timeframe, 1),
+                "notification_kind": "trade_signal",
+                "strong_signal": strong_signal,
+                "signal_level": "strong" if strong_signal else "structure",
+            }
+            events.append(
+                SignalEvent(
+                    symbol=symbol,
+                    name=name,
+                    timeframe=report.timeframe,
+                    signal_type=signal_type,
+                    side=side,
+                    price=float(report.latest_price or 0.0),
+                    structure_time=structure_time,
+                    confirmed_at=confirmed_at,
+                    score=score,
+                    evidence=evidence,
+                )
+            )
+        return events
+
     def _event(
         self,
         symbol: str,
@@ -192,48 +338,8 @@ class MultiTimeframeAnalyzer:
         score: int,
         score_reasons: list[str],
     ) -> SignalEvent | None:
-        indicators = report.indicators
-        fresh = [item for item in report.chan.get("fresh_signals", []) if item["side"] == side]
-        cross = indicators.get("zero_axis_golden_cross" if side == "buy" else "zero_axis_death_cross")
-        if not cross and not fresh:
-            return None
-        if side == "buy" and score < self.buy_threshold:
-            return None
-        if side == "sell" and score < self.sell_threshold:
-            return None
-        point_order = CHAN_BUY_POINTS if side == "buy" else CHAN_SELL_POINTS
-        strongest = max(fresh, key=lambda item: point_order.get(item["signal_type"], 0)) if fresh else None
-        components = []
-        if strongest:
-            components.append(strongest["signal_type"])
-        if cross:
-            components.append("zero_axis_golden_cross" if side == "buy" else "zero_axis_death_cross")
-        confirmed_at = max(
-            [item["confirmed_at"] for item in fresh] + [report.latest_time or ""]
-            if cross
-            else [item["confirmed_at"] for item in fresh]
-        )
-        structure_time = strongest["structure_time"] if strongest else report.latest_time or confirmed_at
-        evidence = {
-            "components": components,
-            "score_reasons": score_reasons,
-            "indicators": indicators,
-            "chan_signal": strongest,
-            "latest_center": report.chan.get("latest_center"),
-            "timeframe_weight": self.timeframe_weights.get(report.timeframe, 1),
-        }
-        return SignalEvent(
-            symbol=symbol,
-            name=name,
-            timeframe=report.timeframe,
-            signal_type="+".join(components),
-            side=side,
-            price=float(report.latest_price or 0.0),
-            structure_time=structure_time,
-            confirmed_at=confirmed_at,
-            score=score,
-            evidence=evidence,
-        )
+        events = self._events(symbol, name, report, side, score, score_reasons)
+        return events[0] if events else None
 
     def analyze(
         self,
@@ -272,14 +378,12 @@ class MultiTimeframeAnalyzer:
             sell_score, sell_reasons = self._score(report, higher, "sell")
             report.buy_score = buy_score
             report.sell_score = sell_score
-            buy_event = self._event(symbol, name, report, "buy", buy_score, buy_reasons)
-            sell_event = self._event(symbol, name, report, "sell", sell_score, sell_reasons)
-            if buy_event:
-                report.events.append(buy_event)
-                events.append(buy_event)
-            if sell_event:
-                report.events.append(sell_event)
-                events.append(sell_event)
+            buy_events = self._events(symbol, name, report, "buy", buy_score, buy_reasons)
+            sell_events = self._events(symbol, name, report, "sell", sell_score, sell_reasons)
+            report.events.extend(buy_events)
+            report.events.extend(sell_events)
+            events.extend(buy_events)
+            events.extend(sell_events)
 
         events.sort(
             key=lambda item: (item.score * self.timeframe_weights.get(item.timeframe, 1), item.confirmed_at),

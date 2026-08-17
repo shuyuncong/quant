@@ -5,10 +5,14 @@ export interface CandidateRow {
   symbol: string;
   name: string;
   score: number;
+  strategy_score?: number;
   confirmed_at?: string;
   dif?: number;
   dea?: number;
   zero_distance?: number;
+  golden_cross_zone?: "above" | "near" | "below";
+  golden_cross_zone_label?: string;
+  confirmation_items?: string[];
   chan_signals?: unknown[];
 }
 

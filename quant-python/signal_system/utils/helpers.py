@@ -205,6 +205,7 @@ DEFAULT_CONFIG = {
         "push_market_regime": True,
         "push_candidate_pool": True,
         "push_trade_signal": True,
+        "push_ai_analysis": True,
     },
     "runtime": {
         "schedule": {

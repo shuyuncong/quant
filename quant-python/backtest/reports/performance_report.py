@@ -131,10 +131,14 @@ class PerformanceReportBuilder:
         turnover_notional = sum(abs(float(item.get("notional", 0.0))) for item in raw_trades)
         turnover_rate = (turnover_notional / average_equity) if average_equity else 0.0
 
-        # 命中率只看入场类信号，因为它们才对应“开新仓或加仓是否有效”。
+        # 回测胜率只对已闭合交易计算。入场信号可能因 T+1、资金或持有期
+        # 尚未成交/平仓，不能直接作为胜率分母；额外保留未配对数量供审计。
         entry_signals = [record for record in signal_records if record.signal_type in {"BUY", "ADD"}]
         profitable_trades = [record for record in trade_records if record.pnl > 0]
-        signal_hit_rate = (len(profitable_trades) / len(entry_signals)) if entry_signals else 0.0
+        completed_trade_win_rate = (
+            len(profitable_trades) / len(trade_records) if trade_records else 0.0
+        )
+        unmatched_entry_signal_count = max(len(entry_signals) - len(trade_records), 0)
 
         daily_returns = []
         if not equity_frame.empty and len(equity_frame) > 1:
@@ -165,7 +169,11 @@ class PerformanceReportBuilder:
             "profit_loss_ratio": float(summary.get("profit_loss_ratio", 0.0) or 0.0),
             "avg_holding_days": float(summary.get("avg_holding_days", 0.0) or 0.0),
             "turnover_rate": turnover_rate,
-            "signal_hit_rate": signal_hit_rate,
+            # Deprecated compatibility alias. New consumers should use
+            # completed_trade_win_rate and inspect unmatched_entry_signal_count.
+            "signal_hit_rate": completed_trade_win_rate,
+            "completed_trade_win_rate": completed_trade_win_rate,
+            "unmatched_entry_signal_count": unmatched_entry_signal_count,
             "sharpe_ratio": sharpe_ratio,
             "calmar_ratio": calmar_ratio,
             "average_equity": average_equity,

@@ -34,9 +34,37 @@ class SignalNotifier:
 
     @staticmethod
     def _markdown(payload: dict[str, Any]) -> str:
+        evidence = payload.get("evidence", {})
+        kind = evidence.get("notification_kind", "trade_signal")
+        if kind == "ai_analysis":
+            report_path = evidence.get("report_path") or "未记录"
+            return (
+                f"# {payload.get('name', 'AI自动解读')}\n\n"
+                f"{evidence.get('content', '')}\n\n"
+                f"> 报告：{report_path}\n"
+                f"> {payload['risk_notice']}\n"
+                f"> event_id: `{payload['event_id']}`"
+            )
+        if kind == "candidate":
+            confirmations = evidence.get("confirmation_items", [])
+            return (
+                f"# MACD 金叉候选\n\n"
+                f"> **{payload.get('name', '')} ({payload['symbol']})**\n\n"
+                f"- 位置：{evidence.get('golden_cross_zone_label', '未识别')}\n"
+                f"- 价格：{payload['price']:.3f}\n"
+                f"- 评分：{payload['score']}\n"
+                f"- DIF / DEA：{float(evidence.get('dif') or 0):.4f} / {float(evidence.get('dea') or 0):.4f}\n"
+                f"- 量比：{float(evidence.get('volume_ratio') or 0):.2f}\n"
+                f"- 确认条件：{'；'.join(confirmations) if confirmations else '暂无额外确认'}\n"
+                f"- 风险：{evidence.get('risk_text', '需结合趋势复核')}\n"
+                f"- 确认时间：{payload['confirmed_at']}\n\n"
+                f"> {payload['risk_notice']}\n"
+                f"> event_id: `{payload['event_id']}`"
+            )
         side = "🟢 买入观察" if payload["side"] == "buy" else "🔴 卖出观察"
-        reasons = payload.get("evidence", {}).get("score_reasons", [])
-        center = payload.get("evidence", {}).get("latest_center")
+        level = "强共振" if evidence.get("strong_signal") else "缠论结构"
+        reasons = evidence.get("score_reasons", [])
+        center = evidence.get("latest_center")
         center_text = "无已确认中枢"
         if center:
             center_text = f"ZD={center['zd']:.3f}, ZG={center['zg']:.3f}"
@@ -45,6 +73,7 @@ class SignalNotifier:
             f"> **{payload.get('name', '')} ({payload['symbol']})**\n\n"
             f"- 周期：{payload['timeframe']}\n"
             f"- 信号：{payload['signal_type']}\n"
+            f"- 级别：{level}\n"
             f"- 价格：{payload['price']:.3f}\n"
             f"- 评分：{payload['score']}\n"
             f"- 确认时间：{payload['confirmed_at']}\n"
@@ -114,16 +143,34 @@ class SignalNotifier:
         if not device_key:
             return False, "Bark device_key 未配置"
         url = str(config.get("url", "") or "https://api.day.app/push")
-        side = "买入观察" if payload["side"] == "buy" else "卖出观察"
-        title = f"{side} {payload.get('name', '')} {payload['symbol']} {payload['timeframe']}".strip()
-        reasons = payload.get("evidence", {}).get("score_reasons", [])
-        body = (
-            f"信号: {payload['signal_type']}\n"
-            f"价格: {payload['price']:.3f}\n"
-            f"评分: {payload['score']}\n"
-            f"确认: {payload['confirmed_at']}\n"
-            f"依据: {('、'.join(reasons) if reasons else '见结构化 evidence')}"
-        )
+        evidence = payload.get("evidence", {})
+        kind = evidence.get("notification_kind", "trade_signal")
+        if kind == "ai_analysis":
+            title = payload.get("name", "AI自动解读")
+            body = str(evidence.get("content", ""))[:3500]
+        elif kind == "candidate":
+            title = f"金叉候选 {payload.get('name', '')} {payload['symbol']}".strip()
+            confirmations = evidence.get("confirmation_items", [])
+            body = (
+                f"位置: {evidence.get('golden_cross_zone_label', '未识别')}\n"
+                f"价格: {payload['price']:.3f}\n"
+                f"评分: {payload['score']}\n"
+                f"确认: {('、'.join(confirmations) if confirmations else '暂无额外确认')}\n"
+                f"风险: {evidence.get('risk_text', '需结合趋势复核')}"
+            )
+        else:
+            side = "买入观察" if payload["side"] == "buy" else "卖出观察"
+            title = f"{side} {payload.get('name', '')} {payload['symbol']} {payload['timeframe']}".strip()
+            reasons = evidence.get("score_reasons", [])
+            level = "强共振" if evidence.get("strong_signal") else "缠论结构"
+            body = (
+                f"信号: {payload['signal_type']}\n"
+                f"级别: {level}\n"
+                f"价格: {payload['price']:.3f}\n"
+                f"评分: {payload['score']}\n"
+                f"确认: {payload['confirmed_at']}\n"
+                f"依据: {('、'.join(reasons) if reasons else '见结构化 evidence')}"
+            )
         body_data = {
             "device_key": device_key,
             "title": title,
@@ -149,7 +196,13 @@ class SignalNotifier:
         missing = [key for key in required if not config.get(key)]
         if missing:
             return False, f"邮件配置缺少: {', '.join(missing)}"
-        subject_side = "买入观察" if payload["side"] == "buy" else "卖出观察"
+        kind = payload.get("evidence", {}).get("notification_kind", "trade_signal")
+        if kind == "ai_analysis":
+            subject_side = "AI自动解读"
+        elif kind == "candidate":
+            subject_side = "MACD金叉候选"
+        else:
+            subject_side = "买入观察" if payload["side"] == "buy" else "卖出观察"
         message = MIMEText(self._markdown(payload), "plain", "utf-8")
         message["Subject"] = f"{subject_side} {payload.get('name', '')} {payload['timeframe']}"
         message["From"] = str(config["sender"])

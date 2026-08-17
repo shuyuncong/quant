@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--symbols", nargs="+", help="股票代码，例如 000001.SZ 600036.SH")
     analyze.add_argument("--no-notify", action="store_true", help="只分析，不写入推送队列")
 
-    scan = subparsers.add_parser("scan", help="扫描日线 MACD 0轴附近金叉")
+    scan = subparsers.add_parser("scan", help="扫描日线 MACD 金叉并按 0轴位置分级")
     scan.add_argument("--no-notify", action="store_true", help="只扫描，不写入推送队列")
 
     monitor = subparsers.add_parser("monitor", help="常驻交易时段监控")

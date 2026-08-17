@@ -158,11 +158,15 @@ const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
   "signal_strategy.macd.slow": { type: "number", min: 1 },
   "signal_strategy.macd.signal": { type: "number", min: 1 },
   "signal_strategy.macd.zero_axis_tolerance": { type: "number", min: 0 },
+  "signal_strategy.macd.moderate_volume_min": { type: "number", min: 0 },
+  "signal_strategy.macd.moderate_volume_max": { type: "number", min: 0 },
+  "signal_strategy.llm_context_bars": { type: "number", min: 10, max: 200 },
   "signal_strategy.scoring.buy_threshold": { type: "number", min: 0, max: 100 },
   "signal_strategy.scoring.sell_threshold": { type: "number", min: 0, max: 100 },
   "monitor.timeframes": { type: "stringArray" },
   "monitor.watchlist": { type: "stringArray" },
   "monitor.bar_limit": { type: "number", min: 30 },
+  "monitor.max_symbols_per_cycle": { type: "number", min: 1, max: 100 },
   "scan.universe_mode": { type: "enum", enum: ["watchlist", "all_a"] },
 };
 
@@ -182,6 +186,9 @@ const NOTIFICATION_SCHEMA: Record<string, FieldDef> = {
   "notification.bark.enabled": { type: "boolean" },
   "notification.bark.url": { type: "string" },
   "notification.bark.device_key": { type: "string" },
+  "notification.push_trade_signal": { type: "boolean" },
+  "notification.push_candidate_pool": { type: "boolean" },
+  "notification.push_ai_analysis": { type: "boolean" },
 };
 
 export type ConfigSection = "strategies" | "notification";
@@ -245,6 +252,13 @@ export function validateSection(
       continue;
     }
     normalized[key] = String(raw);
+  }
+  if (section === "strategies") {
+    const minVolume = Number(normalized["signal_strategy.macd.moderate_volume_min"]);
+    const maxVolume = Number(normalized["signal_strategy.macd.moderate_volume_max"]);
+    if (Number.isFinite(minVolume) && Number.isFinite(maxVolume) && minVolume > maxVolume) {
+      errors.push("温和放量下限不能大于上限");
+    }
   }
   return { ok: errors.length === 0, errors, normalized };
 }

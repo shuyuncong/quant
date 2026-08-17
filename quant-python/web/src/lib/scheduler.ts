@@ -1,10 +1,23 @@
+import fs from "node:fs";
+import path from "node:path";
 import { runBridge } from "./bridge";
-import { getScheduleRows, jobsRunningSince, listJobs } from "./db";
+import { buildOverrides } from "./config";
+import {
+  addOperationLog,
+  failInterruptedJobs,
+  getScheduleRows,
+  listJobs,
+  listJobsByKindSince,
+} from "./db";
 import type { ScheduleRow } from "./types";
-import { startJob } from "./jobs";
+import { resumeInterpretationJobs, startJob } from "./jobs";
+import { signalSystemDir } from "./paths";
+import { nowIso, shanghaiDate, shanghaiHhmm, shanghaiNow } from "./time";
 
 const TICK_MS = 15_000;
 const CALENDAR_TTL_MS = 60_000;
+const OUTBOX_TICK_MS = 30_000;
+const DAILY_BATCH_COOLDOWN_MS = 30_000;
 
 export interface CalendarInfo {
   is_trading_day: boolean;
@@ -12,41 +25,26 @@ export interface CalendarInfo {
   now: string;
 }
 
-export function shanghaiNow(): Date {
-  // Build a Date whose local fields are Asia/Shanghai wall clock.
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "0";
-  return new Date(
-    Number(get("year")),
-    Number(get("month")) - 1,
-    Number(get("day")),
-    Number(get("hour")),
-    Number(get("minute")),
-    Number(get("second"))
-  );
-}
-
-export function shanghaiDate(now = shanghaiNow()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function shanghaiHhmm(now = shanghaiNow()): string {
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
-
 let calendarCache: { at: number; data: CalendarInfo } | null = null;
+
+function isTradingSessionAt(current: Date): boolean {
+  const hhmm = shanghaiHhmm(current);
+  return (hhmm >= "09:30" && hhmm <= "11:30") || (hhmm >= "13:00" && hhmm <= "15:00");
+}
+
+export function fallbackCalendar(
+  current: Date,
+  cached: CalendarInfo | null = null
+): CalendarInfo {
+  const today = shanghaiDate(current);
+  const cacheMatchesToday = cached?.now.slice(0, 10) === today;
+  const isTradingDay = Boolean(cacheMatchesToday && cached?.is_trading_day);
+  return {
+    is_trading_day: isTradingDay,
+    is_trading_session: isTradingDay && isTradingSessionAt(current),
+    now: `${nowIso(current).replace(" ", "T")}+08:00`,
+  };
+}
 
 export async function getCalendar(force = false): Promise<CalendarInfo> {
   const now = Date.now();
@@ -60,19 +58,57 @@ export async function getCalendar(force = false): Promise<CalendarInfo> {
     return data;
   }
   const current = shanghaiNow();
-  const weekday = current.getDay() >= 1 && current.getDay() <= 5;
-  const fallback: CalendarInfo = {
-    is_trading_day: weekday,
-    is_trading_session: false,
-    now: current.toISOString(),
-  };
-  if (calendarCache) return calendarCache.data;
-  return fallback;
+  return fallbackCalendar(current, calendarCache?.data ?? null);
 }
 
 let lastMonitorRunAt = 0;
-let lastDailyDate = "";
+let lastDailyStartAt = 0;
 let lastFixedMonitorRun = "";
+let lastOutboxRunAt = 0;
+let outboxRunning = false;
+
+function fixedMonitorAlreadyScheduled(today: string, fixed: string): boolean {
+  return listJobsByKindSince("monitor-cycle", today).some((job) =>
+    job.created_at.slice(0, 16) === `${today} ${fixed}`
+  );
+}
+
+function resolveReportPath(resultPath: string): string {
+  return path.isAbsolute(resultPath) ? resultPath : path.resolve(signalSystemDir, resultPath);
+}
+
+function dailyScanState(today: string): "none" | "running" | "incomplete" | "complete" {
+  const jobs = listJobsByKindSince("daily-scan", today);
+  if (jobs.some((job) => job.status === "pending" || job.status === "running")) return "running";
+  const latestSuccess = jobs.find((job) => job.status === "success");
+  if (!latestSuccess) return jobs.length ? "incomplete" : "none";
+  if (!latestSuccess.result_path) return "incomplete";
+  return dailyReportState(latestSuccess.result_path);
+}
+
+export function dailyReportState(resultPath: string): "incomplete" | "complete" {
+  try {
+    const report = JSON.parse(fs.readFileSync(resolveReportPath(resultPath), "utf8")) as {
+      completed_round?: boolean;
+    };
+    return report.completed_round === true ? "complete" : "incomplete";
+  } catch {
+    return "incomplete";
+  }
+}
+
+function dispatchOutboxIfDue(): void {
+  if (outboxRunning || Date.now() - lastOutboxRunAt < OUTBOX_TICK_MS) return;
+  outboxRunning = true;
+  lastOutboxRunAt = Date.now();
+  void runBridge(
+    "dispatch-outbox",
+    { overrides: buildOverrides() },
+    { timeoutMs: 120_000 }
+  ).finally(() => {
+    outboxRunning = false;
+  });
+}
 
 export async function estimateNextRun(
   row: ScheduleRow,
@@ -88,12 +124,12 @@ export async function estimateNextRun(
     if (row.trading_days_only) {
       while (target.getDay() === 0 || target.getDay() === 6) target.setDate(target.getDate() + 1);
     }
-    return target.toISOString();
+    return nowIso(target);
   }
   // monitor_cycle
   let intervalEstimate: string | null = null;
   if (calendar.is_trading_session) {
-    intervalEstimate = new Date(now.getTime() + row.interval_seconds * 1000).toISOString();
+    intervalEstimate = nowIso(new Date(now.getTime() + row.interval_seconds * 1000));
   } else {
     const next = new Date(now);
     if (now.getHours() < 13) {
@@ -105,7 +141,7 @@ export async function estimateNextRun(
     if (row.trading_days_only) {
       while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
     }
-    intervalEstimate = next.toISOString();
+    intervalEstimate = nowIso(next);
   }
   const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
   if (fixedTimes.length > 0) {
@@ -123,7 +159,7 @@ export async function estimateNextRun(
     }
     if (earliest) {
       // 配置了固定时点时，按固定时点模式展示下一个执行时点
-      return earliest.toISOString();
+      return nowIso(earliest);
     }
   }
   return intervalEstimate;
@@ -131,6 +167,7 @@ export async function estimateNextRun(
 
 async function tick(): Promise<void> {
   try {
+    dispatchOutboxIfDue();
     const calendar = await getCalendar();
     const now = shanghaiNow();
     const today = shanghaiDate(now);
@@ -141,9 +178,14 @@ async function tick(): Promise<void> {
       if (row.kind === "daily_scan") {
         const dayOk = !row.trading_days_only || calendar.is_trading_day;
         if (!dayOk) continue;
-        const alreadyRan = jobsRunningSince(today, "daily-scan") || lastDailyDate === today;
-        if (hhmm >= row.time && !alreadyRan) {
-          lastDailyDate = today;
+        const state = dailyScanState(today);
+        if (
+          hhmm >= row.time &&
+          state !== "running" &&
+          state !== "complete" &&
+          Date.now() - lastDailyStartAt >= DAILY_BATCH_COOLDOWN_MS
+        ) {
+          lastDailyStartAt = Date.now();
           startJob("daily-scan", { notify: true });
         }
       } else if (row.kind === "monitor_cycle") {
@@ -156,7 +198,7 @@ async function tick(): Promise<void> {
           for (const fixed of fixedTimes) {
             if (fixed === hhmm) {
               const key = `${today}:${fixed}`;
-              if (lastFixedMonitorRun === key) continue;
+              if (lastFixedMonitorRun === key || fixedMonitorAlreadyScheduled(today, fixed)) continue;
               const running = listJobs(20).some(
                 (job) =>
                   ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) &&
@@ -202,13 +244,23 @@ export async function getSchedulerStatus(): Promise<SchedulerStatus> {
   for (const row of rows) {
     nextRuns[row.kind] = await estimateNextRun(row, calendar);
   }
-  return { rows, calendar, now: new Date().toISOString(), next_runs: nextRuns };
+  return { rows, calendar, now: nowIso(), next_runs: nextRuns };
 }
 
 export function ensureScheduler(): void {
   const globalState = globalThis as typeof globalThis & { __webSchedulerStarted?: boolean };
   if (globalState.__webSchedulerStarted) return;
   globalState.__webSchedulerStarted = true;
+  const interruptedJobs = failInterruptedJobs();
+  if (interruptedJobs > 0) {
+    addOperationLog({
+      level: "warning",
+      module: "scheduler",
+      message: `服务重启后关闭 ${interruptedJobs} 个中断任务`,
+      detail: "自动日扫和盘中监控将在下一个可用调度时点补跑",
+    });
+  }
+  resumeInterpretationJobs();
   setInterval(() => {
     void tick();
   }, TICK_MS);

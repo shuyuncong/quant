@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { estimateNextRun } from "../scheduler";
+import { dailyReportState, estimateNextRun, fallbackCalendar } from "../scheduler";
 import type { ScheduleRow } from "../types";
 
 function row(overrides: Partial<ScheduleRow>): ScheduleRow {
@@ -24,7 +27,7 @@ describe("estimateNextRun", () => {
       { is_trading_day: true, is_trading_session: false, now: now.toISOString() },
       now
     );
-    expect(next).toBe(new Date(2026, 7, 14, 15, 30, 0).toISOString());
+    expect(next).toBe("2026-08-14 15:30:00");
   });
 
   it("daily scan skips weekend when trading_days_only", async () => {
@@ -34,7 +37,7 @@ describe("estimateNextRun", () => {
       { is_trading_day: true, is_trading_session: false, now: now.toISOString() },
       now
     );
-    expect(next).toBe(new Date(2026, 7, 17, 15, 30, 0).toISOString()); // Monday
+    expect(next).toBe("2026-08-17 15:30:00"); // Monday
   });
 
   it("monitor cycle during session uses interval", async () => {
@@ -44,7 +47,7 @@ describe("estimateNextRun", () => {
       { is_trading_day: true, is_trading_session: true, now: now.toISOString() },
       now
     );
-    expect(next).toBe(new Date(2026, 7, 14, 10, 5, 0).toISOString());
+    expect(next).toBe("2026-08-14 10:05:00");
   });
 
   it("monitor cycle with fixed times returns nearest fixed time", async () => {
@@ -54,7 +57,7 @@ describe("estimateNextRun", () => {
       { is_trading_day: true, is_trading_session: true, now: now.toISOString() },
       now
     );
-    expect(next).toBe(new Date(2026, 7, 14, 10, 30, 0).toISOString());
+    expect(next).toBe("2026-08-14 10:30:00");
   });
 
   it("monitor cycle fixed time rolls to next day when passed", async () => {
@@ -64,7 +67,7 @@ describe("estimateNextRun", () => {
       { is_trading_day: true, is_trading_session: true, now: now.toISOString() },
       now
     );
-    expect(next).toBe(new Date(2026, 7, 17, 10, 30, 0).toISOString()); // next Monday
+    expect(next).toBe("2026-08-17 10:30:00"); // next Monday
   });
 
   it("disabled row returns null", async () => {
@@ -75,5 +78,36 @@ describe("estimateNextRun", () => {
       now
     );
     expect(next).toBeNull();
+  });
+});
+
+describe("scheduler recovery", () => {
+  it("recomputes the session from a same-day cached trading-day result", () => {
+    const cached = {
+      is_trading_day: true,
+      is_trading_session: true,
+      now: "2026-08-17T10:00:00+08:00",
+    };
+
+    expect(fallbackCalendar(new Date(2026, 7, 17, 11, 31), cached)).toMatchObject({
+      is_trading_day: true,
+      is_trading_session: false,
+    });
+    expect(fallbackCalendar(new Date(2026, 7, 18, 10, 0), cached)).toMatchObject({
+      is_trading_day: false,
+      is_trading_session: false,
+    });
+  });
+
+  it("treats missing or damaged daily reports as incomplete", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-scheduler-report-"));
+    const damaged = path.join(tempDir, "damaged.json");
+    const complete = path.join(tempDir, "complete.json");
+    fs.writeFileSync(damaged, "not-json", "utf8");
+    fs.writeFileSync(complete, JSON.stringify({ completed_round: true }), "utf8");
+
+    expect(dailyReportState(path.join(tempDir, "missing.json"))).toBe("incomplete");
+    expect(dailyReportState(damaged)).toBe("incomplete");
+    expect(dailyReportState(complete)).toBe("complete");
   });
 });

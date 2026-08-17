@@ -287,6 +287,21 @@ def _cmd_outbox_status(config_path: str, payload: dict[str, Any]) -> int:
     return _emit(monitor.store.outbox_summary())
 
 
+def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
+    content = str(payload.get("content", "")).strip()
+    if not content:
+        return _emit_error("notify-summary 需要 content", 2)
+    monitor = _make_monitor(config_path, payload.get("overrides"))
+    return _emit(
+        monitor.notify_ai_analysis(
+            title=str(payload.get("title", "AI自动解读")),
+            content=content,
+            report_path=str(payload.get("report_path", "")),
+            confirmed_at=str(payload.get("confirmed_at", "")) or None,
+        )
+    )
+
+
 def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
     """返回日线零轴金叉指标股票池（候选股，含 TTL 与容量）。"""
     monitor = _make_monitor(config_path, payload.get("overrides"))
@@ -326,6 +341,7 @@ COMMANDS = {
     "dispatch-outbox": lambda p, o: _cmd_dispatch(p, o),
     "test-notify": lambda p, o: _cmd_test_notify(p, o),
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
+    "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),
 }

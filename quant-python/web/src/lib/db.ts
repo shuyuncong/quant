@@ -2,20 +2,19 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { webDataDir } from "./paths";
+import { nowIso } from "./time";
 import type {
   AnalysisNote,
+  HoldingRow,
   JobRow,
   ModelProfile,
+  OperationLog,
   PendingImport,
   PoolRow,
   ScheduleRow,
 } from "./types";
 
 export type { ScheduleRow };
-
-export function nowIso(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 19);
-}
 
 function migrate(db: Database.Database): void {
   db.exec(`
@@ -81,6 +80,25 @@ function migrate(db: Database.Database): void {
       enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS operation_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id INTEGER,
+      level TEXT NOT NULL DEFAULT 'info',
+      module TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL,
+      detail TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_operation_logs_created ON operation_logs(created_at);
+    CREATE TABLE IF NOT EXISTS holdings (
+      symbol TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      shares REAL NOT NULL DEFAULT 0,
+      cost_price REAL NOT NULL DEFAULT 0,
+      total_amount REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   try {
     db.exec("ALTER TABLE model_profiles ADD COLUMN proxy TEXT NOT NULL DEFAULT ''");
@@ -97,14 +115,42 @@ function migrate(db: Database.Database): void {
   } catch {
     /* column already exists on databases created with the new schema */
   }
+  // One-time migration: timestamps written before this change were UTC (nowIso used
+  // toISOString()); shift them to Asia/Shanghai so the whole history is Beijing time.
+  const timezoneMigrated = db
+    .prepare("SELECT value FROM settings WHERE key = 'meta.beijing_time_migrated'")
+    .get() as { value: string } | undefined;
+  if (!timezoneMigrated) {
+    db.exec(`
+      UPDATE jobs SET
+        created_at = datetime(created_at, '+8 hours'),
+        started_at = datetime(started_at, '+8 hours'),
+        finished_at = datetime(finished_at, '+8 hours');
+      UPDATE analysis_notes SET created_at = datetime(created_at, '+8 hours');
+      UPDATE model_profiles SET created_at = datetime(created_at, '+8 hours'), updated_at = datetime(updated_at, '+8 hours');
+      UPDATE stock_pool SET created_at = datetime(created_at, '+8 hours');
+      UPDATE pending_imports SET created_at = datetime(created_at, '+8 hours');
+      UPDATE schedule SET updated_at = datetime(updated_at, '+8 hours');
+      UPDATE settings SET updated_at = datetime(updated_at, '+8 hours');
+    `);
+    db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('meta.beijing_time_migrated', 'true', ?)").run(nowIso());
+  }
   const count = db.prepare("SELECT COUNT(*) AS count FROM schedule").get() as { count: number };
   if (count.count === 0) {
     const now = nowIso();
     const insert = db.prepare(
       "INSERT INTO schedule (kind, time, interval_seconds, trading_days_only, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
     );
-    insert.run("daily_scan", "15:20", 60, 1, 0, now);
-    insert.run("monitor_cycle", "09:30", 60, 1, 0, now);
+    insert.run("daily_scan", "15:20", 60, 1, 1, now);
+    insert.run("monitor_cycle", "09:30", 60, 1, 1, now);
+  }
+  const schedulerAutostartMigrated = db
+    .prepare("SELECT value FROM settings WHERE key = 'meta.scheduler_autostart_v2'")
+    .get() as { value: string } | undefined;
+  if (!schedulerAutostartMigrated) {
+    db.prepare("UPDATE schedule SET enabled = 1, updated_at = ?").run(nowIso());
+    db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('meta.scheduler_autostart_v2', 'true', ?)")
+      .run(nowIso());
   }
 }
 
@@ -383,6 +429,31 @@ export function listJobs(limit = 100, db = getDb()): JobRow[] {
   return rows.map(rowToJob);
 }
 
+export function listJobsByKindSince(kind: string, datePrefix: string, db = getDb()): JobRow[] {
+  const rows = db
+    .prepare("SELECT * FROM jobs WHERE kind = ? AND created_at LIKE ? ORDER BY id DESC")
+    .all(kind, `${datePrefix}%`) as Array<Record<string, unknown>>;
+  return rows.map(rowToJob);
+}
+
+export function listRecoverableJobs(kind: string, db = getDb()): JobRow[] {
+  const rows = db
+    .prepare("SELECT * FROM jobs WHERE kind = ? AND status IN ('pending', 'running') ORDER BY id")
+    .all(kind) as Array<Record<string, unknown>>;
+  return rows.map(rowToJob);
+}
+
+export function failInterruptedJobs(db = getDb()): number {
+  const result = db
+    .prepare(
+      `UPDATE jobs
+       SET status = 'failed', error = ?, finished_at = ?
+       WHERE status IN ('pending', 'running') AND kind <> 'interpret-report'`
+    )
+    .run("Web 服务重启，原任务进程已中断；定时任务将按计划补跑", nowIso());
+  return result.changes;
+}
+
 export function jobsRunningSince(datePrefix: string, kind: string, db = getDb()): boolean {
   const row = db
     .prepare("SELECT COUNT(*) AS count FROM jobs WHERE kind = ? AND status = 'success' AND created_at LIKE ?")
@@ -411,6 +482,17 @@ export function addNote(
     .prepare("INSERT INTO analysis_notes (job_id, symbol, content, model, result_path, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .run(input.job_id, input.symbol ?? "", input.content, input.model ?? "", input.result_path ?? null, nowIso());
   return Number(result.lastInsertRowid);
+}
+
+export function findNoteByJobAndResult(
+  jobId: number,
+  resultPath: string,
+  db = getDb()
+): AnalysisNote | null {
+  const row = db
+    .prepare("SELECT * FROM analysis_notes WHERE job_id = ? AND result_path = ? ORDER BY id DESC LIMIT 1")
+    .get(jobId, resultPath) as Record<string, unknown> | undefined;
+  return row ? rowToNote(row) : null;
 }
 
 export function listNotesByJob(jobId: number, db = getDb()): AnalysisNote[] {
@@ -505,4 +587,109 @@ export function upsertScheduleRow(
     now,
     kind
   );
+}
+
+// ---------- operation logs ----------
+function rowToOperationLog(row: Record<string, unknown>): OperationLog {
+  return {
+    id: Number(row.id),
+    job_id: row.job_id == null ? null : Number(row.job_id),
+    level: String(row.level ?? "info") as OperationLog["level"],
+    module: String(row.module ?? ""),
+    message: String(row.message ?? ""),
+    detail: row.detail == null ? null : String(row.detail),
+    created_at: String(row.created_at ?? ""),
+  };
+}
+
+export function addOperationLog(
+  input: {
+    job_id?: number | null;
+    level: "info" | "warning" | "error";
+    module: string;
+    message: string;
+    detail?: string | null;
+  },
+  db = getDb()
+): number {
+  const result = db
+    .prepare(
+      "INSERT INTO operation_logs (job_id, level, module, message, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(input.job_id ?? null, input.level, input.module, input.message, input.detail ?? null, nowIso());
+  return Number(result.lastInsertRowid);
+}
+
+export function listOperationLogs(
+  limit = 300,
+  level?: "info" | "warning" | "error",
+  db = getDb()
+): OperationLog[] {
+  const rows = level
+    ? db
+        .prepare("SELECT * FROM operation_logs WHERE level = ? ORDER BY id DESC LIMIT ?")
+        .all(level, limit)
+    : db.prepare("SELECT * FROM operation_logs ORDER BY id DESC LIMIT ?").all(limit);
+  return (rows as Array<Record<string, unknown>>).map(rowToOperationLog);
+}
+
+export function clearOperationLogs(db = getDb()): number {
+  const result = db.prepare("DELETE FROM operation_logs").run();
+  return Number(result.changes);
+}
+
+// ---------- holdings ----------
+function rowToHolding(row: Record<string, unknown>): HoldingRow {
+  return {
+    symbol: String(row.symbol),
+    name: String(row.name ?? ""),
+    shares: Number(row.shares ?? 0),
+    cost_price: Number(row.cost_price ?? 0),
+    total_amount: Number(row.total_amount ?? 0),
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  };
+}
+
+export function listHoldings(db = getDb()): HoldingRow[] {
+  const rows = db.prepare("SELECT * FROM holdings ORDER BY symbol").all() as Array<Record<string, unknown>>;
+  return rows.map(rowToHolding);
+}
+
+/** Create or update a holding. When total_amount is empty and shares/cost are valid, it is computed automatically. */
+export function upsertHolding(
+  input: { symbol: string; name?: string; shares?: number; cost_price?: number; total_amount?: number },
+  db = getDb()
+): HoldingRow {
+  const symbol = input.symbol.trim().toUpperCase();
+  const shares = Number(input.shares ?? 0);
+  const costPrice = Number(input.cost_price ?? 0);
+  let totalAmount = Number(input.total_amount ?? 0);
+  if (totalAmount <= 0 && shares > 0 && costPrice > 0) {
+    totalAmount = Math.round(shares * costPrice * 100) / 100;
+  }
+  const now = nowIso();
+  db.prepare(
+    `INSERT INTO holdings (symbol, name, shares, cost_price, total_amount, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(symbol) DO UPDATE SET
+       name = excluded.name,
+       shares = excluded.shares,
+       cost_price = excluded.cost_price,
+       total_amount = excluded.total_amount,
+       updated_at = excluded.updated_at`
+  ).run(symbol, input.name ?? "", shares, costPrice, totalAmount, now, now);
+  return {
+    symbol,
+    name: input.name ?? "",
+    shares,
+    cost_price: costPrice,
+    total_amount: totalAmount,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function removeHolding(symbol: string, db = getDb()): void {
+  db.prepare("DELETE FROM holdings WHERE symbol = ?").run(symbol.trim().toUpperCase());
 }

@@ -73,6 +73,9 @@ signal_strategy:
     slow: 26
     signal: 9
     zero_axis_tolerance: 0.005       # DIF/DEA 距0轴不超过收盘价的0.5%
+    moderate_volume_min: 1.0         # 温和放量下限：当日量/20日均量
+    moderate_volume_max: 2.0         # 温和放量上限，避免把异常巨量当作温和放量
+  llm_context_bars: 48               # 每周期保留给报告和AI解读的近期K线数
   chan:
     min_bi_bars: 4
     divergence_ratio: 0.90          # 当前同向笔MACD面积小于前一笔的90%
@@ -143,6 +146,11 @@ backtest:
   lot_size: 100
   t_plus_one: true
   price_limit_model: "conservative"
+  chan_zero_axis:
+    allowed_zones: ["above", "near"]
+    min_confirmations: 2
+    cross_window_bars: 5
+    max_holding_bars: 40
 
 manual_overrides:
   regime_override: "auto"
@@ -178,9 +186,10 @@ monitor:
   candidate_limit: 100
   candidate_ttl_business_days: 5
   max_scan_symbols_per_run: 500
+  max_symbols_per_cycle: 20          # 盘中分批轮询，避免100只股票×多周期超过监控间隔
 
 scan:
-  universe_mode: "watchlist"        # watchlist / all_a
+  universe_mode: "all_a"            # watchlist / all_a
 
 notification:
   timeout_seconds: 10
@@ -207,6 +216,7 @@ notification:
   push_market_regime: true
   push_candidate_pool: true
   push_trade_signal: true
+  push_ai_analysis: true
 
 runtime:
   database_path: "./data/signal_monitor.db"

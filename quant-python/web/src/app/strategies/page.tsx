@@ -22,11 +22,15 @@ interface StrategiesForm {
   macd_slow: string;
   macd_signal: string;
   zero_axis_tolerance: string;
+  moderate_volume_min: string;
+  moderate_volume_max: string;
+  llm_context_bars: string;
   buy_threshold: string;
   sell_threshold: string;
   timeframes: string;
   watchlist: string;
   bar_limit: string;
+  max_symbols_per_cycle: string;
   universe_mode: string;
 }
 
@@ -64,11 +68,15 @@ export default function StrategiesPage() {
     macd_slow: "",
     macd_signal: "",
     zero_axis_tolerance: "",
+    moderate_volume_min: "",
+    moderate_volume_max: "",
+    llm_context_bars: "",
     buy_threshold: "",
     sell_threshold: "",
     timeframes: "",
     watchlist: "",
     bar_limit: "",
+    max_symbols_per_cycle: "",
     universe_mode: "watchlist",
   });
   const [saving, setSaving] = useState(false);
@@ -90,11 +98,15 @@ export default function StrategiesPage() {
         macd_slow: num(signal.macd?.slow, "26"),
         macd_signal: num(signal.macd?.signal, "9"),
         zero_axis_tolerance: num(signal.macd?.zero_axis_tolerance, "0.005"),
+        moderate_volume_min: num(signal.macd?.moderate_volume_min, "1"),
+        moderate_volume_max: num(signal.macd?.moderate_volume_max, "2"),
+        llm_context_bars: num(signal.llm_context_bars, "48"),
         buy_threshold: num(signal.scoring?.buy_threshold, "60"),
         sell_threshold: num(signal.scoring?.sell_threshold, "60"),
         timeframes: list(monitor.timeframes),
         watchlist: list(monitor.watchlist),
         bar_limit: num(monitor.bar_limit, "300"),
+        max_symbols_per_cycle: num(monitor.max_symbols_per_cycle, "20"),
         universe_mode: String(scan.universe_mode ?? "watchlist"),
       });
     } catch (error) {
@@ -121,11 +133,15 @@ export default function StrategiesPage() {
       "signal_strategy.macd.slow": Number(form.macd_slow),
       "signal_strategy.macd.signal": Number(form.macd_signal),
       "signal_strategy.macd.zero_axis_tolerance": Number(form.zero_axis_tolerance),
+      "signal_strategy.macd.moderate_volume_min": Number(form.moderate_volume_min),
+      "signal_strategy.macd.moderate_volume_max": Number(form.moderate_volume_max),
+      "signal_strategy.llm_context_bars": Number(form.llm_context_bars),
       "signal_strategy.scoring.buy_threshold": Number(form.buy_threshold),
       "signal_strategy.scoring.sell_threshold": Number(form.sell_threshold),
       "monitor.timeframes": form.timeframes.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.watchlist": form.watchlist.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.bar_limit": Number(form.bar_limit),
+      "monitor.max_symbols_per_cycle": Number(form.max_symbols_per_cycle),
       "scan.universe_mode": form.universe_mode,
     };
     try {
@@ -165,9 +181,13 @@ export default function StrategiesPage() {
             <NumberField label="MACD：慢线" value={form.macd_slow} onChange={set("macd_slow")} />
             <NumberField label="MACD：信号线" value={form.macd_signal} onChange={set("macd_signal")} />
             <NumberField label="MACD：0轴容差" value={form.zero_axis_tolerance} onChange={set("zero_axis_tolerance")} />
+            <NumberField label="温和放量下限" value={form.moderate_volume_min} onChange={set("moderate_volume_min")} />
+            <NumberField label="温和放量上限" value={form.moderate_volume_max} onChange={set("moderate_volume_max")} />
             <NumberField label="买入评分阈值" value={form.buy_threshold} onChange={set("buy_threshold")} />
             <NumberField label="卖出评分阈值" value={form.sell_threshold} onChange={set("sell_threshold")} />
             <NumberField label="K线数量（bar_limit）" value={form.bar_limit} onChange={set("bar_limit")} />
+            <NumberField label="AI每周期K线数" value={form.llm_context_bars} onChange={set("llm_context_bars")} />
+            <NumberField label="盘中每批股票数" value={form.max_symbols_per_cycle} onChange={set("max_symbols_per_cycle")} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>监控周期（逗号分隔）</Label>

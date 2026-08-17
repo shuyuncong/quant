@@ -3,10 +3,12 @@ import {
   ArrowRight,
   BellRing,
   BrainCircuit,
+  CheckCircle2,
   Database,
   FileText,
   Filter,
   MonitorPlay,
+  ShieldAlert,
   Settings2,
   Workflow,
 } from "lucide-react";
@@ -32,35 +34,35 @@ const STEPS = [
     title: "第 2 步：日线零轴金叉筛选",
     entry: "「股票池」页按钮 / 定时任务",
     description:
-      "对全市场（all_a）或自选池（watchlist）做日线 MACD 零轴金叉筛选。全市场是分批执行的，首次需要多轮跑完整个市场；也可以等每日定时扫描自动执行。",
+      "对全市场（all_a）或自选池（watchlist）做日线 MACD 金叉筛选。金叉统一定义为 DIF 上穿 DEA，再按 0轴上方、0轴附近、0轴下方分档；全市场首次扫描会分批连续执行，直到完成一轮。",
   },
   {
     icon: MonitorPlay,
     title: "第 3 步：指标股票池（候选股）",
     entry: "「股票池」页指标股票池卡片",
     description:
-      "筛选命中的股票进入指标股票池，展示评分、零轴距离、确认时间。候选保留 5 个交易日，最多 100 只，过期自动清除。",
+      "筛选命中的股票进入指标股票池，严格按 0轴上方 > 0轴附近 > 0轴下方排序，同档再比较策略分；同时展示温和放量、突破 MA5/MA10、红柱放大等确认条件。候选保留 5 个交易日，最多 100 只。",
   },
   {
     icon: BrainCircuit,
     title: "第 4 步：缠论多周期买卖点分析",
     entry: "「结果」页手动触发 / 盘中监控循环",
     description:
-      "交易时段内监控循环会定时对「自选池 + 指标股票池」做 1m/5m/15m/30m/60m/120m/1d 多周期缠论分析，识别一买、二买、三买等买卖点并打分。执行方式支持按间隔（如每 60 秒）或固定时点（10:30 / 13:30 / 14:30，可在定时任务页勾选）。",
+      "交易时段内监控循环会对「自选池 + 指标股票池」分批轮询，做 1m/5m/15m/30m/60m/120m/1d 多周期缠论分析。每个新确认的一买、二买、三买及对应卖点都会独立生成结构事件；评分过阈值时在同一事件上标记为强共振。各周期优先取对应周期行情，直接取数失败才用足量 1 分钟数据降级重采样；历史不足会保留实际数量和告警。",
   },
   {
     icon: BellRing,
     title: "第 5 步：信号通知推送",
     entry: "「推送配置」页",
     description:
-      "新信号先进入通知队列（outbox），再投递到 Bark / 企业微信 / 邮件 / Webhook；投递失败会自动重试，不丢信号。",
+      "缠论结构信号、MACD 金叉候选和 AI 解读可分别开关。新事件先进入 outbox，再投递到 Bark / 企业微信 / 邮件 / Webhook；独立派送心跳会持续重试，第 5 次失败后标记为 failed 并保留错误。",
   },
   {
     icon: FileText,
     title: "第 6 步：结果查看与 AI 解读",
     entry: "「结果」页",
     description:
-      "每次分析/扫描生成 JSON 报告存在 output 目录，结果页按时间倒序展示；对单份报告可以点「AI 解读」，用配置的模型生成文字解读并保存为笔记。",
+      "每次分析/扫描生成 JSON 报告并保存。手动任务可直接 AI 解读；自动盘中/日线任务只在产生新事件时调用模型。解读先作为持久子任务保存，再写入笔记并按配置推送摘要；报告先结构化压缩，各股票和周期的上下文不会被持仓补充文本破坏。",
   },
 ];
 
@@ -70,6 +72,8 @@ const CONFIG_PAGES = [
   { page: "模型配置", path: "/models", purpose: "LLM 接口（地址/模型/Key/代理），用于 AI 解读与图片识别" },
   { page: "定时任务", path: "/schedule", purpose: "每日扫描时间、盘中监控间隔/固定时点、是否仅交易日" },
   { page: "股票池", path: "/pool", purpose: "自选股导入、指标股票池（候选）查看与手动筛选" },
+  { page: "我的持仓", path: "/holdings", purpose: "手动维护持仓（代码/名称/份额/持仓价/总金额），分析时携带" },
+  { page: "操作日志", path: "/logs", purpose: "任务执行、AI 解读等操作记录，报错原因可直接查看" },
 ];
 
 const DATA_STORES = [
@@ -77,6 +81,33 @@ const DATA_STORES = [
   { location: "signal_system/data/signal_monitor.db", content: "指标股票池候选、信号事件、通知队列（outbox）", persist: "必须持久化" },
   { location: "signal_system/output/*.json", content: "分析/扫描结果报告", persist: "必须持久化" },
   { location: "signal_system/cache、logs", content: "行情缓存、运行日志", persist: "可清空，自动重建" },
+];
+
+const ZERO_AXIS_LEVELS = [
+  {
+    title: "0轴上方金叉",
+    level: "优先级最高",
+    description: "两线不在附近容差带内，且 DIF、DEA 都大于 0。通常属于多头趋势回调后的再次启动。",
+    className: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  },
+  {
+    title: "0轴附近金叉",
+    level: "中性转多",
+    description: "两线都靠近 0 轴，或交叉当根跨越/触及 0 轴。属于反转初期，需要后续站稳 0 轴确认。",
+    className: "text-amber-700 bg-amber-50 border-amber-200",
+  },
+  {
+    title: "0轴下方金叉",
+    level: "风险最高",
+    description: "两线不在附近容差带内，且 DIF、DEA 都小于 0。通常只是空头趋势中的弱势反弹。",
+    className: "text-red-700 bg-red-50 border-red-200",
+  },
+];
+
+const GOLDEN_CROSS_CONFIRMATIONS = [
+  "成交量温和放大：当日量比位于策略页配置的上下限之间。",
+  "突破短期压力：前一根收盘价未站上 MA5/MA10，当前收盘价同时站上两条均线。",
+  "红柱同步放大：最近三根 MACD 柱全部为正且连续变长。",
 ];
 
 export default function WorkflowPage() {
@@ -114,6 +145,46 @@ export default function WorkflowPage() {
           <p className="mt-3 text-xs text-muted-foreground">
             自选池和全市场都可以作为筛选输入；筛选出的指标股票池会与自选池一起进入缠论分析；推送支持 Bark/企业微信/邮件/Webhook。
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>MACD 零轴金叉判定</CardTitle>
+          <CardDescription>
+            基础条件是 DIF 从下向上穿越 DEA；位置使用交叉确认当根判断，附近容差按 DIF/DEA 相对收盘价的距离计算。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            {ZERO_AXIS_LEVELS.map((item) => (
+              <div key={item.title} className={`rounded-md border p-3 ${item.className}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{item.title}</span>
+                  <span className="text-xs">{item.level}</span>
+                </div>
+                <p className="mt-2 text-xs leading-5">{item.description}</p>
+              </div>
+            ))}
+          </div>
+          <div className="border-t pt-4">
+            <div className="mb-2 text-sm font-medium">配套确认条件</div>
+            <div className="grid gap-2 md:grid-cols-3">
+              {GOLDEN_CROSS_CONFIRMATIONS.map((item) => (
+                <div key={item} className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <span>排序规则固定为 0轴上方 &gt; 0轴附近 &gt; 0轴下方；只有最新一根确实发生金叉时才评定质量，未发生金叉时质量为 none。确认条件用于同档排序和提高筛选质量，不代表保证盈利或胜率。</span>
+          </div>
+          <div className="border-t pt-4 text-xs leading-5 text-muted-foreground">
+            真实回测会同时输出缠论+零轴策略与原有策略的已闭合交易胜率、收益、回撤和样本外参数结果；单一标的或短区间没有统计意义，任何胜率差异都不能直接外推为未来收益。
+          </div>
         </CardContent>
       </Card>
 

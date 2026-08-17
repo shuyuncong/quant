@@ -23,7 +23,7 @@ export function runBridge(
     let child;
     try {
       const pythonBin = process.env.PYTHON_BIN?.trim() || "python";
-      child = spawn(pythonBin, ["-B", bridgeScript, command, "--payload", "-"], {
+      child = spawn(/* turbopackIgnore: true */ pythonBin, ["-B", bridgeScript, command, "--payload", "-"], {
         cwd: signalSystemDir,
         windowsHide: true,
         env: { ...process.env, PYTHONIOENCODING: "utf-8", ...options.env },

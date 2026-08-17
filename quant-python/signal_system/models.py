@@ -62,6 +62,7 @@ class TimeframeReport:
     latest_price: float | None = None
     indicators: dict[str, Any] = field(default_factory=dict)
     chan: dict[str, Any] = field(default_factory=dict)
+    recent_bars: list[dict[str, Any]] = field(default_factory=list)
     buy_score: int = 0
     sell_score: int = 0
     events: list[SignalEvent] = field(default_factory=list)

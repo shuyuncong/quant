@@ -60,3 +60,23 @@ export interface AnalysisNote {
   result_path: string | null;
   created_at: string;
 }
+
+export interface OperationLog {
+  id: number;
+  job_id: number | null;
+  level: "info" | "warning" | "error";
+  module: string;
+  message: string;
+  detail: string | null;
+  created_at: string;
+}
+
+export interface HoldingRow {
+  symbol: string;
+  name: string;
+  shares: number;
+  cost_price: number;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+}

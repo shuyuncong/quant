@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { startJob, type JobKind } from "@/lib/jobs";
+import { listHoldings } from "@/lib/db";
 
 const VALID_KINDS = new Set<JobKind>([
   "analyze",
@@ -40,6 +41,10 @@ export async function POST(request: Request) {
     if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
   }
   if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
+  if (kind === "analyze") {
+    // 个股分析携带用户持仓，供报告与 AI 解读参考
+    payload.holdings = listHoldings();
+  }
   const jobId = startJob(kind, payload);
   return NextResponse.json({ ok: true, jobId }, { status: 202 });
 }

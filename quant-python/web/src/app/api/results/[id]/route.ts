@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig } from "@/lib/config";
 import { getDb, listNotesByJob } from "@/lib/db";
+import { resolvePathWithin } from "@/lib/paths";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,8 +10,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const effective = await getEffectiveConfig();
     const outputDir = effective.runtime.output_dir;
     if (!outputDir) return NextResponse.json({ error: "输出目录未配置" }, { status: 500 });
-    const full = path.join(outputDir, id);
-    if (!full.startsWith(path.resolve(outputDir)) || !fs.existsSync(full)) {
+    const full = resolvePathWithin(outputDir, id);
+    if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
       return NextResponse.json({ error: "结果不存在" }, { status: 404 });
     }
     const report = JSON.parse(fs.readFileSync(full, "utf8")) as Record<string, unknown>;

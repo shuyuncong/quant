@@ -781,12 +781,34 @@ class MarketDataClient:
     ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
         result: dict[str, pd.DataFrame] = {}
         errors: dict[str, str] = {}
-        requested_intraday = [item for item in timeframes if item != "1d"]
         minute_frame: pd.DataFrame | None = None
-        if requested_intraday:
+
+        def prepare(
+            frame: pd.DataFrame,
+            source_mode: str,
+            direct_error: str | None = None,
+        ) -> pd.DataFrame:
+            prepared = frame.tail(limit).reset_index(drop=True)
+            prepared.attrs.update(frame.attrs)
+            history_complete = len(prepared) >= limit
+            warnings: list[str] = []
+            if direct_error:
+                warnings.append(f"直接获取失败: {direct_error}")
+            if not history_complete:
+                warnings.append(f"行情历史不足: 仅获取 {len(prepared)}/{limit} 根")
+            prepared.attrs.update(
+                requested_bars=limit,
+                history_complete=history_complete,
+                source_mode=source_mode,
+                direct_error=direct_error,
+                source_warning="; ".join(warnings) or None,
+            )
+            return prepared
+
+        if "1m" in timeframes:
             try:
-                minute_frame = self.get_bars(symbol, "1m", limit=max(limit, 600))
-                result["1m"] = minute_frame.tail(limit).reset_index(drop=True)
+                minute_frame = self.get_bars(symbol, "1m", limit=limit)
+                result["1m"] = prepare(minute_frame, "direct")
             except Exception as exc:
                 errors["1m"] = str(exc)
 
@@ -795,17 +817,43 @@ class MarketDataClient:
                 continue
             try:
                 if timeframe == "1d":
-                    result[timeframe] = self.get_bars(symbol, timeframe, limit=limit)
+                    direct = self.get_bars(symbol, timeframe, limit=limit)
+                    result[timeframe] = prepare(direct, "direct")
                     continue
-                minutes = TIMEFRAME_MINUTES[timeframe]
-                if minute_frame is not None and not minute_frame.empty:
+                direct = self.get_bars(symbol, timeframe, limit=limit)
+                if direct.empty:
+                    raise RuntimeError(f"{timeframe} 行情为空")
+                result[timeframe] = prepare(direct, "direct")
+            except Exception as direct_exc:
+                if timeframe == "1d":
+                    errors[timeframe] = str(direct_exc)
+                    continue
+                try:
+                    minutes = TIMEFRAME_MINUTES[timeframe]
+                    # A 1m frame may already have been loaded for the requested
+                    # 1m report.  Reuse it only when it is long enough to make
+                    # the fallback period analyzable; otherwise fetch a larger
+                    # window before resampling.  Forty derived bars is the
+                    # minimum needed by MACD (26 + 9 + a small confirmation
+                    # buffer), while the configured limit remains the target.
+                    required_derived_bars = min(limit, 40)
+                    required_minutes = max(limit, required_derived_bars * minutes)
+                    if minute_frame is None or len(minute_frame) < required_minutes:
+                        minute_frame = self.get_bars(
+                            symbol,
+                            "1m",
+                            limit=required_minutes,
+                        )
                     derived = resample_session_bars(minute_frame, minutes, source_minutes=1)
-                    if len(derived) >= min(40, limit):
-                        result[timeframe] = derived.tail(limit).reset_index(drop=True)
-                        continue
-                result[timeframe] = self.get_bars(symbol, timeframe, limit=limit)
-            except Exception as exc:
-                errors[timeframe] = str(exc)
+                    if len(derived) < min(40, limit):
+                        raise RuntimeError(f"重采样后仅 {len(derived)} 根")
+                    result[timeframe] = prepare(
+                        derived,
+                        "resampled_1m_fallback",
+                        direct_error=str(direct_exc),
+                    )
+                except Exception as fallback_exc:
+                    errors[timeframe] = f"直接获取失败: {direct_exc}; 1m重采样失败: {fallback_exc}"
         return result, errors
 
     def get_trade_dates(self) -> set[date]:

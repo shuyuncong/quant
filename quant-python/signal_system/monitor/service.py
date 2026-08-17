@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 from data.market_data import MarketDataClient, normalize_symbol
+from models import SignalEvent
 from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
@@ -17,6 +18,13 @@ from utils.time_utils import now_shanghai
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_stale_data_error(message: str) -> bool:
+    """Return True when the error means the symbol's daily bars are not
+    current for the expected trade date (e.g. suspended/delisted), so
+    retrying within the same trading day will not help."""
+    return "日线已过期" in message or "日线为空" in message
 
 
 class SignalMonitor:
@@ -37,8 +45,13 @@ class SignalMonitor:
         self.candidate_limit = int(monitor.get("candidate_limit", 100))
         self.candidate_ttl = int(monitor.get("candidate_ttl_business_days", 5))
         self.max_scan_symbols = int(monitor.get("max_scan_symbols_per_run", 500))
+        self.max_monitor_symbols = max(1, int(monitor.get("max_symbols_per_cycle", 20)))
         self.daily_scan_time = str(monitor.get("daily_scan_time", "15:20"))
         self.min_daily_bars = int(config.get("market_data", {}).get("min_listing_trade_days", 120))
+        notification = config.get("notification", {})
+        self.push_trade_signal = bool(notification.get("push_trade_signal", True))
+        self.push_candidate_pool = bool(notification.get("push_candidate_pool", True))
+        self.push_ai_analysis = bool(notification.get("push_ai_analysis", True))
         self._name_map: dict[str, str] | None = None
 
     def _save_report(self, prefix: str, report: dict[str, Any]) -> Path:
@@ -118,6 +131,7 @@ class SignalMonitor:
         symbols: list[str],
         notify: bool = True,
         names: dict[str, str] | None = None,
+        report_meta: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         names = names or {}
         names = self._resolve_names(symbols, names)
@@ -135,7 +149,7 @@ class SignalMonitor:
                 )
                 analysis = self.analyzer.analyze(symbol, names.get(symbol, ""), bars, errors)
                 event_objects = analysis.pop("event_objects")
-                if notify:
+                if notify and self.push_trade_signal:
                     for event in event_objects:
                         if not self._event_is_current(event):
                             stale_event_count += 1
@@ -157,8 +171,96 @@ class SignalMonitor:
             "delivery": delivery,
             "results": results,
         }
+        report.update(report_meta or {})
         report["output_file"] = str(self._save_report("analysis", report))
         return report
+
+    @staticmethod
+    def _candidate_risk_text(zone: str) -> str:
+        return {
+            "above": "多头趋势中的回调再启动，三档中优先级最高，仍需控制追高风险。",
+            "near": "趋势反转初期，可能反复震荡磨底，需要后续站稳0轴确认。",
+            "below": "空头趋势中的弱势反弹，风险最高，不适合重仓追入。",
+        }.get(zone, "位置未识别，需结合趋势与成交量复核。")
+
+    def _candidate_event(self, candidate: dict[str, Any]) -> SignalEvent:
+        zone = str(candidate.get("golden_cross_zone", "near"))
+        confirmed_at = str(candidate.get("confirmed_at") or now_shanghai().isoformat(timespec="seconds"))
+        return SignalEvent(
+            symbol=str(candidate["symbol"]),
+            name=str(candidate.get("name", "")),
+            timeframe="1d",
+            signal_type=f"macd_golden_cross_{zone}",
+            side="watch",
+            price=float(candidate.get("price") or 0.0),
+            structure_time=confirmed_at,
+            confirmed_at=confirmed_at,
+            score=int(candidate.get("score", 0)),
+            evidence={
+                "notification_kind": "candidate",
+                "golden_cross_zone": zone,
+                "golden_cross_zone_label": candidate.get("golden_cross_zone_label"),
+                "golden_cross_quality": candidate.get("golden_cross_quality"),
+                "golden_cross_risk": candidate.get("golden_cross_risk"),
+                "risk_text": self._candidate_risk_text(zone),
+                "confirmation_items": candidate.get("confirmation_items", []),
+                "confirmation_count": candidate.get("confirmation_count", 0),
+                "dif": candidate.get("dif"),
+                "dea": candidate.get("dea"),
+                "hist": candidate.get("hist"),
+                "volume_ratio": candidate.get("volume_ratio"),
+                "zero_distance": candidate.get("zero_distance"),
+                "chan_signals": candidate.get("chan_signals", []),
+            },
+        )
+
+    @staticmethod
+    def _candidate_is_covered_by_trade_event(
+        candidate_event: SignalEvent,
+        trade_events: list[SignalEvent],
+    ) -> bool:
+        for trade_event in trade_events:
+            components = trade_event.evidence.get("components", [])
+            if (
+                trade_event.symbol == candidate_event.symbol
+                and trade_event.timeframe == candidate_event.timeframe
+                and candidate_event.signal_type in components
+            ):
+                return True
+        return False
+
+    def notify_ai_analysis(
+        self,
+        title: str,
+        content: str,
+        report_path: str = "",
+        confirmed_at: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.push_ai_analysis:
+            return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "disabled"}
+        channels = self.notifier.active_channels()
+        if not channels:
+            return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "no_channels"}
+        timestamp = confirmed_at or now_shanghai().isoformat(timespec="seconds")
+        event = SignalEvent(
+            symbol="SYSTEM",
+            name=title.strip() or "AI自动解读",
+            timeframe="report",
+            signal_type="ai_analysis",
+            side="info",
+            price=0.0,
+            structure_time=timestamp,
+            confirmed_at=timestamp,
+            score=0,
+            evidence={
+                "notification_kind": "ai_analysis",
+                "content": content.strip()[:12000],
+                "report_path": report_path,
+            },
+        )
+        inserted = self.store.enqueue_event(event, channels)
+        delivery = self.dispatch_outbox()
+        return {"enqueued": int(inserted), "delivery": delivery, "event_id": event.event_id}
 
     def scan_zero_axis(self, notify: bool = True) -> dict[str, Any]:
         scan_config = self.config.get("scan", {})
@@ -257,16 +359,30 @@ class SignalMonitor:
                 event_objects = analysis.pop("event_objects")
                 daily_report = analysis["timeframes"].get("1d", {})
                 indicators = daily_report.get("indicators", {})
-                if indicators.get("zero_axis_golden_cross"):
+                if indicators.get("golden_cross"):
+                    zone = str(indicators.get("golden_cross_zone", "near"))
+                    zone_priority = {"above": 3, "near": 2, "below": 1}.get(zone, 0)
+                    strategy_score = int(daily_report.get("buy_score", 0))
                     candidates.append(
                         {
                             "symbol": symbol,
                             "name": name,
-                            "score": int(daily_report.get("buy_score", 0)),
+                            "score": zone_priority * 100 + strategy_score,
+                            "strategy_score": strategy_score,
+                            "zone_priority": zone_priority,
                             "confirmed_at": daily_report.get("latest_time"),
+                            "price": daily_report.get("latest_price"),
                             "dif": indicators.get("dif"),
                             "dea": indicators.get("dea"),
+                            "hist": indicators.get("hist"),
                             "zero_distance": indicators.get("zero_distance"),
+                            "volume_ratio": indicators.get("volume_ratio"),
+                            "golden_cross_zone": zone,
+                            "golden_cross_zone_label": indicators.get("golden_cross_zone_label"),
+                            "golden_cross_quality": indicators.get("golden_cross_quality"),
+                            "golden_cross_risk": indicators.get("golden_cross_risk"),
+                            "confirmation_items": indicators.get("confirmation_items", []),
+                            "confirmation_count": indicators.get("confirmation_count", 0),
                             "chan_signals": daily_report.get("chan", {}).get("fresh_signals", []),
                         }
                     )
@@ -275,11 +391,14 @@ class SignalMonitor:
                 errors.append({"symbol": symbol, "error": str(exc)})
                 logger.warning("扫描 %s 失败: %s", symbol, exc)
 
+        stale_symbols = {
+            item["symbol"] for item in errors if _is_stale_data_error(item["error"])
+        }
         if universe_mode == "watchlist":
             completed_round = len(successful_symbols) == total
             coverage = 1.0 if total == 0 else len(successful_symbols) / total
         elif not bootstrap_complete:
-            for symbol in insufficient_symbols:
+            for symbol in insufficient_symbols | stale_symbols:
                 bootstrap_deferred[symbol] = expected_trade_date.isoformat()
             for symbol in successful_symbols:
                 bootstrap_deferred.pop(symbol, None)
@@ -291,7 +410,7 @@ class SignalMonitor:
             self.store.set_state(
                 "daily_bootstrap_success", json.dumps(sorted(bootstrap_success), ensure_ascii=False)
             )
-            ineligible = deferred_today | insufficient_symbols
+            ineligible = deferred_today | insufficient_symbols | stale_symbols
             eligible_total = max(0, total - len(ineligible))
             coverage = 1.0 if eligible_total == 0 else len(bootstrap_success) / eligible_total
             completed_round = len(bootstrap_success) >= eligible_total
@@ -299,7 +418,8 @@ class SignalMonitor:
                 self.store.set_state("daily_bootstrap_complete", "true")
                 self.store.set_state("daily_bootstrap_success", "[]")
         else:
-            eligible_total = max(0, total - len(insufficient_symbols))
+            ineligible = insufficient_symbols | stale_symbols
+            eligible_total = max(0, total - len(ineligible))
             coverage = 1.0 if eligible_total == 0 else len(successful_symbols) / eligible_total
             completed_round = len(successful_symbols) >= eligible_total
         self.store.upsert_candidates(
@@ -311,7 +431,19 @@ class SignalMonitor:
         channels = self.notifier.active_channels()
         new_event_count = 0
         if notify:
-            for event in events_to_enqueue:
+            queued_events = []
+            if self.push_trade_signal:
+                queued_events.extend(events_to_enqueue)
+            if self.push_candidate_pool:
+                for candidate in candidates:
+                    candidate_event = self._candidate_event(candidate)
+                    if self.push_trade_signal and self._candidate_is_covered_by_trade_event(
+                        candidate_event,
+                        events_to_enqueue,
+                    ):
+                        continue
+                    queued_events.append(candidate_event)
+            for event in queued_events:
                 if not self._event_is_current(event):
                     continue
                 if self.store.enqueue_event(event, channels):
@@ -326,9 +458,13 @@ class SignalMonitor:
             "universe_size": total,
             "coverage": coverage,
             "completed_round": completed_round,
-            "ineligible_symbols": len(deferred_today | insufficient_symbols),
+            "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
             "snapshot_histories_updated": snapshot_updates,
-            "candidates": sorted(candidates, key=lambda item: item["score"], reverse=True),
+            "candidates": sorted(
+                candidates,
+                key=lambda item: (item.get("zone_priority", 0), item.get("strategy_score", 0)),
+                reverse=True,
+            ),
             "errors": errors,
             "new_events": new_event_count,
             "delivery": delivery,
@@ -360,7 +496,28 @@ class SignalMonitor:
 
     def run_monitor_cycle(self, notify: bool = True) -> dict[str, Any]:
         symbols, names = self.monitoring_symbols()
-        return self.analyze_symbols(symbols, notify=notify, names=names)
+        if not symbols:
+            return self.analyze_symbols([], notify=notify, names=names)
+        saved_cursor = self.store.get_state("monitor_symbol_cursor", "0") or "0"
+        try:
+            cursor = int(saved_cursor) % len(symbols)
+        except ValueError:
+            cursor = 0
+        batch_size = min(self.max_monitor_symbols, len(symbols))
+        batch = [symbols[(cursor + offset) % len(symbols)] for offset in range(batch_size)]
+        next_cursor = (cursor + batch_size) % len(symbols)
+        self.store.set_state("monitor_symbol_cursor", str(next_cursor))
+        return self.analyze_symbols(
+            batch,
+            notify=notify,
+            names=names,
+            report_meta={
+                "monitor_pool_size": len(symbols),
+                "monitor_batch_start": cursor,
+                "monitor_batch_size": batch_size,
+                "monitor_next_cursor": next_cursor,
+            },
+        )
 
     def run_forever(self, notify: bool = True) -> None:
         logger.info("常驻监控启动，自选股 %s 只", len(self.watchlist))

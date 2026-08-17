@@ -108,16 +108,15 @@ class SignalStore:
                 ),
             )
             inserted = cursor.rowcount == 1
-            if inserted:
-                for channel in channels:
-                    connection.execute(
-                        """
-                        INSERT OR IGNORE INTO outbox_delivery
-                        (event_id, channel, status, attempts, next_attempt_at)
-                        VALUES (?, ?, 'pending', 0, ?)
-                        """,
-                        (event.event_id, channel, now),
-                    )
+            for channel in channels:
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO outbox_delivery
+                    (event_id, channel, status, attempts, next_attempt_at)
+                    VALUES (?, ?, 'pending', 0, ?)
+                    """,
+                    (event.event_id, channel, now),
+                )
         return inserted
 
     def pending_deliveries(self, limit: int = 100, max_attempts: int = 5) -> list[dict[str, Any]]:
@@ -219,18 +218,22 @@ class SignalStore:
         attempts: int,
         error: str,
         claim_token: str,
+        max_attempts: int = 5,
     ) -> bool:
-        next_attempt = now_shanghai() + timedelta(seconds=min(3600, 2 ** min(attempts + 1, 10)))
+        new_attempts = attempts + 1
+        status = "failed" if new_attempts >= max_attempts else "pending"
+        next_attempt = now_shanghai() + timedelta(seconds=min(3600, 2 ** min(new_attempts, 10)))
         with self._connect() as connection:
             cursor = connection.execute(
                 """
                 UPDATE outbox_delivery
-                SET status='pending', attempts=?, next_attempt_at=?, last_error=?,
+                SET status=?, attempts=?, next_attempt_at=?, last_error=?,
                     claimed_at=NULL, claim_token=NULL
                 WHERE event_id=? AND channel=? AND status='sending' AND claim_token=?
                 """,
                 (
-                    attempts + 1,
+                    status,
+                    new_attempts,
                     next_attempt.isoformat(timespec="seconds"),
                     error[:1000],
                     event_id,

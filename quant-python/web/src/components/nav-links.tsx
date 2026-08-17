@@ -9,7 +9,9 @@ import {
   Database,
   LayoutDashboard,
   MessageSquareText,
+  ScrollText,
   SlidersHorizontal,
+  Wallet,
   Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,8 @@ const NAV = [
   { href: "/models", label: "模型配置", icon: BrainCircuit },
   { href: "/schedule", label: "定时任务", icon: Clock3 },
   { href: "/pool", label: "股票池", icon: Database },
+  { href: "/holdings", label: "我的持仓", icon: Wallet },
+  { href: "/logs", label: "操作日志", icon: ScrollText },
   { href: "/workflow", label: "流程说明", icon: Workflow },
 ];
 

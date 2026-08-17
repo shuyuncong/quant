@@ -43,10 +43,14 @@ interface CandidateRow {
   symbol: string;
   name: string;
   score: number;
+  strategy_score?: number;
   confirmed_at?: string;
   dif?: number;
   dea?: number;
   zero_distance?: number;
+  golden_cross_zone?: "above" | "near" | "below";
+  golden_cross_zone_label?: string;
+  confirmation_items?: string[];
   chan_signals?: unknown[];
 }
 
@@ -425,10 +429,11 @@ export default function PoolPage() {
               <TableRow>
                 <TableHead>代码</TableHead>
                 <TableHead>名称</TableHead>
-                <TableHead>评分</TableHead>
+                <TableHead>位置</TableHead>
+                <TableHead>策略分</TableHead>
+                <TableHead>确认条件</TableHead>
                 <TableHead>确认时间</TableHead>
                 <TableHead>零轴距离</TableHead>
-                <TableHead>缠论信号</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -436,21 +441,24 @@ export default function PoolPage() {
                 <TableRow key={item.symbol}>
                   <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
                   <TableCell>{item.name || "-"}</TableCell>
-                  <TableCell>{item.score}</TableCell>
+                  <TableCell>
+                    <Badge variant={item.golden_cross_zone === "above" ? "default" : item.golden_cross_zone === "below" ? "destructive" : "secondary"}>
+                      {item.golden_cross_zone_label || "未识别"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{item.strategy_score ?? item.score}</TableCell>
+                  <TableCell className="max-w-64 text-xs">
+                    {item.confirmation_items?.length ? item.confirmation_items.join("、") : "暂无额外确认"}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.confirmed_at || "-"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {item.zero_distance != null ? item.zero_distance.toFixed(5) : "-"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {Array.isArray(item.chan_signals) && item.chan_signals.length > 0
-                      ? item.chan_signals.map((signal) => String(signal)).join(", ")
-                      : "-"}
                   </TableCell>
                 </TableRow>
               ))}
               {candidates.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     暂无候选，点击「筛选自选池」或「全市场筛选」生成
                   </TableCell>
                 </TableRow>

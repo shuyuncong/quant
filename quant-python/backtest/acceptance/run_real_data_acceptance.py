@@ -30,6 +30,8 @@ for proxy_key in (
     os.environ.pop(proxy_key, None)
 
 from backtest.engine.bt_engine import BacktestEngine
+from backtest.strategies.chan_zero_axis_bt import ChanZeroAxisBacktestStrategy
+from backtest.strategies.trend_following_bt import TrendFollowingBacktestStrategy
 from core.indicators.divergence import DivergenceDetector
 from strategy.strategy_engine import StrategyEngine
 from utils.helpers import load_config
@@ -371,30 +373,52 @@ class AkshareAcceptanceFetcher:
         self.stock_meta = {item["ts_code"]: item for item in stock_pool}
         self.hist_cache: Dict[str, pd.DataFrame] = {}
         self.info_cache: Dict[str, Dict] = {}
+        self.index_cache: Optional[pd.DataFrame] = None
 
     def get_stock_list(self):
         return pd.DataFrame(
             [{"ts_code": item["ts_code"], "name": item["name"]} for item in self.stock_pool]
         )
 
-    def get_financial_data(self, ts_code):
+    def get_financial_data(self, ts_code, period=None):
+        del period
         meta = self.stock_meta[ts_code]
         return {
             "roe": meta["roe"],
             "debt_to_assets": meta["debt_to_assets"],
         }
 
-    def get_daily_basic(self, ts_code):
+    def get_daily_basic(self, ts_code, trade_date=None):
+        del trade_date
         meta = self.stock_meta[ts_code]
         hist = self.get_daily_data(ts_code, period=300)
         latest = hist.iloc[-1]
         total_mv_wan = float(latest["close"]) * float(latest["outstanding_share"]) / 10000.0
         return {
-            "turnover_rate": float(latest["turnover_rate"]) * 100.0,
+            "turnover_rate": float(latest["turnover_rate"]),
             "pe": float(meta["pe"]),
             "total_mv": total_mv_wan,
             "volume_ratio": float(hist["volume"].iloc[-1] / hist["volume"].tail(30).mean()),
         }
+
+    def get_latest_trade_date(self) -> str:
+        """Return the latest date actually present in the acceptance market data."""
+        index_data = self.get_index_daily(start_date=self.start_date, end_date=self.end_date)
+        if index_data.empty:
+            raise RuntimeError("Unable to determine latest trade date from index data")
+        return pd.Timestamp(index_data["datetime"].iloc[-1]).strftime("%Y%m%d")
+
+    def align_end_date_to_latest_trade_date(self) -> str:
+        """Close every acceptance data request on the same completed trading day."""
+        latest_trade_date = self.get_latest_trade_date()
+        self.end_date = latest_trade_date
+        return latest_trade_date
+
+    def _get_latest_report_period(self) -> str:
+        """Return the latest completed quarter end for selector compatibility."""
+        end = pd.Timestamp(self.end_date)
+        current_quarter_start = end.to_period("Q").start_time
+        return (current_quarter_start - pd.Timedelta(days=1)).strftime("%Y%m%d")
 
     def get_daily_data(self, ts_code, start_date=None, end_date=None, period=300):
         del period
@@ -431,19 +455,22 @@ class AkshareAcceptanceFetcher:
 
     def get_index_daily(self, ts_code="000001.SH", start_date=None, end_date=None, period=300):
         del period, ts_code
-        frame = ak.stock_zh_index_daily(symbol="sh000001")
-        result = frame.rename(
-            columns={
-                "date": "datetime",
-                "open": "open",
-                "close": "close",
-                "high": "high",
-                "low": "low",
-                "volume": "volume",
-            }
-        )
-        result["datetime"] = pd.to_datetime(result["datetime"])
-        result["price_change_pct"] = result["close"].astype(float).pct_change().fillna(0.0)
+        if self.index_cache is None:
+            frame = ak.stock_zh_index_daily(symbol="sh000001")
+            result = frame.rename(
+                columns={
+                    "date": "datetime",
+                    "open": "open",
+                    "close": "close",
+                    "high": "high",
+                    "low": "low",
+                    "volume": "volume",
+                }
+            )
+            result["datetime"] = pd.to_datetime(result["datetime"])
+            result["price_change_pct"] = result["close"].astype(float).pct_change().fillna(0.0)
+            self.index_cache = result.sort_values("datetime").reset_index(drop=True)
+        result = self.index_cache.copy()
         result = result[
             (result["datetime"] >= pd.to_datetime(start_date or self.start_date))
             & (result["datetime"] <= pd.to_datetime(end_date or self.end_date))
@@ -514,13 +541,57 @@ def ensure_output_dir() -> Path:
     return output_dir
 
 
+def normalize_backtest_signals(raw_signals: list[dict], ts_code: str, strategy_name: str, regime: str) -> list[dict]:
+    """Add the fields required by BacktestEngine while preserving strategy evidence."""
+    return [
+        {
+            "datetime": signal["datetime"],
+            "action": signal["action"],
+            "position_pct": signal.get("position_pct", 0.95),
+            "ts_code": ts_code,
+            "signal_type": signal.get("signal_type", signal["action"]),
+            "strategy_name": strategy_name,
+            "regime": regime,
+            "reason": signal.get("reason", ""),
+        }
+        for signal in raw_signals
+    ]
+
+
+def build_strategy_comparison(trend_summary: dict, chan_summary: dict) -> dict:
+    """Compare win rates only when both strategies have completed trades."""
+    completed_trades_comparable = (
+        int(trend_summary.get("trade_count", 0)) > 0
+        and int(chan_summary.get("trade_count", 0)) > 0
+    )
+    return {
+        "trend_following": trend_summary,
+        "chan_zero_axis": chan_summary,
+        "comparison_status": (
+            "comparable" if completed_trades_comparable else "insufficient_completed_trades"
+        ),
+        "completed_trade_win_rate_delta": (
+            chan_summary.get("completed_trade_win_rate", chan_summary.get("win_rate", 0.0))
+            - trend_summary.get("completed_trade_win_rate", trend_summary.get("win_rate", 0.0))
+            if completed_trades_comparable
+            else None
+        ),
+        "warning": "单一标的、固定区间的真实数据对比，只用于验收和研究，不能证明长期胜率提升。",
+    }
+
+
 def main() -> None:
-    end_date = datetime.now().strftime("%Y%m%d")
+    requested_end_date = datetime.now().strftime("%Y%m%d")
     start_date = "20240101"
     output_dir = ensure_output_dir()
 
     config = build_acceptance_config()
-    fetcher = AkshareAcceptanceFetcher(STOCK_POOL, start_date=start_date, end_date=end_date)
+    fetcher = AkshareAcceptanceFetcher(
+        STOCK_POOL,
+        start_date=start_date,
+        end_date=requested_end_date,
+    )
+    actual_end_date = fetcher.align_end_date_to_latest_trade_date()
     technical = PandasTechnicalIndicators()
 
     strategy_engine = StrategyEngine(
@@ -536,36 +607,38 @@ def main() -> None:
     backtest_symbol = choose_backtest_symbol(scan_result)
     price_data = fetcher.get_daily_data(backtest_symbol)
     bt_engine = BacktestEngine(config=config)
-    bt_signals = [
-        {
-            "datetime": signal["datetime"],
-            "action": signal["action"],
-            "position_pct": signal.get("position_pct", 0.95),
-            "ts_code": backtest_symbol,
-            "signal_type": signal["action"],
-            "strategy_name": "trend_following",
-            "regime": scan_result["market_status"],
-            "reason": signal["reason"],
-        }
-        for signal in __import__("backtest.strategies.trend_following_bt", fromlist=["TrendFollowingBacktestStrategy"])
-        .TrendFollowingBacktestStrategy(config)
-        .generate_signals(price_data)
-    ]
+    trend_signals = normalize_backtest_signals(
+        TrendFollowingBacktestStrategy(config).generate_signals(price_data),
+        backtest_symbol,
+        "trend_following",
+        scan_result["market_status"],
+    )
+    chan_signals = normalize_backtest_signals(
+        ChanZeroAxisBacktestStrategy(config).generate_signals(price_data),
+        backtest_symbol,
+        "chan_zero_axis",
+        scan_result["market_status"],
+    )
     backtest_result = bt_engine.run(
         price_data=price_data,
-        signals=bt_signals,
+        signals=trend_signals,
         output_path=str(output_dir / "backtest_result.json"),
         strategy_name="trend_following",
+        regime_scope=scan_result["market_status"],
+        config_snapshot=config,
+    )
+    chan_backtest_result = bt_engine.run(
+        price_data=price_data,
+        signals=chan_signals,
+        output_path=str(output_dir / "chan_zero_axis_backtest_result.json"),
+        strategy_name="chan_zero_axis",
         regime_scope=scan_result["market_status"],
         config_snapshot=config,
     )
 
     parameter_scan = bt_engine.scan_parameters(
         price_data=price_data,
-        strategy_cls=__import__(
-            "backtest.strategies.trend_following_bt",
-            fromlist=["TrendFollowingBacktestStrategy"],
-        ).TrendFollowingBacktestStrategy,
+        strategy_cls=TrendFollowingBacktestStrategy,
         param_grid={
             "strategy.technical.ma_period": [120, 180, 250],
             "risk.stop_loss_pct": [0.06, 0.08],
@@ -582,12 +655,36 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    chan_parameter_scan = bt_engine.scan_parameters(
+        price_data=price_data,
+        strategy_cls=ChanZeroAxisBacktestStrategy,
+        param_grid={
+            "backtest.chan_zero_axis.min_confirmations": [1, 2, 3],
+            "backtest.chan_zero_axis.cross_window_bars": [3, 5, 8],
+        },
+        base_config=config,
+        strategy_name="chan_zero_axis",
+        split_ratio=0.7,
+        score_field="annual_return",
+        regime_scope=scan_result["market_status"],
+    )
+    chan_parameter_scan_path = output_dir / "chan_zero_axis_parameter_scan_real_data.json"
+    chan_parameter_scan_path.write_text(
+        json.dumps(chan_parameter_scan, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    trend_summary = backtest_result["summary"]
+    chan_summary = chan_backtest_result["summary"]
+    strategy_comparison = build_strategy_comparison(trend_summary, chan_summary)
+
     acceptance_summary = {
         "run_date": datetime.now().isoformat(),
         "data_source": "akshare_public_endpoints",
         "data_period": {
             "start_date": start_date,
-            "end_date": end_date,
+            "requested_end_date": requested_end_date,
+            "actual_end_date": actual_end_date,
         },
         "stock_pool": [item["ts_code"] for item in STOCK_POOL],
         "market_status": scan_result["market_status"],
@@ -603,18 +700,26 @@ def main() -> None:
         ],
         "backtest_symbol": backtest_symbol,
         "backtest_summary": backtest_result["summary"],
+        "chan_zero_axis_summary": chan_backtest_result["summary"],
+        "strategy_comparison": strategy_comparison,
         "parameter_scan_best_params": parameter_scan.get("best_params", {}),
         "parameter_scan_best_comparison": parameter_scan.get("best_comparison", {}),
+        "chan_zero_axis_parameter_scan_best_params": chan_parameter_scan.get("best_params", {}),
+        "chan_zero_axis_parameter_scan_best_comparison": chan_parameter_scan.get("best_comparison", {}),
         "artifacts": {
             "daily_scan": str(scan_path),
             "backtest_result": str(output_dir / "backtest_result.json"),
             "backtest_report": backtest_result.get("output_files", {}).get("report_json"),
             "parameter_scan": str(parameter_scan_path),
+            "chan_zero_axis_backtest_result": str(output_dir / "chan_zero_axis_backtest_result.json"),
+            "chan_zero_axis_backtest_report": chan_backtest_result.get("output_files", {}).get("report_json"),
+            "chan_zero_axis_parameter_scan": str(chan_parameter_scan_path),
         },
         "limitations": [
             "Daily and index prices are real public market data.",
             "The stock universe is a fixed acceptance watchlist, not the full market.",
             "Fundamental fields are acceptance inputs for the watchlist and are not fetched from Tushare.",
+            "The strategy comparison is not a claim of improved win rate; expand symbols and periods, use rolling out-of-sample validation, and stress-test cost and exit assumptions before relying on it.",
         ],
     }
     summary_path = output_dir / "acceptance_summary.json"

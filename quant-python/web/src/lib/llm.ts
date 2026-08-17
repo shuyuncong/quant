@@ -133,17 +133,115 @@ export async function recognizeSymbols(profile: ModelProfile, dataUrl: string): 
     .filter((item): item is { symbol: string; name: string } => item !== null);
 }
 
-export async function interpretReport(profile: ModelProfile, reportText: string): Promise<string> {
-  const truncated = reportText.length > 12_000 ? `${reportText.slice(0, 12_000)}...（已截断）` : reportText;
+type JsonObject = Record<string, unknown>;
+
+function asObject(value: unknown): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : {};
+}
+
+function compactTimeframe(value: unknown, barsPerTimeframe: number): JsonObject {
+  const report = asObject(value);
+  const recentBars = Array.isArray(report.recent_bars) ? report.recent_bars : [];
+  return {
+    status: report.status,
+    latest_time: report.latest_time,
+    latest_price: report.latest_price,
+    buy_score: report.buy_score,
+    sell_score: report.sell_score,
+    indicators: report.indicators,
+    chan: report.chan,
+    events: report.events,
+    recent_bars: barsPerTimeframe > 0 ? recentBars.slice(-barsPerTimeframe) : [],
+    error: report.error,
+  };
+}
+
+function compactAnalysisResult(value: unknown, barsPerTimeframe: number): JsonObject {
+  const result = asObject(value);
+  const timeframes = asObject(result.timeframes);
+  return {
+    symbol: result.symbol,
+    name: result.name,
+    status: result.status,
+    error: result.error,
+    analyzed_at: result.analyzed_at,
+    events: result.events,
+    timeframes: Object.fromEntries(
+      Object.entries(timeframes).map(([key, report]) => [key, compactTimeframe(report, barsPerTimeframe)])
+    ),
+  };
+}
+
+function compactReport(report: JsonObject, barsPerTimeframe: number, candidateLimit: number): JsonObject {
+  const results = Array.isArray(report.results)
+    ? report.results.map((item) => compactAnalysisResult(item, barsPerTimeframe))
+    : undefined;
+  const candidates = Array.isArray(report.candidates)
+    ? [...report.candidates]
+        .sort((left, right) => Number(asObject(right).score ?? 0) - Number(asObject(left).score ?? 0))
+        .slice(0, candidateLimit)
+    : undefined;
+  return {
+    mode: report.mode,
+    analyzed_at: report.analyzed_at,
+    scanned_at: report.scanned_at,
+    universe_mode: report.universe_mode,
+    universe_size: report.universe_size,
+    batch_start: report.batch_start,
+    batch_size: report.batch_size,
+    coverage: report.coverage,
+    completed_round: report.completed_round,
+    new_events: report.new_events,
+    delivery: report.delivery,
+    output_file: report.output_file,
+    results,
+    candidates,
+    errors: Array.isArray(report.errors) ? report.errors.slice(0, 50) : report.errors,
+  };
+}
+
+export function buildInterpretationContext(reportText: string, maxChars = 60_000): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(reportText);
+  } catch {
+    return reportText.length <= maxChars ? reportText : reportText.slice(-maxChars);
+  }
+  const report = asObject(parsed);
+  for (const [bars, candidates] of [
+    [24, 100],
+    [8, 50],
+    [0, 30],
+  ] as const) {
+    const text = JSON.stringify(compactReport(report, bars, candidates), null, 2);
+    if (text.length <= maxChars || bars === 0) return text;
+  }
+  return JSON.stringify(compactReport(report, 0, 30));
+}
+
+export async function interpretReport(
+  profile: ModelProfile,
+  reportText: string,
+  supplementalContext?: string | null,
+): Promise<string> {
+  // Compact the structured report first.  Holdings and other supplemental
+  // context are appended after compaction so they cannot invalidate JSON
+  // parsing or cause the report to be truncated from its beginning.
+  const supplemental = supplementalContext?.trim() ?? "";
+  const reportBudget = Math.max(1_000, 60_000 - supplemental.length - 256);
+  const compacted = buildInterpretationContext(reportText, reportBudget);
+  const context = supplemental
+    ? `${compacted}\n\n补充上下文：\n${supplemental}`
+    : compacted;
   return chatCompletion(
     profile,
     [
       {
         role: "system",
         content:
-          "你是资深 A 股量化分析助手。基于给定的信号监控报告，输出简洁中文解读：主要信号、风险点、建议动作（观察/买入候选/规避）。300 字以内，使用 Markdown。",
+          "你是资深 A 股量化分析助手。MACD 金叉定义为 DIF 上穿 DEA，并按 0轴上方、0轴附近、0轴下方排序；结合温和放量、突破 MA5/MA10、红柱连续放大确认。基于报告逐股输出主要信号、缠论买卖点、多周期一致性、风险和建议动作（观察/买入候选/减仓候选/规避）。不要承诺胜率，使用简洁 Markdown。",
       },
-      { role: "user", content: truncated },
+      { role: "user", content: context },
     ],
     90_000
   );

@@ -42,6 +42,29 @@ class _BarkErrorResponse(_Response):
 
 
 class NotifierAndConfigTests(unittest.TestCase):
+    def test_candidate_markdown_contains_zone_and_confirmations(self):
+        payload = {
+            "event_id": "candidate-1",
+            "side": "watch",
+            "symbol": "000001.SZ",
+            "name": "平安银行",
+            "timeframe": "1d",
+            "signal_type": "macd_golden_cross_above",
+            "price": 10.5,
+            "score": 350,
+            "confirmed_at": "2025-01-02T15:00:00",
+            "risk_notice": "test",
+            "evidence": {
+                "notification_kind": "candidate",
+                "golden_cross_zone_label": "0轴上方金叉",
+                "confirmation_items": ["成交量温和放大"],
+                "risk_text": "优先级最高",
+            },
+        }
+        markdown = SignalNotifier._markdown(payload)
+        self.assertIn("0轴上方金叉", markdown)
+        self.assertIn("成交量温和放大", markdown)
+
     def test_webhook_contract_has_schema_and_idempotency_key(self):
         notifier = SignalNotifier(
             {
