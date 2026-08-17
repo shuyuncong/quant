@@ -64,3 +64,8 @@ quant-python/signal_system/output/
 quant-python/signal_system/data/*.db
 quant-python/signal_system/data/*.db-*
 quant-python/signal_system/**/__pycache__/
+
+
+### web dev logs & ai workflow docs ###
+docs/ai-dev-workflow/
+quant-python/web/*.log*
