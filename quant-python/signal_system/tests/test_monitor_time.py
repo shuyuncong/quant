@@ -252,7 +252,7 @@ class MonitorTimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)
             monitor.max_monitor_symbols = 2
-            monitor.monitoring_symbols = lambda: (
+            monitor.monitoring_symbols = lambda extra=None: (
                 ["000001.SZ", "000002.SZ", "000003.SZ"],
                 {},
             )
@@ -319,6 +319,40 @@ class MonitorTimeTests(unittest.TestCase):
             )
 
             self.assertTrue(monitor._candidate_is_covered_by_trade_event(candidate, [trade]))
+
+    def test_monitoring_symbols_merges_holdings_watchlist_and_candidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.watchlist = ["000002"]
+            monitor.store.active_candidates = MagicMock(
+                return_value=[{"symbol": "600036", "name": "招商银行"}]
+            )
+            monitor.market.get_stock_list = MagicMock(
+                return_value=pd.DataFrame(
+                    [{"code": "600036", "name": "招商银行"}]
+                )
+            )
+            # 持仓、自选池、指标池合并且去重；持仓优先
+            symbols, names = monitor.monitoring_symbols(["600036.SH", "000002.SZ"])
+            self.assertEqual(["600036", "000002"], symbols)
+            self.assertEqual("招商银行", names.get("600036"))
+
+    def test_scan_summary_notification_uses_outbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.notifier.active_channels = MagicMock(return_value=["webhook"])
+            monitor.store.enqueue_event = MagicMock(return_value=True)
+            monitor.dispatch_outbox = MagicMock(return_value={"delivered": 1, "failed": 0})
+            result = monitor.notify_scan_summary(
+                candidate_count=12,
+                universe_mode="all_a",
+                completed_round=True,
+            )
+            self.assertEqual(1, result["enqueued"])
+            event = monitor.store.enqueue_event.call_args.args[0]
+            self.assertEqual("scan_summary", event.signal_type)
+            self.assertEqual("scan_summary", event.evidence["notification_kind"])
+            self.assertIn("12", event.evidence["content"])
 
     def test_ai_analysis_notification_uses_outbox(self):
         with tempfile.TemporaryDirectory() as directory:

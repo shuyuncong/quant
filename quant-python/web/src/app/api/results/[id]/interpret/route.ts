@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getEffectiveConfig } from "@/lib/config";
 import { addNote, addOperationLog, getDb } from "@/lib/db";
 import { interpretReport, pickChatModel } from "@/lib/llm";
-import { buildHoldingsContext, holdingsFromJobPayload } from "@/lib/holdings-context";
+import { buildHoldingsContext, holdingsFromJobPayload, totalCapitalFromJobPayload } from "@/lib/holdings-context";
 import { resolvePathWithin } from "@/lib/paths";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .prepare("SELECT id, payload FROM jobs WHERE result_path = ? ORDER BY id DESC LIMIT 1")
       .get(full) as { id: number; payload: string } | undefined;
     const holdings = holdingsFromJobPayload(job?.payload);
-    const context = buildHoldingsContext(report, holdings);
+    const totalCapital = totalCapitalFromJobPayload(job?.payload);
+    const context = buildHoldingsContext(report, holdings, totalCapital);
     const content = await interpretReport(profile, report, context);
     const noteId = addNote(
       { job_id: job?.id ?? null, symbol: "", content, model: profile.name, result_path: full },

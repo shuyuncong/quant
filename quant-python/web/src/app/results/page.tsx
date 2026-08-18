@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Play, RefreshCw, Sparkles } from "lucide-react";
+import { MarkdownContent } from "@/components/markdown-content";
 
 interface JobRow {
   id: number;
@@ -328,7 +329,7 @@ export default function ResultsPage() {
       </Card>
 
       <Dialog open={detailFile !== null} onOpenChange={(open) => !open && setDetailFile(null)}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-7xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>结果详情：{detailFile}</DialogTitle>
             <DialogDescription>AI 解读为补充字段，不影响原始分析结果。</DialogDescription>
@@ -344,7 +345,7 @@ export default function ResultsPage() {
               <div className="mb-1 text-xs text-muted-foreground">
                 模型：{note.model} · {note.created_at}
               </div>
-              <div className="whitespace-pre-wrap text-sm">{note.content}</div>
+              <MarkdownContent content={note.content} />
             </div>
           ))}
           <Separator />

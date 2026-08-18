@@ -1,7 +1,17 @@
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
-import { failInterruptedJobs } from "../db";
-import { shouldAutoInterpret } from "../jobs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+vi.mock("../bridge", () => ({
+  runBridge: vi.fn(() =>
+    Promise.resolve({ ok: true, code: 0, data: { report: { output_file: "out/report.json" } } })
+  ),
+}));
+
+import { failInterruptedJobs, getJob, setTotalCapital, upsertHolding } from "../db";
+import { shouldAutoInterpret, startJob } from "../jobs";
 
 describe("job restart recovery", () => {
   it("fails interrupted bridge jobs but preserves recoverable interpretation jobs", () => {
@@ -57,5 +67,39 @@ describe("shouldAutoInterpret", () => {
   it("keeps monitor-cycle interpretation gated on new events", () => {
     expect(shouldAutoInterpret("monitor-cycle", { new_events: 1 })).toBe(true);
     expect(shouldAutoInterpret("monitor-cycle", { new_events: 0 })).toBe(false);
+  });
+});
+
+describe("startJob portfolio attach", () => {
+  beforeEach(() => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-jobs-test-"));
+    process.env.WEB_DATA_DIR = tempDir;
+  });
+
+  it("attaches holdings and total capital to report job payloads", () => {
+    upsertHolding({
+      symbol: "600036.SH",
+      name: "招商银行",
+      shares: 1000,
+      cost_price: 30,
+      total_amount: 0,
+    });
+    setTotalCapital(100000);
+    const jobId = startJob("scan", { notify: true });
+    const payload = JSON.parse(getJob(jobId)!.payload) as {
+      holdings?: Array<{ symbol: string }>;
+      total_capital?: number;
+    };
+    expect(payload.holdings).toHaveLength(1);
+    expect(payload.holdings![0].symbol).toBe("600036.SH");
+    expect(payload.total_capital).toBe(100000);
+  });
+
+  it("does not attach portfolio to notification-only kinds", () => {
+    setTotalCapital(100000);
+    const jobId = startJob("test-notify", {});
+    const payload = JSON.parse(getJob(jobId)!.payload) as Record<string, unknown>;
+    expect(payload.holdings).toBeUndefined();
+    expect(payload.total_capital).toBeUndefined();
   });
 });

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { startJob, type JobKind } from "@/lib/jobs";
-import { listHoldings } from "@/lib/db";
 
-const VALID_KINDS = new Set<JobKind>([
-  "analyze",
-  "scan",
-  "monitor-once",
-  "test-notify",
-  "dispatch-outbox",
-]);
+const VALID_KINDS: Partial<Record<JobKind, true>> = {
+  analyze: true,
+  scan: true,
+  "daily-scan": true,
+  "monitor-once": true,
+  "test-notify": true,
+  "dispatch-outbox": true,
+};
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   const kind = String(body.kind ?? "") as JobKind;
-  if (!VALID_KINDS.has(kind)) {
+  if (!(kind in VALID_KINDS)) {
     return NextResponse.json({ error: "不支持的任务类型" }, { status: 422 });
   }
   if (kind === "analyze") {
@@ -41,10 +41,6 @@ export async function POST(request: Request) {
     if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
   }
   if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
-  if (kind === "analyze") {
-    // 个股分析携带用户持仓，供报告与 AI 解读参考
-    payload.holdings = listHoldings();
-  }
   const jobId = startJob(kind, payload);
   return NextResponse.json({ ok: true, jobId }, { status: 202 });
 }

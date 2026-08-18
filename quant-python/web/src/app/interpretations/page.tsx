@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -28,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RefreshCw } from "lucide-react";
+import { MarkdownContent } from "@/components/markdown-content";
 
 interface NoteRow {
   id: number;
@@ -147,8 +147,9 @@ export default function InterpretationsPage() {
       </Card>
 
       <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
-          <DialogHeader>
+        {/* 弹窗整体 flex 布局不滚动：标题区固定，仅正文区独立滚动 */}
+        <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 gap-1 border-b pb-4 pl-6 pr-16 pt-4">
             <DialogTitle>AI 解读 #{selected?.id}</DialogTitle>
             <DialogDescription>
               {selected?.model ? "模型：" + selected.model : "模型：-"}
@@ -156,8 +157,9 @@ export default function InterpretationsPage() {
               {selected?.result_path ? " · " + fileName(selected.result_path) : ""}
             </DialogDescription>
           </DialogHeader>
-          <Separator />
-          <div className="whitespace-pre-wrap text-sm leading-relaxed">{selected?.content}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <MarkdownContent content={selected?.content ?? ""} />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

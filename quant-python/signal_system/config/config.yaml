@@ -182,7 +182,7 @@ monitor:
   timeframes: ["1m", "5m", "15m", "30m", "60m", "120m", "1d"]
   bar_limit: 300
   interval_seconds: 60
-  daily_scan_time: "15:20"
+  daily_scan_time: "04:00"
   candidate_limit: 100
   candidate_ttl_business_days: 5
   max_scan_symbols_per_run: 500
@@ -222,7 +222,7 @@ runtime:
   database_path: "./data/signal_monitor.db"
   output_dir: "./output"
   schedule:
-    daily_scan_time: "15:30"
+    daily_scan_time: "04:00"
     weekly_review_day: "Friday"
   logging:
     level: "INFO"

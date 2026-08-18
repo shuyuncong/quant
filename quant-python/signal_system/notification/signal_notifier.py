@@ -36,6 +36,13 @@ class SignalNotifier:
     def _markdown(payload: dict[str, Any]) -> str:
         evidence = payload.get("evidence", {})
         kind = evidence.get("notification_kind", "trade_signal")
+        if kind == "scan_summary":
+            return (
+                f"# {payload.get('name', '每日扫描完成')}\n\n"
+                f"{evidence.get('content', '')}\n\n"
+                f"> {payload['risk_notice']}\n"
+                f"> event_id: `{payload['event_id']}`"
+            )
         if kind == "ai_analysis":
             report_path = evidence.get("report_path") or "未记录"
             return (
@@ -145,7 +152,10 @@ class SignalNotifier:
         url = str(config.get("url", "") or "https://api.day.app/push")
         evidence = payload.get("evidence", {})
         kind = evidence.get("notification_kind", "trade_signal")
-        if kind == "ai_analysis":
+        if kind == "scan_summary":
+            title = str(payload.get("name", "每日扫描完成"))
+            body = str(evidence.get("content", ""))[:3500]
+        elif kind == "ai_analysis":
             title = payload.get("name", "AI自动解读")
             body = str(evidence.get("content", ""))[:3500]
         elif kind == "candidate":
@@ -197,7 +207,9 @@ class SignalNotifier:
         if missing:
             return False, f"邮件配置缺少: {', '.join(missing)}"
         kind = payload.get("evidence", {}).get("notification_kind", "trade_signal")
-        if kind == "ai_analysis":
+        if kind == "scan_summary":
+            subject_side = "每日扫描完成"
+        elif kind == "ai_analysis":
             subject_side = "AI自动解读"
         elif kind == "candidate":
             subject_side = "MACD金叉候选"

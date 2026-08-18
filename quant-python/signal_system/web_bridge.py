@@ -241,8 +241,19 @@ def _cmd_scan(config_path: str, payload: dict[str, Any]) -> int:
 
 def _cmd_monitor_once(config_path: str, payload: dict[str, Any]) -> int:
     notify = bool(payload.get("notify", True))
+    # 我的持仓由 Web 端随任务 payload 携带，并入监控范围
+    holdings = payload.get("holdings") or []
+    extra_symbols: list[str] = []
+    if isinstance(holdings, list):
+        for item in holdings:
+            if isinstance(item, dict):
+                code = item.get("symbol") or item.get("ts_code") or ""
+                if code:
+                    extra_symbols.append(str(code))
+            elif isinstance(item, str) and item.strip():
+                extra_symbols.append(item.strip())
     monitor = _make_monitor(config_path, payload.get("overrides"))
-    report = monitor.run_monitor_cycle(notify=notify)
+    report = monitor.run_monitor_cycle(notify=notify, extra_symbols=extra_symbols)
     return _emit({"report": report})
 
 
@@ -287,6 +298,12 @@ def _cmd_outbox_status(config_path: str, payload: dict[str, Any]) -> int:
     return _emit(monitor.store.outbox_summary())
 
 
+def _cmd_outbox_log(config_path: str, payload: dict[str, Any]) -> int:
+    monitor = _make_monitor(config_path, payload.get("overrides"))
+    limit = max(1, min(int(payload.get("limit", 200)), 500))
+    return _emit({"records": monitor.store.list_outbox_log(limit)})
+
+
 def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
     content = str(payload.get("content", "")).strip()
     if not content:
@@ -303,14 +320,17 @@ def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
 
 
 def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
-    """返回日线零轴金叉指标股票池（候选股，含 TTL 与容量）。"""
+    """返回日线零轴金叉指标股票池（候选股，含 TTL 与容量）及失效/过期池。"""
     monitor = _make_monitor(config_path, payload.get("overrides"))
     candidates = monitor.store.active_candidates(limit=monitor.candidate_limit)
+    limit = max(1, min(int(payload.get("expired_limit", 100)), 500))
     return _emit(
         {
             "candidates": candidates,
             "ttl_business_days": monitor.candidate_ttl,
             "capacity": monitor.candidate_limit,
+            "expired_candidates": monitor.store.list_expired_candidates(limit=limit),
+            "expired_count": monitor.store.expired_candidate_count(),
         }
     )
 
@@ -341,6 +361,7 @@ COMMANDS = {
     "dispatch-outbox": lambda p, o: _cmd_dispatch(p, o),
     "test-notify": lambda p, o: _cmd_test_notify(p, o),
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
+    "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),

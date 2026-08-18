@@ -70,6 +70,16 @@ class SignalStore:
                     updated_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS expired_candidate (
+                    symbol TEXT PRIMARY KEY,
+                    name TEXT NOT NULL DEFAULT '',
+                    score INTEGER NOT NULL DEFAULT 0,
+                    expired_on TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT 'expired',
+                    payload TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS run_state (
                     state_key TEXT PRIMARY KEY,
                     state_value TEXT NOT NULL,
@@ -323,11 +333,121 @@ class SignalStore:
     def active_candidates(self, limit: int = 100) -> list[dict[str, Any]]:
         today = now_shanghai().date().isoformat()
         with self._connect() as connection:
+            stale = connection.execute(
+                "SELECT * FROM candidate WHERE expires_on < ?", (today,)
+            ).fetchall()
+            for row in stale:
+                self._store_expired(
+                    connection,
+                    dict(row),
+                    reason="expired",
+                    expired_on=str(row["expires_on"]),
+                )
             connection.execute("DELETE FROM candidate WHERE expires_on < ?", (today,))
             rows = connection.execute(
                 "SELECT payload FROM candidate ORDER BY score DESC LIMIT ?", (limit,)
             ).fetchall()
         return [json.loads(row["payload"]) for row in rows]
+
+    @staticmethod
+    def _store_expired(
+        connection: sqlite3.Connection,
+        row: dict[str, Any],
+        reason: str,
+        expired_on: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO expired_candidate(symbol, name, score, expired_on, reason, payload, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(symbol) DO UPDATE SET
+                name=excluded.name,
+                score=excluded.score,
+                expired_on=excluded.expired_on,
+                reason=excluded.reason,
+                payload=excluded.payload,
+                updated_at=excluded.updated_at
+            """,
+            (
+                str(row["symbol"]),
+                str(row.get("name", "")),
+                int(row.get("score", 0)),
+                expired_on,
+                reason,
+                str(row.get("payload", "{}")),
+                now_shanghai().isoformat(timespec="seconds"),
+            ),
+        )
+
+    def sync_candidates(
+        self,
+        candidates: list[dict[str, Any]],
+        ttl_business_days: int = 5,
+        capacity: int = 100,
+    ) -> None:
+        """Replace the candidate pool after a completed full-universe scan.
+
+        Symbols that are no longer qualified are moved to the expired pool
+        instead of being dropped silently.
+        """
+        now = now_shanghai()
+        expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
+        ranked = sorted(candidates, key=lambda item: item.get("score", 0), reverse=True)[:capacity]
+        confirmed = {str(item["symbol"]) for item in ranked}
+        with self._connect() as connection:
+            rows = connection.execute("SELECT * FROM candidate").fetchall()
+            for row in rows:
+                if row["symbol"] not in confirmed:
+                    self._store_expired(
+                        connection,
+                        dict(row),
+                        reason="no_longer_qualified",
+                        expired_on=now.date().isoformat(),
+                    )
+            connection.execute("DELETE FROM candidate")
+            for candidate in ranked:
+                connection.execute(
+                    """
+                    INSERT INTO candidate(symbol, name, score, expires_on, payload, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        candidate["symbol"],
+                        candidate.get("name", ""),
+                        int(candidate.get("score", 0)),
+                        expires_on,
+                        json.dumps(candidate, ensure_ascii=False),
+                        now.isoformat(timespec="seconds"),
+                    ),
+                )
+
+    def list_expired_candidates(self, limit: int = 200) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT symbol, name, score, expired_on, reason, payload
+                FROM expired_candidate
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (max(1, int(limit)),),
+            ).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            try:
+                payload = json.loads(str(record.pop("payload")))
+            except (TypeError, ValueError):
+                payload = {}
+            if isinstance(payload, dict):
+                record.update({key: payload[key] for key in payload if key not in record})
+            records.append(record)
+        return records
+
+    def expired_candidate_count(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS count FROM expired_candidate").fetchone()
+        return int(row["count"])
 
     def get_state(self, key: str, default: str | None = None) -> str | None:
         with self._connect() as connection:
@@ -374,3 +494,50 @@ class SignalStore:
             "failed": int(failed),
             "total_events": int(total_events),
         }
+
+    def list_outbox_log(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Recent outbox deliveries joined with their signal events, newest first."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT d.event_id, d.channel, d.status, d.attempts, d.next_attempt_at,
+                       d.last_error, d.delivered_at, d.claimed_at,
+                       e.symbol, e.timeframe, e.signal_type, e.side,
+                       e.confirmed_at, e.created_at, e.payload
+                FROM outbox_delivery d
+                JOIN signal_event e ON e.event_id = d.event_id
+                ORDER BY e.created_at DESC, d.channel
+                LIMIT ?
+                """,
+                (max(1, int(limit)),),
+            ).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            try:
+                payload = json.loads(str(record.pop("payload")))
+            except (TypeError, ValueError):
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            record["name"] = str(payload.get("name") or payload.get("title") or record["symbol"] or "")
+            evidence = payload.get("evidence")
+            summary = ""
+            if isinstance(evidence, dict):
+                if isinstance(evidence.get("content"), str):
+                    summary = str(evidence["content"])
+                if not summary and isinstance(evidence.get("components"), list):
+                    summary = " + ".join(str(item) for item in evidence["components"])
+                if not summary and isinstance(evidence.get("golden_cross_zone_label"), str):
+                    summary = str(evidence["golden_cross_zone_label"])
+                if not summary and isinstance(evidence.get("score_reasons"), list):
+                    summary = "；".join(str(item) for item in evidence["score_reasons"][:2])
+                if not summary and isinstance(evidence.get("reason"), str):
+                    summary = str(evidence["reason"])
+            if not summary and isinstance(payload.get("reason"), str):
+                summary = str(payload["reason"])
+            elif not summary and isinstance(payload.get("explanation"), str):
+                summary = str(payload["explanation"])
+            record["summary"] = summary.replace("\n", " ")[:200]
+            records.append(record)
+        return records

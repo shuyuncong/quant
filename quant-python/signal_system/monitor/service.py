@@ -132,6 +132,7 @@ class SignalMonitor:
         notify: bool = True,
         names: dict[str, str] | None = None,
         report_meta: dict[str, Any] | None = None,
+        only_daily_above_cross: bool = False,
     ) -> dict[str, Any]:
         names = names or {}
         names = self._resolve_names(symbols, names)
@@ -139,6 +140,11 @@ class SignalMonitor:
         new_event_count = 0
         stale_event_count = 0
         channels = self.notifier.active_channels()
+        buy_threshold = int(
+            self.config.get("signal_strategy", {})
+            .get("scoring", {})
+            .get("buy_threshold", 60)
+        )
         for requested_symbol in symbols:
             symbol = normalize_symbol(requested_symbol)
             try:
@@ -149,6 +155,21 @@ class SignalMonitor:
                 )
                 analysis = self.analyzer.analyze(symbol, names.get(symbol, ""), bars, errors)
                 event_objects = analysis.pop("event_objects")
+                if only_daily_above_cross:
+                    # 盘中监控只推送日线 0 轴上方金叉且买入评分达阈值的事件
+                    daily_report = analysis.get("timeframes", {}).get("1d", {})
+                    indicators = daily_report.get("indicators", {})
+                    qualifies = (
+                        bool(indicators.get("golden_cross"))
+                        and str(indicators.get("golden_cross_zone", "")) == "above"
+                        and int(daily_report.get("buy_score", 0)) >= buy_threshold
+                    )
+                    if not qualifies:
+                        event_objects = []
+                    else:
+                        event_objects = [
+                            event for event in event_objects if event.timeframe == "1d"
+                        ]
                 if notify and self.push_trade_signal:
                     for event in event_objects:
                         if not self._event_is_current(event):
@@ -256,6 +277,42 @@ class SignalMonitor:
                 "notification_kind": "ai_analysis",
                 "content": content.strip()[:12000],
                 "report_path": report_path,
+            },
+        )
+        inserted = self.store.enqueue_event(event, channels)
+        delivery = self.dispatch_outbox()
+        return {"enqueued": int(inserted), "delivery": delivery, "event_id": event.event_id}
+
+    def notify_scan_summary(
+        self,
+        candidate_count: int,
+        universe_mode: str,
+        completed_round: bool,
+    ) -> dict[str, Any]:
+        """推送每日扫描完成通知（启用通知通道时）。"""
+        channels = self.notifier.active_channels()
+        if not channels:
+            return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "no_channels"}
+        timestamp = now_shanghai().isoformat(timespec="seconds")
+        content = f"每日扫描完成，共 {candidate_count} 只符合日线零轴金叉条件"
+        if completed_round:
+            content += "（全市场轮询完成）"
+        event = SignalEvent(
+            symbol="SYSTEM",
+            name="每日扫描完成",
+            timeframe="report",
+            signal_type="scan_summary",
+            side="info",
+            price=0.0,
+            structure_time=timestamp,
+            confirmed_at=timestamp,
+            score=0,
+            evidence={
+                "notification_kind": "scan_summary",
+                "content": content,
+                "universe_mode": universe_mode,
+                "candidate_count": candidate_count,
+                "completed_round": completed_round,
             },
         )
         inserted = self.store.enqueue_event(event, channels)
@@ -422,11 +479,19 @@ class SignalMonitor:
             eligible_total = max(0, total - len(ineligible))
             coverage = 1.0 if eligible_total == 0 else len(successful_symbols) / eligible_total
             completed_round = len(successful_symbols) >= eligible_total
-        self.store.upsert_candidates(
-            candidates,
-            ttl_business_days=self.candidate_ttl,
-            capacity=self.candidate_limit,
-        )
+        if universe_mode == "all_a" and completed_round:
+            # 全市场轮询完成：未再入选的股票移入失效/过期池
+            self.store.sync_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+            )
+        else:
+            self.store.upsert_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+            )
 
         channels = self.notifier.active_channels()
         new_event_count = 0
@@ -449,6 +514,12 @@ class SignalMonitor:
                 if self.store.enqueue_event(event, channels):
                     new_event_count += 1
         delivery = self.dispatch_outbox() if notify and channels else {"delivered": 0, "failed": 0}
+        if notify:
+            self.notify_scan_summary(
+                candidate_count=len(candidates),
+                universe_mode=universe_mode,
+                completed_round=completed_round,
+            )
         report = {
             "mode": "scan",
             "scanned_at": now_shanghai().isoformat(timespec="seconds"),
@@ -472,10 +543,14 @@ class SignalMonitor:
         report["output_file"] = str(self._save_report("scan", report))
         return report
 
-    def monitoring_symbols(self) -> tuple[list[str], dict[str, str]]:
+    def monitoring_symbols(
+        self, extra_symbols: list[str] | None = None
+    ) -> tuple[list[str], dict[str, str]]:
+        """监控范围 = 我的持仓 + 自选股票池(watchlist) + 指标股票池(candidates)。"""
         candidates = self.store.active_candidates(limit=self.candidate_limit)
         names = {normalize_symbol(item["symbol"]): item.get("name", "") for item in candidates}
-        ordered = list(dict.fromkeys(self.watchlist + list(names)))
+        extra = [normalize_symbol(item) for item in (extra_symbols or []) if item]
+        ordered = list(dict.fromkeys(extra + self.watchlist + list(names)))
         return ordered, self._resolve_names(ordered, names)
 
     def is_trading_day(self, current: datetime | None = None) -> bool:
@@ -494,8 +569,10 @@ class SignalMonitor:
             13, 0
         ) <= current_time <= clock_time(15, 0)
 
-    def run_monitor_cycle(self, notify: bool = True) -> dict[str, Any]:
-        symbols, names = self.monitoring_symbols()
+    def run_monitor_cycle(
+        self, notify: bool = True, extra_symbols: list[str] | None = None
+    ) -> dict[str, Any]:
+        symbols, names = self.monitoring_symbols(extra_symbols)
         if not symbols:
             return self.analyze_symbols([], notify=notify, names=names)
         saved_cursor = self.store.get_state("monitor_symbol_cursor", "0") or "0"
@@ -517,6 +594,7 @@ class SignalMonitor:
                 "monitor_batch_size": batch_size,
                 "monitor_next_cursor": next_cursor,
             },
+            only_daily_above_cross=notify,
         )
 
     def run_forever(self, notify: bool = True) -> None:

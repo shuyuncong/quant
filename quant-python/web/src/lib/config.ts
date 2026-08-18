@@ -65,6 +65,8 @@ export function buildOverrides(): Record<string, unknown> {
   const settings = getAllSettings();
   const overrides: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(settings)) {
+    // holdings.* 是 Web 端持仓数据（总资金等），不是引擎配置，不随任务下发。
+    if (key.startsWith("holdings.")) continue;
     const envKey = SECRET_ENV_KEYS[key];
     if (envKey && process.env[envKey]) {
       deepSet(overrides, key, { __env__: envKey });

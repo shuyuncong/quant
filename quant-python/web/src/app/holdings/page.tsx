@@ -55,13 +55,24 @@ export default function HoldingsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedCapital, setSavedCapital] = useState(0);
+  const [capitalInput, setCapitalInput] = useState("");
+  const [savingCapital, setSavingCapital] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/holdings");
       if (!response.ok) throw new Error("加载持仓失败");
-      const data = (await response.json()) as { holdings: HoldingRow[] };
+      const data = (await response.json()) as {
+        holdings: HoldingRow[];
+        total_capital?: number;
+      };
       setHoldings(data.holdings);
+      setSavedCapital(Number(data.total_capital ?? 0));
+      // 轮询不覆盖正在编辑的输入，仅在尚未填写时同步已保存值
+      setCapitalInput((prev) =>
+        prev === "" && Number(data.total_capital ?? 0) > 0 ? String(data.total_capital) : prev
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载持仓失败");
     } finally {
@@ -158,16 +169,81 @@ export default function HoldingsPage() {
   };
 
   const totalAmount = holdings.reduce((sum, row) => sum + (row.total_amount || 0), 0);
+  const capitalPct =
+    savedCapital > 0 && totalAmount > 0 ? ((totalAmount / savedCapital) * 100).toFixed(1) : "";
   const autoTotal = computedTotal();
+
+  const saveCapital = async () => {
+    const value = Number(capitalInput);
+    if (capitalInput.trim() !== "" && (!Number.isFinite(value) || value < 0)) {
+      toast.error("请输入合法的账户总资金");
+      return;
+    }
+    setSavingCapital(true);
+    try {
+      const response = await fetch("/api/holdings/capital", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ total_capital: capitalInput.trim() === "" ? 0 : value }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        total_capital?: number;
+      };
+      if (!response.ok) throw new Error(data.error || "保存失败");
+      const saved = Number(data.total_capital ?? 0);
+      setSavedCapital(saved);
+      setCapitalInput(saved > 0 ? String(saved) : "");
+      toast.success(saved > 0 ? "已保存账户总资金" : "已清除账户总资金");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      setSavingCapital(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-semibold">我的持仓</h1>
         <p className="text-sm text-muted-foreground">
-          手动维护持仓信息；个股分析与 AI 解读时会带上相关持仓，供分析参考。
+          手动维护持仓信息与账户总资金；分析任务（个股/扫描/监控）与 AI 解读会带上相关持仓与仓位占比，供分析参考。
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="size-4" />
+            账户总资金
+          </CardTitle>
+          <CardDescription>
+            用于计算持仓占总仓位比例；AI 解读会以此判断仓位集中度并给出加减仓金额建议。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex w-56 flex-col gap-1.5">
+              <Label htmlFor="h-capital">总资金（元）</Label>
+              <Input
+                id="h-capital"
+                placeholder="100000"
+                inputMode="decimal"
+                value={capitalInput}
+                onChange={(event) => setCapitalInput(event.target.value)}
+              />
+            </div>
+            <Button onClick={() => void saveCapital()} disabled={savingCapital}>
+              <Wallet className="size-4" />
+              {savingCapital ? "保存中..." : "保存"}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              当前总持仓 {fmtMoney(totalAmount)} 元
+              {capitalPct && savedCapital > 0 ? `，占账户总资金 ${capitalPct}%` : ""}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -253,7 +329,9 @@ export default function HoldingsPage() {
             <Wallet className="size-4" /> 持仓列表
           </CardTitle>
           <CardDescription>
-            共 {holdings.length} 只，总金额 {fmtMoney(totalAmount)} 元。
+            共 {holdings.length} 只，总持仓 {fmtMoney(totalAmount)} 元
+            {capitalPct && savedCapital > 0 ? `，占账户总资金 ${capitalPct}%` : ""}
+            。
           </CardDescription>
         </CardHeader>
         <CardContent>

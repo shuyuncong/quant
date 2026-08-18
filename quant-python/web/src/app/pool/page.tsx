@@ -54,6 +54,15 @@ interface CandidateRow {
   chan_signals?: unknown[];
 }
 
+interface ExpiredCandidateRow {
+  symbol: string;
+  name: string;
+  score: number;
+  expired_on: string;
+  reason: string;
+  updated_at: string;
+}
+
 interface PendingItem {
   id: number;
   kind: "text" | "image";
@@ -93,6 +102,9 @@ export default function PoolPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [candidateMeta, setCandidateMeta] = useState<{ ttl_business_days?: number; capacity?: number }>({});
+  const [expired, setExpired] = useState<ExpiredCandidateRow[]>([]);
+  const [expiredCount, setExpiredCount] = useState(0);
+  const [expiredOpen, setExpiredOpen] = useState(false);
   const [scanning, setScanning] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -111,12 +123,16 @@ export default function PoolPage() {
           candidates?: CandidateRow[];
           ttl_business_days?: number;
           capacity?: number;
+          expired_candidates?: ExpiredCandidateRow[];
+          expired_count?: number;
         };
         setCandidates(candidatesData.candidates ?? []);
         setCandidateMeta({
           ttl_business_days: candidatesData.ttl_business_days,
           capacity: candidatesData.capacity,
         });
+        setExpired(candidatesData.expired_candidates ?? []);
+        setExpiredCount(candidatesData.expired_count ?? 0);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载股票池失败");
@@ -407,6 +423,13 @@ export default function PoolPage() {
               <RefreshCw className="size-3.5" /> 刷新
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExpiredOpen(true)}
+            >
+              失效/过期（{expiredCount}）
+            </Button>
+            <Button
               variant="secondary"
               size="sm"
               disabled={scanning !== null}
@@ -467,6 +490,50 @@ export default function PoolPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={expiredOpen} onOpenChange={setExpiredOpen}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>失效/过期指标股票池</DialogTitle>
+            <DialogDescription>
+              不再符合条件或超过保留期的候选股（共 {expiredCount} 只），不再参与监控扫描；每日全市场扫描完成时更新。
+            </DialogDescription>
+          </DialogHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>代码</TableHead>
+                <TableHead>名称</TableHead>
+                <TableHead>原因</TableHead>
+                <TableHead>移除日期</TableHead>
+                <TableHead>评分</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {expired.map((item) => (
+                <TableRow key={item.symbol}>
+                  <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
+                  <TableCell>{item.name || "-"}</TableCell>
+                  <TableCell>
+                    <Badge variant={item.reason === "no_longer_qualified" ? "secondary" : "outline"}>
+                      {item.reason === "no_longer_qualified" ? "不再符合条件" : item.reason === "expired" ? "已过期" : item.reason}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.expired_on}</TableCell>
+                  <TableCell className="text-xs">{item.score}</TableCell>
+                </TableRow>
+              ))}
+              {expired.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    暂无失效/过期记录
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
 
       {pending.length > 0 && (
         <Card>

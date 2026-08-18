@@ -8,13 +8,19 @@ import {
   createJob,
   findNoteByJobAndResult,
   getJob,
+  getTotalCapital,
+  listHoldings,
   listRecoverableJobs,
   updateJob,
 } from "./db";
 import { nowIso } from "./time";
 import { interpretReport, pickChatModel } from "./llm";
 import { signalSystemDir } from "./paths";
-import { buildHoldingsContext, holdingsFromJobPayload } from "./holdings-context";
+import {
+  buildHoldingsContext,
+  holdingsFromJobPayload,
+  totalCapitalFromJobPayload,
+} from "./holdings-context";
 
 export type JobKind =
   | "analyze"
@@ -25,9 +31,17 @@ export type JobKind =
   | "test-notify"
   | "dispatch-outbox";
 
-
 // job kinds that produce a report file worth interpreting
 const AUTO_INTERPRET_KINDS: JobKind[] = [
+  "analyze",
+  "scan",
+  "daily-scan",
+  "monitor-once",
+  "monitor-cycle",
+];
+
+// job kinds whose reports may reference the user's holdings; attach them for AI interpretation.
+const PORTFOLIO_KINDS: JobKind[] = [
   "analyze",
   "scan",
   "daily-scan",
@@ -71,8 +85,10 @@ async function autoInterpret(
     if (!content) {
       const full = resolveReportPath(resultPath);
       const reportText = fs.readFileSync(full, "utf8");
-      const holdings = holdingsFromJobPayload(getJob(parentJobId)?.payload);
-      const context = buildHoldingsContext(reportText, holdings);
+      const parentPayload = getJob(parentJobId)?.payload;
+      const holdings = holdingsFromJobPayload(parentPayload);
+      const totalCapital = totalCapitalFromJobPayload(parentPayload);
+      const context = buildHoldingsContext(reportText, holdings, totalCapital);
       content = await interpretReport(profile!, reportText, context);
       noteId = addNote({ job_id: parentJobId, result_path: resultPath, content, model: profile!.name });
       addOperationLog({
@@ -223,6 +239,11 @@ function mergeOverrides(
 
 /** Create a job row and run the bridge command in the background. Returns the job id immediately. */
 export function startJob(kind: JobKind, payload: Record<string, unknown>): number {
+  if (PORTFOLIO_KINDS.includes(kind)) {
+    // 报告任务统一携带用户持仓与账户总资金，供引擎报告和 AI 解读（含调度器触发的任务）参考。
+    payload.holdings = listHoldings();
+    payload.total_capital = getTotalCapital();
+  }
   const jobId = createJob(kind, payload);
   updateJob(jobId, { status: "running", started_at: nowIso() });
   addOperationLog({

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listHoldings, upsertHolding } from "@/lib/db";
+import { getTotalCapital, listHoldings, upsertHolding } from "@/lib/db";
 import { normalizeSymbol } from "@/lib/symbols";
 
 function validSymbol(symbol: string): boolean {
@@ -12,7 +12,7 @@ function toNumber(value: unknown): number {
 }
 
 export async function GET() {
-  return NextResponse.json({ holdings: listHoldings() });
+  return NextResponse.json({ holdings: listHoldings(), total_capital: getTotalCapital() });
 }
 
 export async function POST(request: Request) {

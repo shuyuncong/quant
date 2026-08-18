@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { CalendarClock, Save } from "lucide-react";
+import { CalendarClock, Play, Save } from "lucide-react";
 
 interface ScheduleData {
   rows: Array<{
@@ -33,6 +33,25 @@ interface ScheduleData {
 export default function SchedulePage() {
   const [data, setData] = useState<ScheduleData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  const runNow = useCallback(async (kind: "daily-scan" | "monitor-once") => {
+    setRunning(true);
+    try {
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, notify: true }),
+      });
+      const result = (await response.json().catch(() => ({}))) as { error?: string; jobId?: number };
+      if (!response.ok) throw new Error(result.error || "启动失败");
+      toast.success(`任务已启动 #${result.jobId ?? ""}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "启动失败");
+    } finally {
+      setRunning(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -103,58 +122,77 @@ export default function SchedulePage() {
       <Card>
         <CardHeader>
           <CardTitle>每日扫描</CardTitle>
-          <CardDescription>在指定时刻执行一次日线扫描并推送信号（同日只跑一次）。</CardDescription>
+          <CardDescription>全市场扫描日线零轴金叉，更新指标股票池；指定时刻执行（同日只跑一次）。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={daily?.enabled ?? false}
-                onCheckedChange={(value) => patchRow("daily_scan", { enabled: value })}
-              />
-              <Label>启用</Label>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={daily?.enabled ?? false}
+                  onCheckedChange={(value) => patchRow("daily_scan", { enabled: value })}
+                />
+                <Label>启用</Label>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>每日扫描时刻（HH:MM，Asia/Shanghai）</Label>
+                <Input type="time" className="w-32" value={daily?.time ?? "04:00"} onChange={(event) => patchRow("daily_scan", { time: event.target.value })} />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={daily?.trading_days_only ?? true}
+                  onCheckedChange={(value) => patchRow("daily_scan", { trading_days_only: value })}
+                />
+                <Label>仅交易日</Label>
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>每日扫描时刻（HH:MM，Asia/Shanghai）</Label>
-              <Input type="time" className="w-32" value={daily?.time ?? "15:20"} onChange={(event) => patchRow("daily_scan", { time: event.target.value })} />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={daily?.trading_days_only ?? true}
-                onCheckedChange={(value) => patchRow("daily_scan", { trading_days_only: value })}
-              />
-              <Label>仅交易日</Label>
-            </div>
+            <Button variant="secondary" onClick={() => void runNow("daily-scan")} disabled={running}>
+              <Play className="size-4" /> 立即执行一次
+            </Button>
           </div>
-
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>盘中监控</CardTitle>
-          <CardDescription>交易时段（9:30-11:30、13:00-15:00）运行监控循环并推送；执行方式为「间隔」或「固定时点」二选一。</CardDescription>
+          <CardDescription>交易时段（9:30-11:30、13:00-15:00）运行监控循环；默认按固定时点执行，也可改为每 N 分钟。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={monitor?.enabled ?? false}
-                onCheckedChange={(value) => patchRow("monitor_cycle", { enabled: value })}
-              />
-              <Label>启用</Label>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={monitor?.enabled ?? false}
+                  onCheckedChange={(value) => patchRow("monitor_cycle", { enabled: value })}
+                />
+                <Label>启用</Label>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>每 N 分钟执行（备选，固定时点优先）</Label>
+                <Input
+                  type="number"
+                  min={10}
+                  className="w-32"
+                  value={monitor ? Math.round(monitor.interval_seconds / 60) : 60}
+                  onChange={(event) =>
+                    patchRow("monitor_cycle", {
+                      interval_seconds: Math.max(10, Number(event.target.value) || 0) * 60,
+                    })
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={monitor?.trading_days_only ?? true}
+                  onCheckedChange={(value) => patchRow("monitor_cycle", { trading_days_only: value })}
+                />
+                <Label>仅交易日</Label>
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>监控间隔（秒，最小 10）</Label>
-              <Input type="number" className="w-32" value={monitor?.interval_seconds ?? 60} onChange={(event) => patchRow("monitor_cycle", { interval_seconds: Number(event.target.value) })} />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={monitor?.trading_days_only ?? true}
-                onCheckedChange={(value) => patchRow("monitor_cycle", { trading_days_only: value })}
-              />
-              <Label>仅交易日</Label>
-            </div>
+            <Button variant="secondary" onClick={() => void runNow("monitor-once")} disabled={running}>
+              <Play className="size-4" /> 立即执行一次
+            </Button>
           </div>
           <div className="flex flex-col gap-2 border-t pt-3">
             <Label>固定时点（可选）</Label>

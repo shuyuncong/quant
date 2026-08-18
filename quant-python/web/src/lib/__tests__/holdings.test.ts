@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listHoldings, removeHolding, upsertHolding } from "../db";
-import { buildHoldingsContext, holdingsFromJobPayload } from "../holdings-context";
+import { getTotalCapital, listHoldings, removeHolding, setTotalCapital, upsertHolding } from "../db";
+import {
+  buildHoldingsContext,
+  holdingsFromJobPayload,
+  totalCapitalFromJobPayload,
+} from "../holdings-context";
 
 describe("holdings", () => {
   beforeEach(() => {
@@ -46,6 +50,16 @@ describe("holdings", () => {
     });
     expect(holding.total_amount).toBe(1234.5);
   });
+
+  it("reads and writes total capital setting", () => {
+    expect(getTotalCapital()).toBe(0);
+    setTotalCapital(100000);
+    expect(getTotalCapital()).toBe(100000);
+    setTotalCapital(0);
+    expect(getTotalCapital()).toBe(0);
+    expect(() => setTotalCapital(-1)).toThrow();
+    expect(() => setTotalCapital(Number.NaN)).toThrow();
+  });
 });
 
 describe("holdings context", () => {
@@ -78,5 +92,62 @@ describe("holdings context", () => {
     );
     expect(holdings).toHaveLength(1);
     expect(holdingsFromJobPayload("not json")).toEqual([]);
+  });
+
+  it("parses total capital from job payload json", () => {
+    expect(totalCapitalFromJobPayload(JSON.stringify({ total_capital: 123456 }))).toBe(123456);
+    expect(totalCapitalFromJobPayload(JSON.stringify({ total_capital: 0 }))).toBe(0);
+    expect(totalCapitalFromJobPayload("not json")).toBe(0);
+    expect(totalCapitalFromJobPayload(null)).toBe(0);
+  });
+
+  it("includes account total capital and per-symbol share when configured", () => {
+    const holdings = [
+      {
+        symbol: "600036.SH",
+        name: "招商银行",
+        shares: 1000,
+        cost_price: 30,
+        total_amount: 30000,
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        symbol: "000001.SZ",
+        name: "平安银行",
+        shares: 100,
+        cost_price: 10,
+        total_amount: 1000,
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    const report = JSON.stringify({ results: [{ symbol: "600036" }] });
+    const context = buildHoldingsContext(report, holdings, 100000);
+    expect(context).toContain("账户总资金：100000.00 元");
+    expect(context).toContain("当前总持仓金额：30000.00 元");
+    expect(context).toContain("占总资金 30.0%");
+    expect(context).toContain("占总持仓 100.0%");
+    // 报告未涉及的持仓不出现
+    expect(context).not.toContain("000001.SZ");
+  });
+
+  it("omits capital lines when total capital is unknown", () => {
+    const holdings = [
+      {
+        symbol: "600036.SH",
+        name: "招商银行",
+        shares: 1000,
+        cost_price: 30,
+        total_amount: 30000,
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    const report = JSON.stringify({ results: [{ symbol: "600036" }] });
+    const context = buildHoldingsContext(report, holdings);
+    expect(context).toContain("当前总持仓金额：30000.00 元");
+    expect(context).not.toContain("账户总资金");
+    expect(context).not.toContain("占总资金");
   });
 });

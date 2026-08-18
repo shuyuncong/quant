@@ -147,6 +147,79 @@ class ScoringAndStorageTests(unittest.TestCase):
         )
         self.assertTrue(all("macd_golden_cross_above" in event.evidence["components"] for event in events))
 
+    def test_list_outbox_log_joins_event_details_and_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SignalStore(os.path.join(directory, "signals.db"))
+            event = SignalEvent(
+                symbol="000001.SZ",
+                name="平安银行",
+                timeframe="5m",
+                signal_type="buy_1",
+                side="buy",
+                price=10,
+                structure_time="2025-01-01T10:00:00",
+                confirmed_at="2025-01-01T10:01:00",
+                score=20,
+                evidence={"notification_kind": "trade_signal", "content": "买入候选"},
+            )
+            store.enqueue_event(event, ["webhook", "wechat"])
+            records = store.list_outbox_log()
+            self.assertEqual(2, len(records))
+            record = records[0]
+            self.assertEqual("webhook", record["channel"])
+            self.assertEqual("000001.SZ", record["symbol"])
+            self.assertEqual("buy_1", record["signal_type"])
+            self.assertEqual("平安银行", record["name"])
+            self.assertEqual("买入候选", record["summary"])
+            self.assertEqual("pending", record["status"])
+            self.assertEqual(0, record["attempts"])
+            self.assertIn("event_id", record)
+            self.assertIn("confirmed_at", record)
+
+    def test_sync_candidates_moves_dropped_symbols_to_expired_pool(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SignalStore(os.path.join(directory, "signals.db"))
+            store.upsert_candidates(
+                [
+                    {"symbol": "000001", "name": "A", "score": 90},
+                    {"symbol": "000002", "name": "B", "score": 80},
+                ],
+                ttl_business_days=5,
+                capacity=10,
+            )
+            store.sync_candidates(
+                [{"symbol": "000001", "name": "A", "score": 95}],
+                ttl_business_days=5,
+                capacity=10,
+            )
+            active = store.active_candidates()
+            self.assertEqual(["000001"], [item["symbol"] for item in active])
+            expired = store.list_expired_candidates()
+            self.assertEqual(1, len(expired))
+            self.assertEqual("000002", expired[0]["symbol"])
+            self.assertEqual("no_longer_qualified", expired[0]["reason"])
+            self.assertIn("name", expired[0])
+
+    def test_expired_candidates_are_moved_to_expired_pool(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SignalStore(os.path.join(directory, "signals.db"))
+            # 候选过期时间设为过去，active_candidates 清理时移入失效池
+            store.upsert_candidates(
+                [{"symbol": "000001", "name": "A", "score": 90}],
+                ttl_business_days=5,
+                capacity=10,
+            )
+            with store._connect() as connection:
+                connection.execute(
+                    "UPDATE candidate SET expires_on = '2020-01-01' WHERE symbol = '000001'"
+                )
+            self.assertEqual([], store.active_candidates())
+            expired = store.list_expired_candidates()
+            self.assertEqual(1, len(expired))
+            self.assertEqual("000001", expired[0]["symbol"])
+            self.assertEqual("expired", expired[0]["reason"])
+            self.assertEqual(1, store.expired_candidate_count())
+
     def test_fifth_delivery_failure_becomes_terminal(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SignalStore(os.path.join(directory, "signals.db"))

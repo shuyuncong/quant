@@ -139,10 +139,39 @@ function migrate(db: Database.Database): void {
   if (count.count === 0) {
     const now = nowIso();
     const insert = db.prepare(
-      "INSERT INTO schedule (kind, time, interval_seconds, trading_days_only, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO schedule (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
-    insert.run("daily_scan", "15:20", 60, 1, 1, now);
-    insert.run("monitor_cycle", "09:30", 60, 1, 1, now);
+    insert.run("daily_scan", "04:00", 60, "[]", 1, 1, now);
+    insert.run(
+      "monitor_cycle",
+      "09:30",
+      3600,
+      JSON.stringify(["10:30", "13:30", "14:30"]),
+      1,
+      1,
+      now
+    );
+  } else {
+    // 旧默认迁移：每日扫描 15:20 -> 04:00；监控若从未改过(60s 间隔且无固定时点)切到默认固定时点模式
+    const now = nowIso();
+    const daily = db.prepare("SELECT time FROM schedule WHERE kind = 'daily_scan'").get() as
+      | { time: string }
+      | undefined;
+    if (daily && daily.time === "15:20") {
+      db.prepare("UPDATE schedule SET time = '04:00', updated_at = ? WHERE kind = 'daily_scan'").run(now);
+    }
+    const monitor = db
+      .prepare("SELECT interval_seconds, fixed_times FROM schedule WHERE kind = 'monitor_cycle'")
+      .get() as { interval_seconds: number; fixed_times: string } | undefined;
+    if (
+      monitor &&
+      monitor.interval_seconds === 60 &&
+      (monitor.fixed_times === "[]" || monitor.fixed_times === "null")
+    ) {
+      db.prepare(
+        "UPDATE schedule SET interval_seconds = 3600, fixed_times = ?, updated_at = ? WHERE kind = 'monitor_cycle'"
+      ).run(JSON.stringify(["10:30", "13:30", "14:30"]), now);
+    }
   }
   const schedulerAutostartMigrated = db
     .prepare("SELECT value FROM settings WHERE key = 'meta.scheduler_autostart_v2'")
@@ -639,6 +668,23 @@ export function clearOperationLogs(db = getDb()): number {
 }
 
 // ---------- holdings ----------
+
+/** 账户总资金（元），用于计算持仓占比和给 AI 解读的仓位建议。 */
+export const TOTAL_CAPITAL_KEY = "holdings.total_capital";
+
+export function getTotalCapital(db = getDb()): number {
+  const value = Number(getSetting(TOTAL_CAPITAL_KEY, db));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function setTotalCapital(value: number, db = getDb()): void {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new Error("账户总资金必须是合法的非负数字");
+  }
+  setSetting(TOTAL_CAPITAL_KEY, num > 0 ? num : 0, db);
+}
+
 function rowToHolding(row: Record<string, unknown>): HoldingRow {
   return {
     symbol: String(row.symbol),
