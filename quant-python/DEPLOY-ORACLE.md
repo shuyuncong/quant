@@ -13,6 +13,11 @@
 ├── cache/               # 行情缓存（可清空，自动重建）
 ├── logs/                # Python 引擎日志
 └── quant-python/        # 代码仓库（git clone）
+    └── quant-python/    # 仓库根目录内的项目子目录（Dockerfile 位于此处）
+        ├── Dockerfile
+        ├── docker-compose.yml   # 仓库自带的通用版 Compose
+        ├── web/
+        └── signal_system/
 ```
 
 ## 0. 准备
@@ -34,14 +39,16 @@ sudo mkdir -p /opt/docker/quant
 cd /opt/docker/quant
 sudo chown -R ubuntu:ubuntu /opt/docker/quant
 
-# 克隆代码（仓库将位于 /opt/docker/quant/quant-python）
+# 克隆代码（仓库根目录将位于 /opt/docker/quant/quant-python）
+# 注意：仓库根目录内还有 quant-python/ 项目子目录，Dockerfile 位于
+# /opt/docker/quant/quant-python/quant-python/Dockerfile
 git clone https://github.com/shuyuncong/quant.git quant-python
 
 # 创建数据目录（对应容器内 /app/data、/app/signal_system/output 等）
 mkdir -p data output cache logs
 
 # 环境变量（可选，也可以全部在网页里配置）
-cp quant-python/web/.env.example .env
+cp quant-python/quant-python/web/.env.example .env
 nano .env
 ```
 
@@ -55,7 +62,7 @@ nano docker-compose.yml
 services:
   quant-web:
     build:
-      context: ./quant-python
+      context: ./quant-python/quant-python
       dockerfile: Dockerfile
     image: quant-web:latest
     container_name: quant-web
@@ -82,7 +89,7 @@ services:
       - /opt/docker/quant/logs:/app/signal_system/logs
 ```
 
-> 说明：仓库自带的 `quant-python/docker-compose.yml` 面向通用部署（绑定 `0.0.0.0` + 命名卷）；上面这份是服务器专用版，仅监听 `127.0.0.1`，并把数据放到宿主机目录，方便 Nginx 转发与备份脚本打包。
+> 说明：仓库自带的 `quant-python/quant-python/docker-compose.yml` 面向通用部署（绑定 `0.0.0.0` + 命名卷）；上面这份是服务器专用版，仅监听 `127.0.0.1`，并把数据放到宿主机目录，方便 Nginx 转发与备份脚本打包。
 
 构建并启动（首次构建需要几分钟）：
 

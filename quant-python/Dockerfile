@@ -3,11 +3,15 @@
 # ---- build stage: compile the Next.js web console ----
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+
+# 国内网络可覆盖为镜像源：docker compose 中 build.args.NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY web/package.json web/package-lock.json ./web/
-RUN cd web && npm ci --no-audit --no-fund
+RUN cd web && npm ci --no-audit --no-fund --registry=$NPM_REGISTRY
 COPY web/ ./web/
 RUN cd web && npm run build
 
