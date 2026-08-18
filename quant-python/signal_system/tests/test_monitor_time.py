@@ -276,50 +276,6 @@ class MonitorTimeTests(unittest.TestCase):
                 monitor.analyze_symbols.call_args_list[0].kwargs["report_meta"]["monitor_pool_size"],
             )
 
-    def test_candidate_event_carries_zone_confirmations_and_risk(self):
-        with tempfile.TemporaryDirectory() as directory:
-            monitor = self._monitor(directory)
-            event = monitor._candidate_event(
-                {
-                    "symbol": "000001.SZ",
-                    "name": "平安银行",
-                    "price": 10.5,
-                    "score": 350,
-                    "confirmed_at": "2025-01-02T15:00:00",
-                    "golden_cross_zone": "above",
-                    "golden_cross_zone_label": "0轴上方金叉",
-                    "confirmation_items": ["成交量温和放大"],
-                }
-            )
-            self.assertEqual("macd_golden_cross_above", event.signal_type)
-            self.assertEqual("candidate", event.evidence["notification_kind"])
-            self.assertIn("优先级最高", event.evidence["risk_text"])
-
-    def test_candidate_notification_is_covered_by_trade_event_for_same_cross(self):
-        with tempfile.TemporaryDirectory() as directory:
-            monitor = self._monitor(directory)
-            candidate = monitor._candidate_event(
-                {
-                    "symbol": "000001.SZ",
-                    "confirmed_at": "2025-01-02T15:00:00",
-                    "golden_cross_zone": "above",
-                }
-            )
-            trade = SignalEvent(
-                symbol="000001.SZ",
-                name="平安银行",
-                timeframe="1d",
-                signal_type="buy_2",
-                side="buy",
-                price=10.0,
-                structure_time="2025-01-02T15:00:00",
-                confirmed_at="2025-01-02T15:00:00",
-                score=80,
-                evidence={"components": ["buy_2", "macd_golden_cross_above"]},
-            )
-
-            self.assertTrue(monitor._candidate_is_covered_by_trade_event(candidate, [trade]))
-
     def test_monitoring_symbols_merges_holdings_watchlist_and_candidates(self):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)
@@ -347,12 +303,97 @@ class MonitorTimeTests(unittest.TestCase):
                 candidate_count=12,
                 universe_mode="all_a",
                 completed_round=True,
+                candidates=[
+                    {"symbol": "000001.SZ", "name": "平安银行", "golden_cross_zone_label": "0轴上方金叉"},
+                    {"symbol": "600036.SH", "name": "招商银行", "golden_cross_zone_label": ""},
+                ],
             )
             self.assertEqual(1, result["enqueued"])
             event = monitor.store.enqueue_event.call_args.args[0]
             self.assertEqual("scan_summary", event.signal_type)
             self.assertEqual("scan_summary", event.evidence["notification_kind"])
             self.assertIn("12", event.evidence["content"])
+            self.assertIn("000001.SZ 平安银行（0轴上方金叉）", event.evidence["content"])
+            self.assertIn("600036.SH 招商银行", event.evidence["content"])
+            self.assertEqual(2, len(event.evidence["candidates"]))
+
+    def test_daily_scan_notify_enqueues_only_one_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.config["scan"] = {"universe_mode": "all_a"}
+            monitor.store.set_state("daily_bootstrap_complete", "true")
+            monitor.market.refresh_daily_histories_from_snapshot = lambda: 0
+            monitor.market.get_stock_list = lambda: pd.DataFrame(
+                [{"code": "000001", "name": "平安银行"}, {"code": "000002", "name": "招商银行"}]
+            )
+            monitor.market.latest_expected_trade_date = lambda: date(2025, 1, 2)
+
+            def bars(symbol, *args, **kwargs):
+                return pd.DataFrame(
+                    {
+                        "datetime": pd.bdate_range(end="2025-01-02", periods=200),
+                        "is_closed": True,
+                    }
+                )
+
+            monitor.market.get_bars = bars
+            monitor.analyzer.analyze = lambda *args, **kwargs: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                },
+            }
+            monitor.notifier.active_channels = MagicMock(return_value=["webhook"])
+            enqueued = []
+
+            def track_enqueue(event, channels):
+                enqueued.append(event)
+                return True
+
+            monitor.store.enqueue_event = track_enqueue
+            monitor.dispatch_outbox = MagicMock(return_value={"delivered": 1, "failed": 0})
+            report = monitor.scan_zero_axis(notify=True)
+            self.assertEqual(1, len(enqueued))
+            self.assertEqual("scan_summary", enqueued[0].signal_type)
+            self.assertIn("000001 平安银行（0轴上方金叉）", enqueued[0].evidence["content"])
+            self.assertIn("000002 招商银行（0轴上方金叉）", enqueued[0].evidence["content"])
+            self.assertEqual(2, report["candidate_count"])
+            self.assertEqual({"delivered": 1, "failed": 0}, report["delivery"])
+            self.assertNotIn("new_events", report)
+
+    def test_daily_scan_notify_skips_summary_when_candidate_push_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.config["scan"] = {"universe_mode": "all_a"}
+            monitor.push_candidate_pool = False
+            monitor.store.set_state("daily_bootstrap_complete", "true")
+            monitor.market.refresh_daily_histories_from_snapshot = lambda: 0
+            monitor.market.get_stock_list = lambda: pd.DataFrame(
+                [{"code": "000001", "name": "平安银行"}, {"code": "000002", "name": "招商银行"}]
+            )
+            monitor.market.latest_expected_trade_date = lambda: date(2025, 1, 2)
+
+            def bars(symbol, *args, **kwargs):
+                return pd.DataFrame(
+                    {
+                        "datetime": pd.bdate_range(end="2025-01-02", periods=200),
+                        "is_closed": True,
+                    }
+                )
+
+            monitor.market.get_bars = bars
+            monitor.analyzer.analyze = lambda *args, **kwargs: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                },
+            }
+            monitor.notifier.active_channels = MagicMock(return_value=["webhook"])
+            monitor.store.enqueue_event = MagicMock(return_value=True)
+            monitor.dispatch_outbox = MagicMock(return_value={"delivered": 1, "failed": 0})
+            report = monitor.scan_zero_axis(notify=True)
+            monitor.store.enqueue_event.assert_not_called()
+            self.assertEqual({"delivered": 1, "failed": 0}, report["delivery"])
 
     def test_ai_analysis_notification_uses_outbox(self):
         with tempfile.TemporaryDirectory() as directory:

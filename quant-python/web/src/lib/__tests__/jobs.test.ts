@@ -58,9 +58,9 @@ describe("shouldAutoInterpret", () => {
   });
 
   it("interprets daily-scan only after the full round completes", () => {
-    expect(shouldAutoInterpret("daily-scan", { completed_round: true, new_events: 3 })).toBe(true);
-    expect(shouldAutoInterpret("daily-scan", { completed_round: false, new_events: 3 })).toBe(false);
-    expect(shouldAutoInterpret("daily-scan", { completed_round: true, new_events: 0 })).toBe(false);
+    expect(shouldAutoInterpret("daily-scan", { completed_round: true, candidate_count: 3 })).toBe(true);
+    expect(shouldAutoInterpret("daily-scan", { completed_round: false, candidate_count: 3 })).toBe(false);
+    expect(shouldAutoInterpret("daily-scan", { completed_round: true, candidate_count: 0 })).toBe(false);
     expect(shouldAutoInterpret("daily-scan", undefined)).toBe(false);
   });
 

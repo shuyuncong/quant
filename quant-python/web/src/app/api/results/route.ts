@@ -29,6 +29,7 @@ export async function GET() {
             scanned_at: parsed.scanned_at ?? parsed.analyzed_at ?? "",
             symbols: parsed.symbols ?? undefined,
             new_events: parsed.new_events ?? undefined,
+            candidate_count: parsed.candidate_count ?? undefined,
             delivery: parsed.delivery ?? undefined,
             output_file: parsed.output_file ?? full,
           };

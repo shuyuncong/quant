@@ -192,6 +192,7 @@ function compactReport(report: JsonObject, barsPerTimeframe: number, candidateLi
     coverage: report.coverage,
     completed_round: report.completed_round,
     new_events: report.new_events,
+    candidate_count: report.candidate_count,
     delivery: report.delivery,
     output_file: report.output_file,
     results,

@@ -196,60 +196,6 @@ class SignalMonitor:
         report["output_file"] = str(self._save_report("analysis", report))
         return report
 
-    @staticmethod
-    def _candidate_risk_text(zone: str) -> str:
-        return {
-            "above": "多头趋势中的回调再启动，三档中优先级最高，仍需控制追高风险。",
-            "near": "趋势反转初期，可能反复震荡磨底，需要后续站稳0轴确认。",
-            "below": "空头趋势中的弱势反弹，风险最高，不适合重仓追入。",
-        }.get(zone, "位置未识别，需结合趋势与成交量复核。")
-
-    def _candidate_event(self, candidate: dict[str, Any]) -> SignalEvent:
-        zone = str(candidate.get("golden_cross_zone", "near"))
-        confirmed_at = str(candidate.get("confirmed_at") or now_shanghai().isoformat(timespec="seconds"))
-        return SignalEvent(
-            symbol=str(candidate["symbol"]),
-            name=str(candidate.get("name", "")),
-            timeframe="1d",
-            signal_type=f"macd_golden_cross_{zone}",
-            side="watch",
-            price=float(candidate.get("price") or 0.0),
-            structure_time=confirmed_at,
-            confirmed_at=confirmed_at,
-            score=int(candidate.get("score", 0)),
-            evidence={
-                "notification_kind": "candidate",
-                "golden_cross_zone": zone,
-                "golden_cross_zone_label": candidate.get("golden_cross_zone_label"),
-                "golden_cross_quality": candidate.get("golden_cross_quality"),
-                "golden_cross_risk": candidate.get("golden_cross_risk"),
-                "risk_text": self._candidate_risk_text(zone),
-                "confirmation_items": candidate.get("confirmation_items", []),
-                "confirmation_count": candidate.get("confirmation_count", 0),
-                "dif": candidate.get("dif"),
-                "dea": candidate.get("dea"),
-                "hist": candidate.get("hist"),
-                "volume_ratio": candidate.get("volume_ratio"),
-                "zero_distance": candidate.get("zero_distance"),
-                "chan_signals": candidate.get("chan_signals", []),
-            },
-        )
-
-    @staticmethod
-    def _candidate_is_covered_by_trade_event(
-        candidate_event: SignalEvent,
-        trade_events: list[SignalEvent],
-    ) -> bool:
-        for trade_event in trade_events:
-            components = trade_event.evidence.get("components", [])
-            if (
-                trade_event.symbol == candidate_event.symbol
-                and trade_event.timeframe == candidate_event.timeframe
-                and candidate_event.signal_type in components
-            ):
-                return True
-        return False
-
     def notify_ai_analysis(
         self,
         title: str,
@@ -288,8 +234,9 @@ class SignalMonitor:
         candidate_count: int,
         universe_mode: str,
         completed_round: bool,
+        candidates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """推送每日扫描完成通知（启用通知通道时）。"""
+        """推送每日扫描完成通知（统一一条汇总，不逐股推送）。"""
         channels = self.notifier.active_channels()
         if not channels:
             return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "no_channels"}
@@ -297,6 +244,25 @@ class SignalMonitor:
         content = f"每日扫描完成，共 {candidate_count} 只符合日线零轴金叉条件"
         if completed_round:
             content += "（全市场轮询完成）"
+        listed: list[dict[str, Any]] = []
+        for item in (candidates or [])[:50]:
+            listed.append(
+                {
+                    "symbol": str(item["symbol"]),
+                    "name": str(item.get("name", "")),
+                    "golden_cross_zone_label": str(item.get("golden_cross_zone_label") or ""),
+                }
+            )
+        lines = []
+        for item in listed:
+            line = " ".join(part for part in (item["symbol"], item["name"]) if part)
+            if item["golden_cross_zone_label"]:
+                line += f"（{item['golden_cross_zone_label']}）"
+            lines.append(line)
+        if lines:
+            content += "\n\n" + "\n".join(lines)
+            if len(listed) < candidate_count:
+                content += f"\n… 其余 {candidate_count - len(listed)} 只见股票池"
         event = SignalEvent(
             symbol="SYSTEM",
             name="每日扫描完成",
@@ -313,6 +279,7 @@ class SignalMonitor:
                 "universe_mode": universe_mode,
                 "candidate_count": candidate_count,
                 "completed_round": completed_round,
+                "candidates": listed,
             },
         )
         inserted = self.store.enqueue_event(event, channels)
@@ -390,7 +357,6 @@ class SignalMonitor:
         candidates: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
         names: dict[str, str] = {}
-        events_to_enqueue = []
         successful_symbols: set[str] = set()
         batch_names = self._resolve_names([normalize_symbol(str(row["code"])) for row in batch])
         for row in batch:
@@ -413,7 +379,7 @@ class SignalMonitor:
                     raise ValueError(f"日线不足{self.min_daily_bars}个交易日")
                 successful_symbols.add(symbol)
                 analysis = self.analyzer.analyze(symbol, name, {"1d": daily})
-                event_objects = analysis.pop("event_objects")
+                analysis.pop("event_objects")
                 daily_report = analysis["timeframes"].get("1d", {})
                 indicators = daily_report.get("indicators", {})
                 if indicators.get("golden_cross"):
@@ -443,7 +409,6 @@ class SignalMonitor:
                             "chan_signals": daily_report.get("chan", {}).get("fresh_signals", []),
                         }
                     )
-                events_to_enqueue.extend(event_objects)
             except Exception as exc:
                 errors.append({"symbol": symbol, "error": str(exc)})
                 logger.warning("扫描 %s 失败: %s", symbol, exc)
@@ -493,33 +458,24 @@ class SignalMonitor:
                 capacity=self.candidate_limit,
             )
 
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda item: (item.get("zone_priority", 0), item.get("strategy_score", 0)),
+            reverse=True,
+        )
         channels = self.notifier.active_channels()
-        new_event_count = 0
-        if notify:
-            queued_events = []
-            if self.push_trade_signal:
-                queued_events.extend(events_to_enqueue)
+        # 每日扫描入库后只推送一条汇总通知，不逐股推送；候选推送开关关闭时跳过汇总，仅投递队列已有事件
+        delivery = {"delivered": 0, "failed": 0}
+        if notify and channels:
             if self.push_candidate_pool:
-                for candidate in candidates:
-                    candidate_event = self._candidate_event(candidate)
-                    if self.push_trade_signal and self._candidate_is_covered_by_trade_event(
-                        candidate_event,
-                        events_to_enqueue,
-                    ):
-                        continue
-                    queued_events.append(candidate_event)
-            for event in queued_events:
-                if not self._event_is_current(event):
-                    continue
-                if self.store.enqueue_event(event, channels):
-                    new_event_count += 1
-        delivery = self.dispatch_outbox() if notify and channels else {"delivered": 0, "failed": 0}
-        if notify:
-            self.notify_scan_summary(
-                candidate_count=len(candidates),
-                universe_mode=universe_mode,
-                completed_round=completed_round,
-            )
+                delivery = self.notify_scan_summary(
+                    candidate_count=len(candidates),
+                    universe_mode=universe_mode,
+                    completed_round=completed_round,
+                    candidates=sorted_candidates,
+                )["delivery"]
+            else:
+                delivery = self.dispatch_outbox()
         report = {
             "mode": "scan",
             "scanned_at": now_shanghai().isoformat(timespec="seconds"),
@@ -531,13 +487,9 @@ class SignalMonitor:
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
             "snapshot_histories_updated": snapshot_updates,
-            "candidates": sorted(
-                candidates,
-                key=lambda item: (item.get("zone_priority", 0), item.get("strategy_score", 0)),
-                reverse=True,
-            ),
+            "candidate_count": len(candidates),
+            "candidates": sorted_candidates,
             "errors": errors,
-            "new_events": new_event_count,
             "delivery": delivery,
         }
         report["output_file"] = str(self._save_report("scan", report))

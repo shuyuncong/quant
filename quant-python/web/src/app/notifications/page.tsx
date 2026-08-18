@@ -290,7 +290,7 @@ export default function NotificationsPage() {
             <Switch checked={form.push_trade_signal} onCheckedChange={(value) => set("push_trade_signal", value)} />
           </div>
           <div className="flex items-center justify-between border-b pb-3">
-            <div><Label>MACD 金叉候选</Label><p className="text-xs text-muted-foreground">推送日线金叉位置、确认条件和风险。</p></div>
+            <div><Label>MACD 金叉候选</Label><p className="text-xs text-muted-foreground">每日扫描完成后推送一条汇总（候选股列表），不逐股推送。</p></div>
             <Switch checked={form.push_candidate_pool} onCheckedChange={(value) => set("push_candidate_pool", value)} />
           </div>
           <div className="flex items-center justify-between border-b pb-3">

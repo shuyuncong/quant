@@ -207,7 +207,7 @@ export function shouldAutoInterpret(kind: JobKind, report: Record<string, unknow
   if (!AUTO_INTERPRET_KINDS.includes(kind)) return false;
   if (["analyze", "scan", "monitor-once"].includes(kind)) return true;
   if (kind === "daily-scan") {
-    return report?.completed_round === true && Number(report?.new_events ?? 0) > 0;
+    return report?.completed_round === true && Number(report?.candidate_count ?? 0) > 0;
   }
   return Number(report?.new_events ?? 0) > 0;
 }
