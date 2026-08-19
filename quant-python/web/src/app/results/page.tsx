@@ -30,6 +30,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Play, RefreshCw, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
 
@@ -206,31 +212,97 @@ export default function ResultsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() =>
-                runJob(
-                  "analyze",
-                  symbolsInput.trim()
-                    ? { symbols: symbolsInput.split(/[\s,，;；]+/).filter(Boolean) }
-                    : {}
-                )
-              }
-              disabled={running}
-            >
-              <Play className="size-4" /> 个股分析
-            </Button>
-            <Button variant="secondary" onClick={() => runJob("scan")} disabled={running}>
-              日线扫描
-            </Button>
-            <Button variant="secondary" onClick={() => runJob("monitor-once")} disabled={running}>
-              监控一次
-            </Button>
-            <Button variant="secondary" onClick={() => runJob("dispatch-outbox")} disabled={running}>
-              补投队列
-            </Button>
-            <Button variant="outline" onClick={() => runJob("test-notify")} disabled={running}>
-              测试通知
-            </Button>
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      onClick={() =>
+                        runJob(
+                          "analyze",
+                          symbolsInput.trim()
+                            ? { symbols: symbolsInput.split(/[\s,，;；]+/).filter(Boolean) }
+                            : {}
+                        )
+                      }
+                      disabled={running}
+                    >
+                      <Play className="size-4" /> 个股分析
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">个股分析</p>
+                  <p className="mt-0.5 text-background/70">
+                    分析指定股票（留空用自选池）：多周期缠论买卖点 + MACD 信号，结果写入 output 目录。
+                    开启推送时，新鲜且达阈值的新信号会进入通知队列。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button variant="secondary" onClick={() => runJob("scan")} disabled={running}>
+                      日线扫描
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">日线扫描</p>
+                  <p className="mt-0.5 text-background/70">
+                    与股票池页的筛选同一引擎，范围按配置 scan.universe_mode（当前 all_a 全市场）。
+                    扫描结果写入候选池并输出报告；开启推送时扫完推一条汇总通知。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button variant="secondary" onClick={() => runJob("monitor-once")} disabled={running}>
+                      监控一次
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">监控一次</p>
+                  <p className="mt-0.5 text-background/70">
+                    对「持仓 + 自选池 + 候选池」执行一次盘中监控：从轮询游标处取一批（默认 20 只）
+                    做多周期分析。开启推送时只推「日线 0 轴上方金叉且买入分≥60」的新鲜信号。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button variant="secondary" onClick={() => runJob("dispatch-outbox")} disabled={running}>
+                      补投队列
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">补投队列</p>
+                  <p className="mt-0.5 text-background/70">
+                    重试通知 outbox 里投递失败/未发出的消息（每次最多 100 条）。
+                    通知通道恢复后，用它把积压的推送补发出去。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button variant="outline" onClick={() => runJob("test-notify")} disabled={running}>
+                      测试通知
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">测试通知</p>
+                  <p className="mt-0.5 text-background/70">
+                    向所有已启用的通知通道（微信/Webhook/邮件/Bark）发送一条测试信号，验证推送配置是否可用。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button variant="ghost" onClick={() => void loadResults()} disabled={loading}>
               <RefreshCw className="size-4" /> 刷新结果
             </Button>

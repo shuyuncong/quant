@@ -30,6 +30,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { CheckCircle2, FileImage, FileText, Filter, Plus, RefreshCw, Trash2, XCircle } from "lucide-react";
 
 interface PoolRow {
@@ -429,21 +435,49 @@ export default function PoolPage() {
             >
               失效/过期（{expiredCount}）
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={scanning !== null}
-              onClick={() => void runScan("watchlist")}
-            >
-              <Filter className="size-3.5" /> 筛选自选池
-            </Button>
-            <Button
-              size="sm"
-              disabled={scanning !== null}
-              onClick={() => void runScan("all_a")}
-            >
-              <Filter className="size-3.5" /> 全市场筛选
-            </Button>
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={scanning !== null}
+                      onClick={() => void runScan("watchlist")}
+                    >
+                      <Filter className="size-3.5" /> 筛选自选池
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">筛选自选池</p>
+                  <p className="mt-0.5 text-background/70">
+                    只扫描自选池（config 的 monitor.watchlist）里的股票：逐只拉日线算 MACD，
+                    当日出现「零轴金叉」的按 0 轴位置打分写入候选池。只增不改、不淘汰，也不推送通知。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      size="sm"
+                      disabled={scanning !== null}
+                      onClick={() => void runScan("all_a")}
+                    >
+                      <Filter className="size-3.5" /> 全市场筛选
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  <p className="font-medium">全市场筛选</p>
+                  <p className="mt-0.5 text-background/70">
+                    扫描全 A 股：首次运行分批回填日线历史（每轮最多 500 只），整轮扫完才把
+                    不再入选/过期的移入「失效/过期」池。通常要多跑几轮才覆盖完整，不推送通知。
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </CardHeader>
         <CardContent>
