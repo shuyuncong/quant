@@ -1,0 +1,39 @@
+# Oracle Cloud 服务器专用 Compose（与 DEPLOY-ORACLE.md 配套）
+# 与同目录的通用版 docker-compose.yml 差异：
+#   - 仅监听 127.0.0.1，由 Nginx 对外提供 80/443，不直接暴露公网
+#   - 数据挂载到宿主机目录，方便 Nginx 转发与备份脚本打包
+# 注意：本文件必须与 Dockerfile 同目录（Docker Compose >= 2.35 的 bake 构建
+# 按 compose 文件所在目录解析 Dockerfile 与 context，放别处会构建失败）
+services:
+  quant-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quant-web:latest
+    container_name: quant-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3111:3111"
+    environment:
+      TZ: Asia/Shanghai
+      # 镜像内 Python 依赖安装在 /opt/venv，勿改为 python3（系统解释器没有依赖）
+      PYTHON_BIN: /opt/venv/bin/python
+      WEB_DATA_DIR: /app/data
+      TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
+      WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
+      SIGNAL_WEBHOOK_URL: "${SIGNAL_WEBHOOK_URL:-}"
+      SIGNAL_WEBHOOK_AUTH: "${SIGNAL_WEBHOOK_AUTH:-}"
+      SIGNAL_EMAIL_SENDER: "${SIGNAL_EMAIL_SENDER:-}"
+      SIGNAL_EMAIL_PASSWORD: "${SIGNAL_EMAIL_PASSWORD:-}"
+      SIGNAL_EMAIL_RECEIVER: "${SIGNAL_EMAIL_RECEIVER:-}"
+      SIGNAL_BARK_DEVICE_KEY: "${SIGNAL_BARK_DEVICE_KEY:-}"
+    volumes:
+      # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
+      - /opt/docker/quant/data:/app/data
+      # Python 信号库（候选池、事件去重、outbox、全市场初始化进度）
+      - /opt/docker/quant/data:/app/signal_system/data
+      # 分析/扫描结果 JSON
+      - /opt/docker/quant/output:/app/signal_system/output
+      # 行情缓存与日志（可清空，丢失后会自动重建）
+      - /opt/docker/quant/cache:/app/signal_system/cache
+      - /opt/docker/quant/logs:/app/signal_system/logs

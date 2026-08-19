@@ -6,8 +6,6 @@
 
 ```text
 /opt/docker/quant/
-├── docker-compose.yml   # 服务器专用 Compose（见第 3 节）
-├── .env                 # 环境变量（可选，也可在网页里配置）
 ├── data/                # Web 数据库（app.db）——必须保留
 ├── output/              # 分析/扫描结果 JSON——必须保留
 ├── cache/               # 行情缓存（可清空，自动重建）
@@ -15,7 +13,9 @@
 └── quant-python/        # 代码仓库（git clone）
     └── quant-python/    # 仓库根目录内的项目子目录（Dockerfile 位于此处）
         ├── Dockerfile
-        ├── docker-compose.yml   # 仓库自带的通用版 Compose
+        ├── .env                       # 环境变量（可选，也可在网页里配置）
+        ├── docker-compose.yml         # 仓库自带的通用版 Compose
+        ├── docker-compose.oracle.yml  # 服务器专用 Compose（见第 3 节）
         ├── web/
         └── signal_system/
 ```
@@ -47,25 +47,19 @@ git clone https://github.com/shuyuncong/quant.git quant-python
 # 创建数据目录（对应容器内 /app/data、/app/signal_system/output 等）
 mkdir -p data output cache logs
 
-# 环境变量（可选，也可以全部在网页里配置）
-cp quant-python/quant-python/web/.env.example .env
-nano .env
+# 环境变量（可选，也可以全部在网页里配置；.env 必须与 compose 文件同目录）
+cp quant-python/quant-python/web/.env.example quant-python/quant-python/.env
+nano quant-python/quant-python/.env
 ```
 
-创建 `docker-compose.yml`：
-
-```bash
-nano docker-compose.yml
-```
+服务器专用 Compose 已随仓库提供：`quant-python/quant-python/docker-compose.oracle.yml`（与 Dockerfile 同目录，内容如下）：
 
 ```yaml
 services:
   quant-web:
     build:
-      context: ./quant-python/quant-python
-      # dockerfile 路径相对本文件所在目录（/opt/docker/quant）：
-      # Compose >= 2.35 的 bake 构建按此基准解析 Dockerfile，只写 Dockerfile 会在 /opt/docker/quant/ 下找不到
-      dockerfile: quant-python/quant-python/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: quant-web:latest
     container_name: quant-web
     restart: unless-stopped
@@ -74,7 +68,8 @@ services:
       - "127.0.0.1:3111:3111"
     environment:
       TZ: Asia/Shanghai
-      PYTHON_BIN: python3
+      # 镜像内 Python 依赖安装在 /opt/venv，勿改为 python3
+      PYTHON_BIN: /opt/venv/bin/python
       WEB_DATA_DIR: /app/data
       TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
       WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
@@ -85,20 +80,27 @@ services:
       SIGNAL_EMAIL_RECEIVER: "${SIGNAL_EMAIL_RECEIVER:-}"
       SIGNAL_BARK_DEVICE_KEY: "${SIGNAL_BARK_DEVICE_KEY:-}"
     volumes:
+      # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
       - /opt/docker/quant/data:/app/data
+      # Python 信号库（候选池、事件去重、outbox、全市场初始化进度）
+      - /opt/docker/quant/data:/app/signal_system/data
+      # 分析/扫描结果 JSON
       - /opt/docker/quant/output:/app/signal_system/output
+      # 行情缓存与日志（可清空，丢失后会自动重建）
       - /opt/docker/quant/cache:/app/signal_system/cache
       - /opt/docker/quant/logs:/app/signal_system/logs
 ```
 
-> 说明：仓库自带的 `quant-python/quant-python/docker-compose.yml` 面向通用部署（绑定 `0.0.0.0` + 命名卷）；上面这份是服务器专用版，仅监听 `127.0.0.1`，并把数据放到宿主机目录，方便 Nginx 转发与备份脚本打包。
-> `dockerfile` 必须写相对 `/opt/docker/quant` 的完整路径（即上面的 `quant-python/quant-python/Dockerfile`）：Docker Compose ≥ 2.35 默认用 bake 构建，Dockerfile 按 compose 文件所在目录解析，而不是按 build context 解析；写 `Dockerfile` 会报 `failed to read dockerfile: open Dockerfile: no such file or directory`。
+> 说明：仓库自带的 `quant-python/quant-python/docker-compose.yml` 面向通用部署（绑定 `0.0.0.0` + 命名卷）；`docker-compose.oracle.yml` 是服务器专用版，仅监听 `127.0.0.1`，并把数据放到宿主机目录，方便 Nginx 转发与备份脚本打包。
+> **compose 文件必须与 Dockerfile 同目录**：Docker Compose ≥ 2.35 默认用 bake 构建，Dockerfile 与 context 按 compose 文件所在目录解析（而不是按 build context）；把 compose 放在 `/opt/docker/quant` 下引用子目录里的 Dockerfile 会报 `failed to read dockerfile: open Dockerfile: no such file or directory` 或 `resolve: lstat ...: no such file or directory`。
+> 若服务器上残留旧容器（报 `container name already in use`），先 `docker rm -f quant-web` 再启动。
 
-构建并启动（首次构建需要几分钟）：
+构建并启动（**必须在项目子目录内执行**，首次构建需要几分钟）：
 
 ```bash
-docker compose up -d --build
-docker compose logs -f quant-web
+cd /opt/docker/quant/quant-python/quant-python
+docker compose -f docker-compose.oracle.yml up -d --build
+docker compose -f docker-compose.oracle.yml logs -f quant-web
 ```
 
 本服务为本地构建镜像，无需 `docker compose pull`。验证应用是否起来：
@@ -301,9 +303,9 @@ crontab -e
 更新到最新代码：
 
 ```bash
-cd /opt/docker/quant
-git -C quant-python pull
-docker compose up -d --build
+cd /opt/docker/quant/quant-python/quant-python
+git -C /opt/docker/quant/quant-python pull
+docker compose -f docker-compose.oracle.yml up -d --build
 ```
 
 首次上线前迁移本机已有数据（SQLite WAL 三个文件一起拷）：
