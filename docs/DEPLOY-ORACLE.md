@@ -316,6 +316,48 @@ scp quant-python/web/data/app.db* ubuntu@服务器IP:/opt/docker/quant/data/
 scp -r quant-python/signal_system/output/* ubuntu@服务器IP:/opt/docker/quant/output/
 ```
 
+## 自动部署（推送即更新，可选）
+
+push 到 master 后由 GitHub Actions 触发服务器自动拉取并重建，无需手动 ssh：
+
+```text
+推送代码 → GitHub Actions → SSH 执行 /home/ubuntu/ops/deploy-quant.sh → git pull + docker compose up -d --build
+```
+
+仓库已包含 `.github/workflows/deploy-oracle.yml` 与 `docs/ops/deploy-quant.sh`，服务器上一次性配置：
+
+```bash
+# 1. 服务器：放置部署脚本（内容见 docs/ops/deploy-quant.sh）
+mkdir -p /home/ubuntu/ops
+# 把 docs/ops/deploy-quant.sh 的内容保存为 /home/ubuntu/ops/deploy-quant.sh
+chmod +x /home/ubuntu/ops/deploy-quant.sh
+
+# 2. 本机：生成部署专用密钥（和你的登录密钥分开）
+ssh-keygen -t ed25519 -f ~/.ssh/oracle_deploy -C "github-actions"
+ssh-copy-id -i ~/.ssh/oracle_deploy.pub ubuntu@服务器IP
+```
+
+> 安全加固（可选但推荐）：在服务器 `~/.ssh/authorized_keys` 中给部署公钥加限制，只允许执行部署脚本、禁止登录 shell：
+> `command="/home/ubuntu/ops/deploy-quant.sh",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA... github-actions`
+
+```bash
+# 3. GitHub 仓库 → Settings → Secrets and variables → Actions 添加三个 Secret：
+#    ORACLE_HOST    服务器公网 IP
+#    ORACLE_USER    ubuntu
+#    ORACLE_SSH_KEY 部署私钥内容（~/.ssh/oracle_deploy 的完整内容）
+```
+
+之后每次 push 涉及 `web/`、`signal_system/`、`core/`、`Dockerfile` 等路径时自动部署；纯文档提交不触发（workflow 里有 paths 过滤）。日志在服务器 `/home/ubuntu/ops/deploy-quant.log`，执行记录可在 GitHub 仓库 Actions 页查看。
+
+不想用 Actions 时，也可以 cron 每 5 分钟轮询一次 master（服务器主动拉取，零入站依赖）：
+
+```bash
+crontab -e
+*/5 * * * * /home/ubuntu/ops/deploy-quant.sh >> /home/ubuntu/ops/deploy-quant.log 2>&1
+```
+
+（脚本会先比对 master 是否有新提交，无更新时自动跳过构建。）
+
 ## 注意事项
 
 - **页面暂无登录密码**：公网使用前建议在 Nginx 加 Basic Auth（`sudo apt install -y apache2-utils && sudo htpasswd -c /etc/nginx/.htpasswd admin`，并在 server 块加 `auth_basic "Restricted";` 与 `auth_basic_user_file /etc/nginx/.htpasswd;`）或限制来源 IP。
