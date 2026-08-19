@@ -63,7 +63,9 @@ services:
   quant-web:
     build:
       context: ./quant-python/quant-python
-      dockerfile: Dockerfile
+      # dockerfile 路径相对本文件所在目录（/opt/docker/quant）：
+      # Compose >= 2.35 的 bake 构建按此基准解析 Dockerfile，只写 Dockerfile 会在 /opt/docker/quant/ 下找不到
+      dockerfile: quant-python/quant-python/Dockerfile
     image: quant-web:latest
     container_name: quant-web
     restart: unless-stopped
@@ -90,6 +92,7 @@ services:
 ```
 
 > 说明：仓库自带的 `quant-python/quant-python/docker-compose.yml` 面向通用部署（绑定 `0.0.0.0` + 命名卷）；上面这份是服务器专用版，仅监听 `127.0.0.1`，并把数据放到宿主机目录，方便 Nginx 转发与备份脚本打包。
+> `dockerfile` 必须写相对 `/opt/docker/quant` 的完整路径（即上面的 `quant-python/quant-python/Dockerfile`）：Docker Compose ≥ 2.35 默认用 bake 构建，Dockerfile 按 compose 文件所在目录解析，而不是按 build context 解析；写 `Dockerfile` 会报 `failed to read dockerfile: open Dockerfile: no such file or directory`。
 
 构建并启动（首次构建需要几分钟）：
 
