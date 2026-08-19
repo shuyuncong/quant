@@ -14,6 +14,8 @@
   - 定义评估体系、参数优化、A 股现实约束增强和第二阶段接口预留
 - 开发 TODO 清单：`docs/TODO.md`
   - 按开发顺序拆分的可执行任务列表
+- Oracle Cloud 部署指南：`docs/DEPLOY-ORACLE.md`
+  - 服务器落地部署（Docker Compose + Nginx 反代 + HTTPS + rclone 备份）；通用部署见 `quant-python/DEPLOY.md`
 
 ---
 

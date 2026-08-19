@@ -1,6 +1,6 @@
 # Oracle Cloud 部署指南（quant.illsky.com）
 
-> 与现有服务（CLIProxyAPI 等）保持一致的部署方式：Docker Compose + Nginx 反向代理 + Certbot HTTPS + rclone 备份。通用部署说明见 [DEPLOY.md](DEPLOY.md)。
+> 与现有服务（CLIProxyAPI 等）保持一致的部署方式：Docker Compose + Nginx 反向代理 + Certbot HTTPS + rclone 备份。通用部署说明见 [DEPLOY.md](../quant-python/DEPLOY.md)。
 
 ## 目录结构
 

@@ -1,6 +1,6 @@
 # 部署指南
 
-> Oracle Cloud 服务器落地部署（Nginx 反代 + HTTPS + rclone 备份）见 [DEPLOY-ORACLE.md](DEPLOY-ORACLE.md)。
+> Oracle Cloud 服务器落地部署（Nginx 反代 + HTTPS + rclone 备份）见 [DEPLOY-ORACLE.md](../docs/DEPLOY-ORACLE.md)。
 
 本系统由两部分组成，必须一起部署：
 
