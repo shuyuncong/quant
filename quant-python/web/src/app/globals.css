@@ -126,5 +126,60 @@
   }
   html {
     @apply font-sans;
+    font-optical-sizing: auto;
+  }
+  h1,
+  h2,
+  h3,
+  [data-slot="card-title"] {
+    letter-spacing: -0.01em;
+  }
+  .text-xs {
+    letter-spacing: 0.01em;
+  }
+}
+
+/* Apple-style translucent material for floating chrome */
+.surface-glass {
+  background: color-mix(in oklab, var(--sidebar) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+
+/* Ease dark/light theme changes instead of an abrupt brightness jump */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .surface-glass {
+    background: var(--sidebar);
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .surface-glass {
+    background: var(--sidebar);
+    backdrop-filter: none;
+    border: 1px solid var(--border);
   }
 }

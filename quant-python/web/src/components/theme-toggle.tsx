@@ -21,13 +21,20 @@ export function ThemeToggle() {
   const isDark = resolvedTheme === "dark"
   const label = isDark ? "切换到浅色模式" : "切换到深色模式"
 
+  const toggleTheme = () => {
+    const root = document.documentElement
+    root.classList.add("theme-transition")
+    setTheme(isDark ? "light" : "dark")
+    window.setTimeout(() => root.classList.remove("theme-transition"), 400)
+  }
+
   return (
     <Button
       variant="ghost"
       size="icon"
       aria-label={label}
       title={label}
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      onClick={toggleTheme}
     >
       {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </Button>

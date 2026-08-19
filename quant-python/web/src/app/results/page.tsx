@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -38,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Play, RefreshCw, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
+import { SymbolCombobox } from "@/components/symbol-combobox";
 
 interface JobRow {
   id: number;
@@ -198,12 +198,12 @@ export default function ResultsPage() {
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-72 flex-1 flex-col gap-1.5">
-              <Label htmlFor="symbols">个股代码（analyze，逗号/空格分隔，留空使用自选股）</Label>
-              <Input
+              <Label htmlFor="symbols">个股代码（可输入或从持仓下拉选择，逗号/空格分隔，留空使用自选股）</Label>
+              <SymbolCombobox
                 id="symbols"
                 placeholder="600036.SH 000001.SZ"
                 value={symbolsInput}
-                onChange={(event) => setSymbolsInput(event.target.value)}
+                onChange={setSymbolsInput}
               />
             </div>
             <div className="flex items-center gap-2 pb-2">

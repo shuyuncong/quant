@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
-  { href: "/results", label: "结果", icon: BarChart3 },
+  { href: "/results", label: "个股分析", icon: BarChart3 },
   { href: "/interpretations", label: "AI 解读", icon: MessageSquareText },
   { href: "/strategies", label: "策略配置", icon: Activity },
   { href: "/notifications", label: "推送配置", icon: Bell },
@@ -110,10 +110,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             aria-label="关闭导航"
-            className="absolute inset-0 bg-black/30"
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="relative flex h-full w-64 max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl">
+          <aside className="surface-glass relative flex h-full w-64 max-w-[85vw] flex-col border-r border-sidebar-border text-sidebar-foreground shadow-2xl">
             <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-4">
               <span className="text-sm font-semibold tracking-wide">缠论信号监控</span>
               <button
