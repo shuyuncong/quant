@@ -370,7 +370,7 @@ export default function HoldingsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-red-600 hover:text-red-700"
+                        className="text-destructive hover:text-destructive/80"
                         onClick={() => void remove(row.symbol)}
                       >
                         <Trash2 className="size-3.5" />

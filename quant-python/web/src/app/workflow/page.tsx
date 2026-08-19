@@ -88,19 +88,22 @@ const ZERO_AXIS_LEVELS = [
     title: "0轴上方金叉",
     level: "优先级最高",
     description: "两线不在附近容差带内，且 DIF、DEA 都大于 0。通常属于多头趋势回调后的再次启动。",
-    className: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    className:
+      "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/30",
   },
   {
     title: "0轴附近金叉",
     level: "中性转多",
     description: "两线都靠近 0 轴，或交叉当根跨越/触及 0 轴。属于反转初期，需要后续站稳 0 轴确认。",
-    className: "text-amber-700 bg-amber-50 border-amber-200",
+    className:
+      "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-500/10 dark:border-amber-500/30",
   },
   {
     title: "0轴下方金叉",
     level: "风险最高",
     description: "两线不在附近容差带内，且 DIF、DEA 都小于 0。通常只是空头趋势中的弱势反弹。",
-    className: "text-red-700 bg-red-50 border-red-200",
+    className:
+      "text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-500/10 dark:border-red-500/30",
   },
 ];
 
@@ -179,7 +182,7 @@ export default function WorkflowPage() {
             </div>
           </div>
           <div className="flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <span>排序规则固定为 0轴上方 &gt; 0轴附近 &gt; 0轴下方；只有最新一根确实发生金叉时才评定质量，未发生金叉时质量为 none。确认条件用于同档排序和提高筛选质量，不代表保证盈利或胜率。</span>
           </div>
           <div className="border-t pt-4 text-xs leading-5 text-muted-foreground">

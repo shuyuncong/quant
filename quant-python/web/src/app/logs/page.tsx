@@ -83,8 +83,8 @@ const LEVEL_BADGE: Record<LogLevel, "default" | "secondary" | "destructive" | "o
 
 const LEVEL_CLASS: Record<LogLevel, string> = {
   info: "text-muted-foreground",
-  warning: "text-amber-600",
-  error: "text-red-600",
+  warning: "text-amber-600 dark:text-amber-400",
+  error: "text-red-600 dark:text-red-400",
 };
 
 const MODULE_LABEL: Record<string, string> = {
@@ -234,9 +234,9 @@ export default function LogsPage() {
   ];
 
   const summaryCards = [
-    { label: "待推送", value: summary.pending, className: "text-amber-600" },
-    { label: "已投递", value: summary.delivered, className: "text-green-600" },
-    { label: "失败", value: summary.failed, className: "text-red-600" },
+    { label: "待推送", value: summary.pending, className: "text-amber-600 dark:text-amber-400" },
+    { label: "已投递", value: summary.delivered, className: "text-green-600 dark:text-green-400" },
+    { label: "失败", value: summary.failed, className: "text-red-600 dark:text-red-400" },
   ];
 
   return (
@@ -310,7 +310,7 @@ export default function LogsPage() {
                   </TableHeader>
                   <TableBody>
                     {logs.map((log) => (
-                      <TableRow key={log.id} className={cn(log.level === "error" && "bg-red-50/60")}>
+                      <TableRow key={log.id} className={cn(log.level === "error" && "bg-red-50/60 dark:bg-red-500/10")}>
                         <TableCell className="font-mono text-xs">#{log.id}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {log.created_at}
@@ -399,7 +399,7 @@ export default function LogsPage() {
                     {records.map((record) => (
                       <TableRow
                         key={`${record.event_id}-${record.channel}`}
-                        className={cn(record.status === "failed" && "bg-red-50/60")}
+                        className={cn(record.status === "failed" && "bg-red-50/60 dark:bg-red-500/10")}
                       >
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {record.created_at}
@@ -523,8 +523,8 @@ export default function LogsPage() {
           {pushSelected?.last_error && (
             <>
               <Separator />
-              <div className="text-xs font-medium text-red-600">失败原因</div>
-              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-red-50/60 p-3 text-xs">
+              <div className="text-xs font-medium text-red-600 dark:text-red-400">失败原因</div>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-red-50/60 p-3 text-xs dark:bg-red-500/10">
                 {pushSelected.last_error}
               </pre>
             </>

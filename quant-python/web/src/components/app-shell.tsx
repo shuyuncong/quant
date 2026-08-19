@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { href: "/results", label: "结果", icon: BarChart3 },
@@ -57,8 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             href={item.href}
             onClick={onNavigate}
             className={cn(
-              "flex h-8 items-center gap-2 rounded px-2 text-[13px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-              active && "bg-[#eef4ff] font-medium text-[#2563eb] hover:bg-[#eef4ff]"
+              "flex h-8 items-center gap-2 rounded px-2 text-[13px] text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              active && "bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent"
             )}
           >
             <Icon className="h-4 w-4" />
@@ -70,13 +71,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f3f6fa] text-zinc-900 md:flex-row">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#e8edf5] bg-white px-3 md:hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground md:flex-row">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground md:hidden">
+        <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           aria-label="打开导航"
           title="打开导航"
-          className="flex size-8 items-center justify-center rounded hover:bg-zinc-100"
+          className="flex size-8 shrink-0 items-center justify-center rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => setMobileNavOpen(true)}
         >
           <Menu className="size-4" />
@@ -84,15 +86,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <span className="min-w-0 truncate text-sm font-semibold">
           {currentPage?.label ?? "缠论信号监控"}
         </span>
+        </div>
+        <ThemeToggle />
       </header>
 
-      <aside className="hidden w-52 shrink-0 flex-col border-r border-[#e8edf5] bg-white md:flex">
-        <div className="flex h-12 items-center gap-2 border-b border-[#e8edf5] px-4">
+      <aside className="hidden w-52 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
+        <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-4">
           <span className="text-sm font-semibold tracking-wide">缠论信号监控</span>
         </div>
         {navigation()}
-        <div className="border-t border-[#e8edf5] p-3 text-[12px] text-zinc-400">
-          量化信号仅供研究，不构成投资建议
+        <div className="flex items-center justify-between gap-2 border-t border-sidebar-border p-2 pl-3">
+          <span className="min-w-0 text-[12px] leading-tight text-muted-foreground">
+            量化信号仅供研究，不构成投资建议
+          </span>
+          <ThemeToggle />
         </div>
       </aside>
 
@@ -106,21 +113,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="relative flex h-full w-64 max-w-[85vw] flex-col border-r border-[#e8edf5] bg-white shadow-xl">
-            <div className="flex h-12 items-center justify-between border-b border-[#e8edf5] px-4">
+          <aside className="relative flex h-full w-64 max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl">
+            <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-4">
               <span className="text-sm font-semibold tracking-wide">缠论信号监控</span>
               <button
                 type="button"
                 aria-label="关闭导航"
                 title="关闭导航"
-                className="flex size-8 items-center justify-center rounded hover:bg-zinc-100"
+                className="flex size-8 items-center justify-center rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 onClick={() => setMobileNavOpen(false)}
               >
                 <X className="size-4" />
               </button>
             </div>
             {navigation(() => setMobileNavOpen(false))}
-            <div className="border-t border-[#e8edf5] p-3 text-[12px] text-zinc-400">
+            <div className="border-t border-sidebar-border p-3 text-[12px] text-muted-foreground">
               量化信号仅供研究，不构成投资建议
             </div>
           </aside>
