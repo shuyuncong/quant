@@ -181,8 +181,8 @@ sudo certbot --nginx -d quant.illsky.com
 
 - **访问地址**：`https://quant.illsky.com`
 - **API 测试**：`curl -s https://quant.illsky.com/ | head`
-- **容器状态**：`docker compose ps`
-- **查看日志**：`docker compose logs -f quant-web`
+- **容器状态**：`docker compose -f docker-compose.oracle.yml ps`
+- **查看日志**：`docker compose -f docker-compose.oracle.yml logs -f quant-web`（在项目子目录内执行）
 
 ## 8. 备份脚本（与现有备份保持一致）
 
