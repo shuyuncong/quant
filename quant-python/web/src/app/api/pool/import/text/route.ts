@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: outcome.error || "解析失败" }, { status: 500 });
   }
   const data = outcome.data as { symbols: Array<{ symbol: string; name: string }>; unknown: string[]; raw_lines: string[] };
-  const pendingId = createPendingImport("text", text, { symbols: data.symbols, unknown: data.unknown });
+  const pendingId = await createPendingImport("text", text, { symbols: data.symbols, unknown: data.unknown });
   return NextResponse.json({
     ok: true,
     pending_id: pendingId,

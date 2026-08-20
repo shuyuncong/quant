@@ -78,7 +78,7 @@ const CONFIG_PAGES = [
 
 const DATA_STORES = [
   { location: "web/data/app.db", content: "Web 配置、自选股票池、模型/推送/定时设置、AI 解读笔记", persist: "必须持久化" },
-  { location: "signal_system/data/signal_monitor.db", content: "指标股票池候选、信号事件、通知队列（outbox）", persist: "必须持久化" },
+  { location: "signal_system/state/signal_monitor.db", content: "指标股票池候选、信号事件、通知队列（outbox）", persist: "必须持久化" },
   { location: "signal_system/output/*.json", content: "分析/扫描结果报告", persist: "必须持久化" },
   { location: "signal_system/cache、logs", content: "行情缓存、运行日志", persist: "可清空，自动重建" },
 ];

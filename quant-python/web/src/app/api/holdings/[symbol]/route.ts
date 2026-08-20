@@ -21,7 +21,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   const normalized = normalizeSymbol(decodeURIComponent(symbol));
-  const holding = upsertHolding({
+  const holding = await upsertHolding({
     symbol: normalized,
     name: String(body.name ?? "").trim(),
     shares: toNumber(body.shares),
@@ -33,6 +33,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  removeHolding(decodeURIComponent(symbol));
+  await removeHolding(decodeURIComponent(symbol));
   return NextResponse.json({ ok: true });
 }

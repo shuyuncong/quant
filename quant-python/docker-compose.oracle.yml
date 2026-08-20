@@ -19,6 +19,9 @@ services:
       # 镜像内 Python 依赖安装在 /opt/venv，勿改为 python3（系统解释器没有依赖）
       PYTHON_BIN: /opt/venv/bin/python
       WEB_DATA_DIR: /app/data
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL must be set}"
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
       TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
       WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
       SIGNAL_WEBHOOK_URL: "${SIGNAL_WEBHOOK_URL:-}"

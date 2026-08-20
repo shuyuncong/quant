@@ -50,7 +50,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ sect
     if (shouldKeepExistingSecret(key, value)) {
       continue; // "****" 表示保留数据库中已有密钥
     }
-    setSetting(key, value);
+    await setSetting(key, value);
   }
   const effective = await getEffectiveConfig(true);
   return NextResponse.json({ ok: true, settings: effective.settings });

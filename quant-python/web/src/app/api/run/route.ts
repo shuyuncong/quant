@@ -41,6 +41,6 @@ export async function POST(request: Request) {
     if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
   }
   if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
-  const jobId = startJob(kind, payload);
+  const jobId = await startJob(kind, payload);
   return NextResponse.json({ ok: true, jobId }, { status: 202 });
 }

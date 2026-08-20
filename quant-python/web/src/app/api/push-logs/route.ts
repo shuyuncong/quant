@@ -6,9 +6,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 200) || 200, 500);
   try {
+    const overrides = await buildOverrides();
     const [logOutcome, summaryOutcome] = await Promise.all([
-      runBridge("outbox-log", { limit, overrides: buildOverrides() }, { timeoutMs: 30_000 }),
-      runBridge("outbox-status", { overrides: buildOverrides() }, { timeoutMs: 30_000 }),
+      runBridge("outbox-log", { limit, overrides }, { timeoutMs: 30_000 }),
+      runBridge("outbox-status", { overrides }, { timeoutMs: 30_000 }),
     ]);
     if (!logOutcome.ok || !logOutcome.data) {
       throw new Error(logOutcome.error || "读取推送日志失败");

@@ -13,17 +13,17 @@ export function resolveApiKey(profile: ModelProfile): string {
   return fromEnv || profile.api_key;
 }
 
-export function enabledModels(): ModelProfile[] {
-  return listModels().filter((model) => model.enabled && resolveApiKey(model));
+export async function enabledModels(): Promise<ModelProfile[]> {
+  return (await listModels()).filter((model) => model.enabled && resolveApiKey(model));
 }
 
-export function pickVisionModel(): ModelProfile | null {
-  return enabledModels().find((model) => model.vision_supported) ?? null;
+export async function pickVisionModel(): Promise<ModelProfile | null> {
+  return (await enabledModels()).find((model) => model.vision_supported) ?? null;
 }
 
 /** 任选一个已启用且有 API Key 的模型用于文本类任务（AI 解读等）。 */
-export function pickChatModel(): ModelProfile | null {
-  return enabledModels()[0] ?? null;
+export async function pickChatModel(): Promise<ModelProfile | null> {
+  return (await enabledModels())[0] ?? null;
 }
 
 function stripJsonFences(text: string): string {
@@ -93,7 +93,7 @@ export async function testProfile(profile: ModelProfile): Promise<{ ok: boolean;
 }
 
 export async function testModelById(id: number): Promise<{ ok: boolean; detail: string }> {
-  const profile = getModel(id);
+  const profile = await getModel(id);
   if (!profile) return { ok: false, detail: "模型不存在" };
   return testProfile(profile);
 }

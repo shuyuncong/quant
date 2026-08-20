@@ -9,14 +9,15 @@ import {
   totalCapitalFromJobPayload,
 } from "../holdings-context";
 
-describe("holdings", () => {
+describe.skipIf(!process.env.SUPABASE_TEST_DATABASE_URL)("holdings", () => {
   beforeEach(() => {
+    process.env.DATABASE_URL = process.env.SUPABASE_TEST_DATABASE_URL;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-holdings-test-"));
     process.env.WEB_DATA_DIR = tempDir;
   });
 
-  it("upserts, computes total when empty, lists and removes", () => {
-    const holding = upsertHolding({
+  it("upserts, computes total when empty, lists and removes", async () => {
+    const holding = await upsertHolding({
       symbol: "600036.SH",
       name: "招商银行",
       shares: 1000,
@@ -24,24 +25,24 @@ describe("holdings", () => {
       total_amount: 0,
     });
     expect(holding.total_amount).toBe(30000);
-    expect(listHoldings()).toHaveLength(1);
+    expect(await listHoldings()).toHaveLength(1);
 
-    upsertHolding({
+    await upsertHolding({
       symbol: "600036.SH",
       name: "招商银行",
       shares: 2000,
       cost_price: 30,
       total_amount: 0,
     });
-    expect(listHoldings()).toHaveLength(1);
-    expect(listHoldings()[0].shares).toBe(2000);
+    expect(await listHoldings()).toHaveLength(1);
+    expect((await listHoldings())[0].shares).toBe(2000);
 
-    removeHolding("600036.SH");
-    expect(listHoldings()).toHaveLength(0);
+    await removeHolding("600036.SH");
+    expect(await listHoldings()).toHaveLength(0);
   });
 
-  it("keeps manually entered total amount", () => {
-    const holding = upsertHolding({
+  it("keeps manually entered total amount", async () => {
+    const holding = await upsertHolding({
       symbol: "000001.SZ",
       name: "平安银行",
       shares: 100,
@@ -51,14 +52,14 @@ describe("holdings", () => {
     expect(holding.total_amount).toBe(1234.5);
   });
 
-  it("reads and writes total capital setting", () => {
-    expect(getTotalCapital()).toBe(0);
-    setTotalCapital(100000);
-    expect(getTotalCapital()).toBe(100000);
-    setTotalCapital(0);
-    expect(getTotalCapital()).toBe(0);
-    expect(() => setTotalCapital(-1)).toThrow();
-    expect(() => setTotalCapital(Number.NaN)).toThrow();
+  it("reads and writes total capital setting", async () => {
+    expect(await getTotalCapital()).toBe(0);
+    await setTotalCapital(100000);
+    expect(await getTotalCapital()).toBe(100000);
+    await setTotalCapital(0);
+    expect(await getTotalCapital()).toBe(0);
+    await expect(setTotalCapital(-1)).rejects.toThrow();
+    await expect(setTotalCapital(Number.NaN)).rejects.toThrow();
   });
 });
 

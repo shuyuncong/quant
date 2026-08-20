@@ -29,6 +29,7 @@ ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
 ENV PYTHON_BIN=/opt/venv/bin/python
 ENV WEB_DATA_DIR=/app/data
+ENV DATABASE_POOL_MAX=5
 
 WORKDIR /app/web
 COPY --from=build /app/web /app/web

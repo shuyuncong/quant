@@ -3,7 +3,7 @@ import { getJob } from "@/lib/db";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const job = getJob(Number(id));
+  const job = await getJob(Number(id));
   if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
   return NextResponse.json({ job });
 }

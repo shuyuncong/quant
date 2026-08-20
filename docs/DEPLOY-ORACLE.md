@@ -13,7 +13,7 @@
 └── quant-python/        # 代码仓库（git clone）
     └── quant-python/    # 仓库根目录内的项目子目录（Dockerfile 位于此处）
         ├── Dockerfile
-        ├── .env                       # 环境变量（可选，也可在网页里配置）
+        ├── .env                       # 服务器环境变量（DATABASE_URL 必填，不提交 Git）
         ├── docker-compose.yml         # 仓库自带的通用版 Compose
         ├── docker-compose.oracle.yml  # 服务器专用 Compose（见第 3 节）
         ├── web/
@@ -47,10 +47,28 @@ git clone https://github.com/shuyuncong/quant.git quant-python
 # 创建数据目录（对应容器内 /app/data、/app/signal_system/output 等）
 mkdir -p data output cache logs
 
-# 环境变量（可选，也可以全部在网页里配置；.env 必须与 compose 文件同目录）
+# 环境变量（DATABASE_URL 必填；.env 必须与 compose 文件同目录）
 cp quant-python/quant-python/web/.env.example quant-python/quant-python/.env
 nano quant-python/quant-python/.env
 ```
+
+Web 业务库已改为 Supabase PostgreSQL。在服务器上生成密码的 URL 编码值（命令不会把原密码写入 shell 历史）：
+
+```bash
+python3 -c 'import getpass,urllib.parse; print(urllib.parse.quote(getpass.getpass("Database password: "), safe=""))'
+```
+
+把输出结果填入 `.env` 的 `<URL编码后的密码>`：
+
+```dotenv
+DATABASE_URL=postgresql://postgres.qutqrxicwrnorvujdrvp:<URL编码后的密码>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+DATABASE_SSL_REJECT_UNAUTHORIZED=true
+DATABASE_POOL_MAX=5
+```
+
+保存后执行 `chmod 600 quant-python/quant-python/.env`。必须使用 Supabase **Session pooler** 的 `5432` 端口，因为调度器需要保持 PostgreSQL 会话锁。
+
+`DATABASE_URL` 必填，另外两个变量使用上面的默认值即可。Oracle 直接连接 Supabase，不要配置本地 relay 专用的 `DATABASE_SSL_SERVERNAME`，也不要把 TLS 校验设为 `false`。当前应用不使用 Supabase Publishable key 或 Secret key，无需把它们放入服务器环境变量。
 
 服务器专用 Compose 已随仓库提供：`quant-python/quant-python/docker-compose.oracle.yml`（与 Dockerfile 同目录，内容如下）：
 
@@ -71,6 +89,9 @@ services:
       # 镜像内 Python 依赖安装在 /opt/venv，勿改为 python3
       PYTHON_BIN: /opt/venv/bin/python
       WEB_DATA_DIR: /app/data
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL must be set}"
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
       TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
       WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
       SIGNAL_WEBHOOK_URL: "${SIGNAL_WEBHOOK_URL:-}"
@@ -99,8 +120,10 @@ services:
 
 ```bash
 cd /opt/docker/quant/quant-python/quant-python
+docker compose -f docker-compose.oracle.yml config --quiet
 docker compose -f docker-compose.oracle.yml up -d --build
 docker compose -f docker-compose.oracle.yml logs -f quant-web
+docker compose -f docker-compose.oracle.yml exec quant-web npm run db:verify
 ```
 
 本服务为本地构建镜像，无需 `docker compose pull`。验证应用是否起来：
@@ -300,19 +323,33 @@ crontab -e
 
 ## 更新代码与迁移数据
 
-更新到最新代码：
+### 从 SQLite 版升级到 Supabase 版
+
+如果 Supabase 已经完成数据迁移（本项目当前就是这种情况），Oracle 只需配置同一个数据库连接串，**不要在 Oracle 上再次执行 `npm run db:migrate`**。升级前先写入服务器 `.env`，再拉取代码和重建容器：
 
 ```bash
 cd /opt/docker/quant/quant-python/quant-python
-git -C /opt/docker/quant/quant-python pull
+
+umask 077
+nano .env
+chmod 600 .env
+
+git -C /opt/docker/quant/quant-python pull --ff-only origin master
+docker compose -f docker-compose.oracle.yml config --quiet
 docker compose -f docker-compose.oracle.yml up -d --build
+docker compose -f docker-compose.oracle.yml exec quant-web npm run db:verify
+docker compose -f docker-compose.oracle.yml ps
+curl -fsS http://127.0.0.1:3111/api/config >/dev/null && echo OK
 ```
 
-首次上线前迁移本机已有数据（SQLite WAL 三个文件一起拷）：
+`db:verify` 应显示 PostgreSQL `17.6`、`transaction_round_trip: true` 和 `public_schema_usage: false`。自动部署脚本后续会继续读取服务器上的这个 `.env`，不需要把数据库密码加入 GitHub Actions Secrets。
+
+Oracle 上旧的 `web/data/app.db` 不再是 Web 运行时数据库，不要把它复制进新容器覆盖 Supabase。如果 Oracle 的旧 `app.db` 含有比 Supabase 更新的数据，应先停止升级并单独核对增量数据；不要直接执行迁移覆盖已有 Supabase 数据。
+
+Python 信号状态和分析结果仍然保存在 Oracle 本地，首次上线时只迁移这些文件：
 
 ```bash
 # 在本机执行
-scp quant-python/web/data/app.db* ubuntu@服务器IP:/opt/docker/quant/data/
 scp -r quant-python/signal_system/output/* ubuntu@服务器IP:/opt/docker/quant/output/
 ```
 

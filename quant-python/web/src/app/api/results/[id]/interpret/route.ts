@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig } from "@/lib/config";
-import { addNote, addOperationLog, getDb } from "@/lib/db";
+import { addNote, addOperationLog, findJobByResultPath } from "@/lib/db";
 import { interpretReport, pickChatModel } from "@/lib/llm";
 import { buildHoldingsContext, holdingsFromJobPayload, totalCapitalFromJobPayload } from "@/lib/holdings-context";
 import { resolvePathWithin } from "@/lib/paths";
@@ -16,9 +16,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
       return NextResponse.json({ error: "结果不存在" }, { status: 404 });
     }
-    const profile = pickChatModel();
+    const profile = await pickChatModel();
     if (!profile) {
-      addOperationLog({
+      await addOperationLog({
         job_id: null,
         level: "warning",
         module: "interpret",
@@ -31,19 +31,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       );
     }
     const report = fs.readFileSync(full, "utf8");
-    const db = getDb();
-    const job = db
-      .prepare("SELECT id, payload FROM jobs WHERE result_path = ? ORDER BY id DESC LIMIT 1")
-      .get(full) as { id: number; payload: string } | undefined;
+    const job = await findJobByResultPath(full);
     const holdings = holdingsFromJobPayload(job?.payload);
     const totalCapital = totalCapitalFromJobPayload(job?.payload);
     const context = buildHoldingsContext(report, holdings, totalCapital);
     const content = await interpretReport(profile, report, context);
-    const noteId = addNote(
+    const noteId = await addNote(
       { job_id: job?.id ?? null, symbol: "", content, model: profile.name, result_path: full },
-      db
     );
-    addOperationLog({
+    await addOperationLog({
       job_id: job?.id ?? null,
       level: "info",
       module: "interpret",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { listPendingImports } from "@/lib/db";
 
 export async function GET() {
-  const pending = listPendingImports().map((item) => ({
+  const pending = (await listPendingImports()).map((item) => ({
     ...item,
     candidates: (() => {
       try {

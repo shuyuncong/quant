@@ -7,7 +7,7 @@ function validSymbol(symbol: string): boolean {
 }
 
 export async function GET() {
-  return NextResponse.json({ pool: listPool() });
+  return NextResponse.json({ pool: await listPool() });
 }
 
 export async function POST(request: Request) {
@@ -31,6 +31,6 @@ export async function POST(request: Request) {
   if (normalized.length === 0) {
     return NextResponse.json({ error: "没有合法的股票代码" }, { status: 422 });
   }
-  const added = addPoolSymbols(normalized);
-  return NextResponse.json({ ok: true, added, pool: listPool() });
+  const added = await addPoolSymbols(normalized);
+  return NextResponse.json({ ok: true, added, pool: await listPool() });
 }

@@ -5,24 +5,25 @@ import path from "node:path";
 import { buildOverrides, maskSettings, validateSection } from "../config";
 import { setSetting } from "../db";
 
-describe("config precedence (env > DB > YAML)", () => {
+describe.skipIf(!process.env.SUPABASE_TEST_DATABASE_URL)("config precedence (env > DB > YAML)", () => {
   beforeEach(() => {
+    process.env.DATABASE_URL = process.env.SUPABASE_TEST_DATABASE_URL;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-config-test-"));
     process.env.WEB_DATA_DIR = tempDir;
   });
 
-  it("sends env marker when env var exists for a secret", () => {
+  it("sends env marker when env var exists for a secret", async () => {
     process.env.TUSHARE_TOKEN = "env-token";
-    setSetting("market_data.tushare_token", "db-token");
-    const overrides = buildOverrides();
+    await setSetting("market_data.tushare_token", "db-token");
+    const overrides = await buildOverrides();
     expect((overrides.market_data as Record<string, unknown>).tushare_token).toEqual({ __env__: "TUSHARE_TOKEN" });
     delete process.env.TUSHARE_TOKEN;
   });
 
-  it("uses DB value when env var is absent", () => {
+  it("uses DB value when env var is absent", async () => {
     delete process.env.TUSHARE_TOKEN;
-    setSetting("market_data.tushare_token", "db-token");
-    const overrides = buildOverrides();
+    await setSetting("market_data.tushare_token", "db-token");
+    const overrides = await buildOverrides();
     expect((overrides.market_data as Record<string, unknown>).tushare_token).toBe("db-token");
   });
 

@@ -65,6 +65,9 @@ quant-python/signal_system/data/*.db
 quant-python/signal_system/data/*.db-*
 quant-python/signal_system/**/__pycache__/
 
+# Server-only Docker Compose environment
+quant-python/.env
+
 
 ### web dev logs & ai workflow docs ###
 docs/ai-dev-workflow/

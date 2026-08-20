@@ -9,12 +9,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
   } catch {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
-  updatePoolSymbol(decodeURIComponent(symbol), String(body.name ?? ""));
+  await updatePoolSymbol(decodeURIComponent(symbol), String(body.name ?? ""));
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  removePoolSymbol(decodeURIComponent(symbol));
+  await removePoolSymbol(decodeURIComponent(symbol));
   return NextResponse.json({ ok: true });
 }

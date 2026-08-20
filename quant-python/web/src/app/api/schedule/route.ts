@@ -7,7 +7,7 @@ function validateTime(value: unknown): boolean {
 }
 
 export async function GET() {
-  ensureScheduler();
+  await ensureScheduler();
   const status = await getSchedulerStatus();
   return NextResponse.json(status);
 }
@@ -57,9 +57,9 @@ export async function PUT(request: Request) {
     }
     if (typeof row.trading_days_only === "boolean") input.trading_days_only = row.trading_days_only;
     if (typeof row.enabled === "boolean") input.enabled = row.enabled;
-    upsertScheduleRow(kind, input);
+    await upsertScheduleRow(kind, input);
   }
-  ensureScheduler();
+  await ensureScheduler();
   const status = await getSchedulerStatus();
   return NextResponse.json({ ok: true, ...status });
 }

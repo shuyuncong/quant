@@ -12,7 +12,7 @@ function toNumber(value: unknown): number {
 }
 
 export async function GET() {
-  return NextResponse.json({ holdings: listHoldings(), total_capital: getTotalCapital() });
+  return NextResponse.json({ holdings: await listHoldings(), total_capital: await getTotalCapital() });
 }
 
 export async function POST(request: Request) {
@@ -37,12 +37,12 @@ export async function POST(request: Request) {
   if (shares < 0 || costPrice < 0) {
     return NextResponse.json({ error: "持仓份额/持仓价不能为负数" }, { status: 422 });
   }
-  const holding = upsertHolding({
+  const holding = await upsertHolding({
     symbol,
     name: String(body.name ?? "").trim(),
     shares,
     cost_price: costPrice,
     total_amount: toNumber(body.total_amount),
   });
-  return NextResponse.json({ ok: true, holding, holdings: listHoldings() });
+  return NextResponse.json({ ok: true, holding, holdings: await listHoldings() });
 }

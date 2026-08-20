@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getTotalCapital, setTotalCapital } from "@/lib/db";
 
 export async function GET() {
-  return NextResponse.json({ total_capital: getTotalCapital() });
+  return NextResponse.json({ total_capital: await getTotalCapital() });
 }
 
 export async function POST(request: Request) {
@@ -16,6 +16,6 @@ export async function POST(request: Request) {
   if (!Number.isFinite(value) || value < 0) {
     return NextResponse.json({ error: "账户总资金必须是合法的非负数字" }, { status: 422 });
   }
-  setTotalCapital(value);
-  return NextResponse.json({ ok: true, total_capital: getTotalCapital() });
+  await setTotalCapital(value);
+  return NextResponse.json({ ok: true, total_capital: await getTotalCapital() });
 }

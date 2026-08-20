@@ -8,8 +8,10 @@ import {
   getScheduleRows,
   listJobs,
   listJobsByKindSince,
+  tryAcquireSchedulerLeadership,
 } from "./db";
 import type { ScheduleRow } from "./types";
+import type { PoolClient } from "pg";
 import { resumeInterpretationJobs, startJob } from "./jobs";
 import { signalSystemDir } from "./paths";
 import { nowIso, shanghaiDate, shanghaiHhmm, shanghaiNow } from "./time";
@@ -67,8 +69,8 @@ let lastFixedMonitorRun = "";
 let lastOutboxRunAt = 0;
 let outboxRunning = false;
 
-function fixedMonitorAlreadyScheduled(today: string, fixed: string): boolean {
-  return listJobsByKindSince("monitor-cycle", today).some((job) =>
+async function fixedMonitorAlreadyScheduled(today: string, fixed: string): Promise<boolean> {
+  return (await listJobsByKindSince("monitor-cycle", today)).some((job) =>
     job.created_at.slice(0, 16) === `${today} ${fixed}`
   );
 }
@@ -77,8 +79,8 @@ function resolveReportPath(resultPath: string): string {
   return path.isAbsolute(resultPath) ? resultPath : path.resolve(signalSystemDir, resultPath);
 }
 
-function dailyScanState(today: string): "none" | "running" | "incomplete" | "complete" {
-  const jobs = listJobsByKindSince("daily-scan", today);
+async function dailyScanState(today: string): Promise<"none" | "running" | "incomplete" | "complete"> {
+  const jobs = await listJobsByKindSince("daily-scan", today);
   if (jobs.some((job) => job.status === "pending" || job.status === "running")) return "running";
   const latestSuccess = jobs.find((job) => job.status === "success");
   if (!latestSuccess) return jobs.length ? "incomplete" : "none";
@@ -97,17 +99,23 @@ export function dailyReportState(resultPath: string): "incomplete" | "complete" 
   }
 }
 
-function dispatchOutboxIfDue(): void {
+async function dispatchOutboxIfDue(): Promise<void> {
   if (outboxRunning || Date.now() - lastOutboxRunAt < OUTBOX_TICK_MS) return;
   outboxRunning = true;
   lastOutboxRunAt = Date.now();
-  void runBridge(
-    "dispatch-outbox",
-    { overrides: buildOverrides() },
-    { timeoutMs: 120_000 }
-  ).finally(() => {
+  try {
+    const overrides = await buildOverrides();
+    void runBridge(
+      "dispatch-outbox",
+      { overrides },
+      { timeoutMs: 120_000 }
+    ).finally(() => {
+      outboxRunning = false;
+    });
+  } catch (error) {
     outboxRunning = false;
-  });
+    throw error;
+  }
 }
 
 export async function estimateNextRun(
@@ -167,18 +175,18 @@ export async function estimateNextRun(
 
 async function tick(): Promise<void> {
   try {
-    dispatchOutboxIfDue();
+    await dispatchOutboxIfDue();
     const calendar = await getCalendar();
     const now = shanghaiNow();
     const today = shanghaiDate(now);
     const hhmm = shanghaiHhmm(now);
-    const rows = getScheduleRows();
+    const rows = await getScheduleRows();
     for (const row of rows) {
       if (!row.enabled) continue;
       if (row.kind === "daily_scan") {
         const dayOk = !row.trading_days_only || calendar.is_trading_day;
         if (!dayOk) continue;
-        const state = dailyScanState(today);
+        const state = await dailyScanState(today);
         if (
           hhmm >= row.time &&
           state !== "running" &&
@@ -186,7 +194,7 @@ async function tick(): Promise<void> {
           Date.now() - lastDailyStartAt >= DAILY_BATCH_COOLDOWN_MS
         ) {
           lastDailyStartAt = Date.now();
-          startJob("daily-scan", { notify: true });
+          await startJob("daily-scan", { notify: true });
         }
       } else if (row.kind === "monitor_cycle") {
         if (!calendar.is_trading_session) continue;
@@ -198,15 +206,15 @@ async function tick(): Promise<void> {
           for (const fixed of fixedTimes) {
             if (fixed === hhmm) {
               const key = `${today}:${fixed}`;
-              if (lastFixedMonitorRun === key || fixedMonitorAlreadyScheduled(today, fixed)) continue;
-              const running = listJobs(20).some(
+              if (lastFixedMonitorRun === key || await fixedMonitorAlreadyScheduled(today, fixed)) continue;
+              const running = (await listJobs(20)).some(
                 (job) =>
                   ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) &&
                   job.status === "running"
               );
               if (!running) {
                 lastFixedMonitorRun = key;
-                startJob("monitor-cycle", { notify: true });
+                await startJob("monitor-cycle", { notify: true });
               }
             }
           }
@@ -214,12 +222,12 @@ async function tick(): Promise<void> {
           // 间隔模式：交易时段内按 interval_seconds 周期执行
           const elapsed = Date.now() - lastMonitorRunAt;
           if (elapsed >= row.interval_seconds * 1000) {
-            const running = listJobs(20).some(
+            const running = (await listJobs(20)).some(
               (job) => ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) && job.status === "running"
             );
             if (!running) {
               lastMonitorRunAt = Date.now();
-              startJob("monitor-cycle", { notify: true });
+              await startJob("monitor-cycle", { notify: true });
             }
           }
         }
@@ -238,7 +246,7 @@ export interface SchedulerStatus {
 }
 
 export async function getSchedulerStatus(): Promise<SchedulerStatus> {
-  const rows = getScheduleRows();
+  const rows = await getScheduleRows();
   const calendar = await getCalendar();
   const nextRuns: Record<string, string | null> = {};
   for (const row of rows) {
@@ -247,21 +255,45 @@ export async function getSchedulerStatus(): Promise<SchedulerStatus> {
   return { rows, calendar, now: nowIso(), next_runs: nextRuns };
 }
 
-export function ensureScheduler(): void {
-  const globalState = globalThis as typeof globalThis & { __webSchedulerStarted?: boolean };
+export async function ensureScheduler(): Promise<void> {
+  const globalState = globalThis as typeof globalThis & {
+    __webSchedulerStarted?: boolean;
+    __webSchedulerLeader?: PoolClient;
+    __webSchedulerInterval?: ReturnType<typeof setInterval>;
+    __webSchedulerRetry?: ReturnType<typeof setTimeout>;
+  };
   if (globalState.__webSchedulerStarted) return;
+  const leader = await tryAcquireSchedulerLeadership();
+  if (!leader) {
+    globalState.__webSchedulerRetry ??= setTimeout(() => {
+      globalState.__webSchedulerRetry = undefined;
+      void ensureScheduler();
+    }, 15_000);
+    return;
+  }
+  globalState.__webSchedulerLeader = leader;
   globalState.__webSchedulerStarted = true;
-  const interruptedJobs = failInterruptedJobs();
+  leader.once("error", () => {
+    if (globalState.__webSchedulerInterval) clearInterval(globalState.__webSchedulerInterval);
+    globalState.__webSchedulerInterval = undefined;
+    globalState.__webSchedulerLeader = undefined;
+    globalState.__webSchedulerStarted = false;
+    globalState.__webSchedulerRetry ??= setTimeout(() => {
+      globalState.__webSchedulerRetry = undefined;
+      void ensureScheduler();
+    }, 5_000);
+  });
+  const interruptedJobs = await failInterruptedJobs();
   if (interruptedJobs > 0) {
-    addOperationLog({
+    await addOperationLog({
       level: "warning",
       module: "scheduler",
       message: `服务重启后关闭 ${interruptedJobs} 个中断任务`,
       detail: "自动日扫和盘中监控将在下一个可用调度时点补跑",
     });
   }
-  resumeInterpretationJobs();
-  setInterval(() => {
+  await resumeInterpretationJobs();
+  globalState.__webSchedulerInterval = setInterval(() => {
     void tick();
   }, TICK_MS);
   void tick();

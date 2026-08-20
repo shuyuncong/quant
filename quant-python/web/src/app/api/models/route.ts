@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createModel, listModels } from "@/lib/db";
 
 export async function GET() {
-  const models = listModels().map((model) => ({
+  const models = (await listModels()).map((model) => ({
     ...model,
     api_key: model.api_key ? "****" : "",
     env_present: Boolean(model.env_key && process.env[model.env_key]),
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   if (proxy && !/^https?:\/\//.test(proxy)) {
     return NextResponse.json({ error: "代理地址必须以 http(s):// 开头" }, { status: 422 });
   }
-  const id = createModel({
+  const id = await createModel({
     name,
     base_url: baseUrl,
     model,

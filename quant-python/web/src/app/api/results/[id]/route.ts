@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { getEffectiveConfig } from "@/lib/config";
-import { getDb, listNotesByJob } from "@/lib/db";
+import { findJobByResultPath, listNotesByJob } from "@/lib/db";
 import { resolvePathWithin } from "@/lib/paths";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,11 +15,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "结果不存在" }, { status: 404 });
     }
     const report = JSON.parse(fs.readFileSync(full, "utf8")) as Record<string, unknown>;
-    const db = getDb();
-    const job = db
-      .prepare("SELECT id FROM jobs WHERE result_path = ? ORDER BY id DESC LIMIT 1")
-      .get(full) as { id: number } | undefined;
-    const notes = job ? listNotesByJob(job.id, db) : [];
+    const job = await findJobByResultPath(full);
+    const notes = job ? await listNotesByJob(job.id) : [];
     return NextResponse.json({ report, job_id: job?.id ?? null, notes });
   } catch (error) {
     return NextResponse.json(

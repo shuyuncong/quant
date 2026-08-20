@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const level =
     levelParam === "info" || levelParam === "warning" || levelParam === "error" ? levelParam : undefined;
   try {
-    const logs = listOperationLogs(limit, level);
+    const logs = await listOperationLogs(limit, level);
     return NextResponse.json({ logs });
   } catch (error) {
     return NextResponse.json(
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
 export async function DELETE() {
   try {
-    const cleared = clearOperationLogs();
+    const cleared = await clearOperationLogs();
     return NextResponse.json({ ok: true, cleared });
   } catch (error) {
     return NextResponse.json(

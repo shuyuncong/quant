@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { addPoolSymbols, getPendingImport, setPendingStatus } from "@/lib/db";
+import { confirmPendingImport, getPendingImport } from "@/lib/db";
 import { normalizeSymbol } from "@/lib/symbols";
 
 export async function POST(request: Request) {
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   const pendingId = Number(body.pending_id);
-  const pending = getPendingImport(pendingId);
+  const pending = await getPendingImport(pendingId);
   if (!pending) {
     return NextResponse.json({ error: "待确认导入不存在" }, { status: 404 });
   }
@@ -31,7 +31,9 @@ export async function POST(request: Request) {
   if (valid.length === 0) {
     return NextResponse.json({ error: "没有合法的股票代码可确认" }, { status: 422 });
   }
-  const added = addPoolSymbols(valid.map((item) => ({ ...item, source: pending.kind === "image" ? "image" : "text" })));
-  setPendingStatus(pendingId, "confirmed");
+  const added = await confirmPendingImport(
+    pendingId,
+    valid.map((item) => ({ ...item, source: pending.kind === "image" ? "image" : "text" })),
+  );
   return NextResponse.json({ ok: true, added });
 }

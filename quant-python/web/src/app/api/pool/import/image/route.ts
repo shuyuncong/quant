@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   if (dataUrl.length > MAX_DATA_URL_LENGTH) {
     return NextResponse.json({ error: "图片过大（最大约 20MB）" }, { status: 422 });
   }
-  const profile = pickVisionModel();
+  const profile = await pickVisionModel();
   if (!profile) {
     return NextResponse.json(
       { error: "未配置可用的视觉模型（需启用并配置 API Key），请改用文本导入" },
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     if (candidates.length === 0) {
       return NextResponse.json({ error: "模型未能识别出股票代码，请尝试文本导入" }, { status: 422 });
     }
-    const pendingId = createPendingImport("image", dataUrl.slice(0, 500), { symbols: candidates });
+    const pendingId = await createPendingImport("image", dataUrl.slice(0, 500), { symbols: candidates });
     return NextResponse.json({ ok: true, pending_id: pendingId, candidates, model: profile.name });
   } catch (error) {
     return NextResponse.json(

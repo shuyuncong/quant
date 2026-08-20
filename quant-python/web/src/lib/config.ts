@@ -61,8 +61,8 @@ export function deepDelete(obj: Record<string, unknown>, dotPath: string): void 
 }
 
 /** Build bridge overrides from DB settings. Secret fields prefer the matching environment variable. */
-export function buildOverrides(): Record<string, unknown> {
-  const settings = getAllSettings();
+export async function buildOverrides(providedSettings?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const settings = providedSettings ?? (await getAllSettings());
   const overrides: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(settings)) {
     // holdings.* 是 Web 端持仓数据（总资金等），不是引擎配置，不随任务下发。
@@ -101,13 +101,13 @@ export interface EffectiveConfig {
 let cache: { at: number; version: string; result: EffectiveConfig } | null = null;
 
 export async function getEffectiveConfig(force = false): Promise<EffectiveConfig> {
-  const settings = getAllSettings();
+  const settings = await getAllSettings();
   const version = JSON.stringify(settings);
   const now = Date.now();
   if (!force && cache && now - cache.at < 10_000 && cache.version === version) {
     return cache.result;
   }
-  const outcome = await runBridge("config", { overrides: buildOverrides() }, { timeoutMs: 30_000 });
+  const outcome = await runBridge("config", { overrides: await buildOverrides(settings) }, { timeoutMs: 30_000 });
   if (!outcome.ok || !outcome.data) {
     throw new Error(outcome.error || "获取有效配置失败");
   }
@@ -128,17 +128,17 @@ export async function getEffectiveConfig(force = false): Promise<EffectiveConfig
   return result;
 }
 
-export function saveSettings(values: Record<string, unknown>): void {
+export async function saveSettings(values: Record<string, unknown>): Promise<void> {
   for (const [key, value] of Object.entries(values)) {
-    setSetting(key, value);
+    await setSetting(key, value);
   }
 }
 
-export function clearSetting(key: string): void {
-  deleteSetting(key);
+export async function clearSetting(key: string): Promise<void> {
+  await deleteSetting(key);
 }
 
-export function getSettingValue(key: string): unknown {
+export async function getSettingValue(key: string): Promise<unknown> {
   return getSetting(key);
 }
 

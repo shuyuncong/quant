@@ -68,10 +68,10 @@ async function autoInterpret(
   resultPath: string,
   notificationAt: string
 ): Promise<void> {
-  const existingNote = findNoteByJobAndResult(parentJobId, resultPath);
-  const profile = existingNote ? null : pickChatModel();
+  const existingNote = await findNoteByJobAndResult(parentJobId, resultPath);
+  const profile = existingNote ? null : await pickChatModel();
   if (!existingNote && !profile) {
-    addOperationLog({
+    await addOperationLog({
       job_id: interpretationJobId,
       level: "warning",
       module: "auto-interpret",
@@ -85,13 +85,13 @@ async function autoInterpret(
     if (!content) {
       const full = resolveReportPath(resultPath);
       const reportText = fs.readFileSync(full, "utf8");
-      const parentPayload = getJob(parentJobId)?.payload;
+      const parentPayload = (await getJob(parentJobId))?.payload;
       const holdings = holdingsFromJobPayload(parentPayload);
       const totalCapital = totalCapitalFromJobPayload(parentPayload);
       const context = buildHoldingsContext(reportText, holdings, totalCapital);
       content = await interpretReport(profile!, reportText, context);
-      noteId = addNote({ job_id: parentJobId, result_path: resultPath, content, model: profile!.name });
-      addOperationLog({
+      noteId = await addNote({ job_id: parentJobId, result_path: resultPath, content, model: profile!.name });
+      await addOperationLog({
         job_id: interpretationJobId,
         level: "info",
         module: "auto-interpret",
@@ -106,12 +106,12 @@ async function autoInterpret(
         content,
         report_path: resultPath,
         confirmed_at: notificationAt,
-        overrides: buildOverrides(),
+        overrides: await buildOverrides(),
       },
       { timeoutMs: 120_000 }
     );
     if (!pushOutcome.ok) {
-      addOperationLog({
+      await addOperationLog({
         job_id: interpretationJobId,
         level: "warning",
         module: "auto-interpret",
@@ -121,7 +121,7 @@ async function autoInterpret(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    addOperationLog({
+    await addOperationLog({
       job_id: interpretationJobId,
       level: "error",
       module: "auto-interpret",
@@ -136,7 +136,7 @@ async function autoInterpret(
 async function executeInterpretationJob(jobId: number, payload: InterpretationPayload): Promise<void> {
   if (activeInterpretationJobs.has(jobId)) return;
   activeInterpretationJobs.add(jobId);
-  updateJob(jobId, { status: "running", started_at: nowIso(), error: null, finished_at: null });
+  await updateJob(jobId, { status: "running", started_at: nowIso(), error: null, finished_at: null });
   try {
     await autoInterpret(
       jobId,
@@ -144,13 +144,13 @@ async function executeInterpretationJob(jobId: number, payload: InterpretationPa
       payload.result_path,
       payload.notification_at
     );
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "success",
       result_path: payload.result_path,
       finished_at: nowIso(),
     });
   } catch (error) {
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "failed",
       error: error instanceof Error ? error.message : String(error),
       finished_at: nowIso(),
@@ -160,21 +160,21 @@ async function executeInterpretationJob(jobId: number, payload: InterpretationPa
   }
 }
 
-function createInterpretationJob(parentJobId: number, resultPath: string): {
+async function createInterpretationJob(parentJobId: number, resultPath: string): Promise<{
   jobId: number;
   payload: InterpretationPayload;
-} {
+}> {
   const payload: InterpretationPayload = {
     parent_job_id: parentJobId,
     result_path: resultPath,
     notification_at: nowIso().replace(" ", "T"),
   };
-  const jobId = createJob("interpret-report", payload);
+  const jobId = await createJob("interpret-report", payload);
   return { jobId, payload };
 }
 
-export function resumeInterpretationJobs(): void {
-  for (const job of listRecoverableJobs("interpret-report")) {
+export async function resumeInterpretationJobs(): Promise<void> {
+  for (const job of await listRecoverableJobs("interpret-report")) {
     try {
       const raw = JSON.parse(job.payload) as Partial<InterpretationPayload>;
       if (!raw.parent_job_id || !raw.result_path) throw new Error("解读任务载荷不完整");
@@ -184,7 +184,7 @@ export function resumeInterpretationJobs(): void {
         notification_at: String(raw.notification_at || job.created_at.replace(" ", "T")),
       });
     } catch (error) {
-      updateJob(job.id, {
+      await updateJob(job.id, {
         status: "failed",
         error: error instanceof Error ? error.message : String(error),
         finished_at: nowIso(),
@@ -238,15 +238,15 @@ function mergeOverrides(
 }
 
 /** Create a job row and run the bridge command in the background. Returns the job id immediately. */
-export function startJob(kind: JobKind, payload: Record<string, unknown>): number {
+export async function startJob(kind: JobKind, payload: Record<string, unknown>): Promise<number> {
   if (PORTFOLIO_KINDS.includes(kind)) {
     // 报告任务统一携带用户持仓与账户总资金，供引擎报告和 AI 解读（含调度器触发的任务）参考。
-    payload.holdings = listHoldings();
-    payload.total_capital = getTotalCapital();
+    payload.holdings = await listHoldings();
+    payload.total_capital = await getTotalCapital();
   }
-  const jobId = createJob(kind, payload);
-  updateJob(jobId, { status: "running", started_at: nowIso() });
-  addOperationLog({
+  const jobId = await createJob(kind, payload);
+  await updateJob(jobId, { status: "running", started_at: nowIso() });
+  await addOperationLog({
     job_id: jobId,
     level: "info",
     module: "job",
@@ -256,11 +256,11 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
   const { overrides: extraOverrides, ...rest } = payload;
   const bridgePayload = {
     ...rest,
-    overrides: mergeOverrides(buildOverrides(), extraOverrides as Record<string, unknown> | undefined),
+    overrides: mergeOverrides(await buildOverrides(), extraOverrides as Record<string, unknown> | undefined),
   };
   const timeoutMs = kind === "test-notify" ? 60_000 : kind === "dispatch-outbox" ? 120_000 : 0;
   runBridge(KIND_TO_COMMAND[kind], bridgePayload, { timeoutMs })
-    .then((outcome) => {
+    .then(async (outcome) => {
       if (outcome.ok) {
         const report = (outcome.data as { report?: Record<string, unknown> } | undefined)?.report;
         const resultPath = typeof report?.output_file === "string" ? report.output_file : null;
@@ -268,14 +268,14 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
         // exit between these writes can then be recovered by the scheduler.
         const interpretation =
           resultPath && shouldAutoInterpret(kind, report)
-            ? createInterpretationJob(jobId, resultPath)
+            ? await createInterpretationJob(jobId, resultPath)
             : null;
-        updateJob(jobId, {
+        await updateJob(jobId, {
           status: "success",
           result_path: resultPath,
           finished_at: nowIso(),
         });
-        addOperationLog({
+        await addOperationLog({
           job_id: jobId,
           level: "info",
           module: "job",
@@ -286,8 +286,8 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
           void executeInterpretationJob(interpretation.jobId, interpretation.payload);
         }
       } else {
-        updateJob(jobId, { status: "failed", error: outcome.error || "执行失败", finished_at: nowIso() });
-        addOperationLog({
+        await updateJob(jobId, { status: "failed", error: outcome.error || "执行失败", finished_at: nowIso() });
+        await addOperationLog({
           job_id: jobId,
           level: "error",
           module: "job",
@@ -296,9 +296,9 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
         });
       }
     })
-    .catch((error) => {
-      updateJob(jobId, { status: "failed", error: String(error), finished_at: nowIso() });
-      addOperationLog({
+    .catch(async (error) => {
+      await updateJob(jobId, { status: "failed", error: String(error), finished_at: nowIso() });
+      await addOperationLog({
         job_id: jobId,
         level: "error",
         module: "job",
@@ -309,7 +309,7 @@ export function startJob(kind: JobKind, payload: Record<string, unknown>): numbe
   return jobId;
 }
 
-export function getJobById(id: number) {
+export async function getJobById(id: number) {
   return getJob(id);
 }
 
@@ -317,7 +317,7 @@ export async function runSynchronously(kind: JobKind, payload: Record<string, un
   const { overrides: extraOverrides, ...rest } = payload;
   const bridgePayload = {
     ...rest,
-    overrides: mergeOverrides(buildOverrides(), extraOverrides as Record<string, unknown> | undefined),
+    overrides: mergeOverrides(await buildOverrides(), extraOverrides as Record<string, unknown> | undefined),
   };
   return runBridge(KIND_TO_COMMAND[kind], bridgePayload, { timeoutMs });
 }
