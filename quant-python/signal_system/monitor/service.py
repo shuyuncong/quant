@@ -33,7 +33,7 @@ class SignalMonitor:
         self.market = MarketDataClient(config)
         self.analyzer = MultiTimeframeAnalyzer(config)
         runtime = config.get("runtime", {})
-        database_path = runtime.get("database_path", "./data/signal_monitor.db")
+        database_path = runtime.get("database_path", "./state/signal_monitor.db")
         self.store = SignalStore(database_path)
         self.notifier = SignalNotifier(config)
         self.output_dir = Path(runtime.get("output_dir", "./output"))

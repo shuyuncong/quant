@@ -44,7 +44,7 @@ python main.py
 
 主要输入：
 - `config/config.yaml`
-- `data/positions.yaml`，如果你要让系统检查已有持仓
+- `state/positions.yaml`，如果你要让系统检查已有持仓
 
 主要输出：
 - 控制台摘要

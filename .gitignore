@@ -61,6 +61,7 @@ quant-python/signal_system/cache_acceptance/
 quant-python/signal_system/cache/
 quant-python/signal_system/logs/
 quant-python/signal_system/output/
+quant-python/signal_system/state/
 quant-python/signal_system/data/*.db
 quant-python/signal_system/data/*.db-*
 quant-python/signal_system/**/__pycache__/

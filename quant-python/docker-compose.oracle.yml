@@ -33,8 +33,9 @@ services:
     volumes:
       # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
       - /opt/docker/quant/data:/app/data
-      # Python 信号库（候选池、事件去重、outbox、全市场初始化进度）
-      - /opt/docker/quant/data:/app/signal_system/data
+      # Python 信号库状态（signal_monitor.db：候选池、事件去重、outbox、全市场初始化进度）。
+      # 必须挂到独立的 state/ 目录：signal_system/data 是 Python 源码包目录，不能被挂载遮蔽。
+      - /opt/docker/quant/state:/app/signal_system/state
       # 分析/扫描结果 JSON
       - /opt/docker/quant/output:/app/signal_system/output
       # 行情缓存与日志（可清空，丢失后会自动重建）

@@ -167,8 +167,8 @@ python -m compileall -q .
 ## 运行数据
 
 - `cache/`：行情缓存和日线历史。
-- `data/signal_monitor.db`：事件、outbox、候选池和任务状态。
+- `state/signal_monitor.db`：事件、outbox、候选池和任务状态。
 - `output/`：每次分析/扫描的 JSON 报告。
 - `logs/signal_monitor.log`：运行日志。
 
-这些目录已加入 `.gitignore`。删除缓存可强制重拉行情；删除数据库会丢失去重、候选池和调度状态，可能导致旧信号再次被视为新事件。
+这些目录已加入 `.gitignore`。`state/` 是信号引擎运行时状态目录（SQLite 数据库），Docker 部署时挂载独立命名卷持久化；`data/` 目录只存放 Python 源码包、禁止被卷覆盖。删除缓存可强制重拉行情；删除数据库会丢失去重、候选池和调度状态，可能导致旧信号再次被视为新事件。

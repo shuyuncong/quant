@@ -26,8 +26,10 @@ services:
     volumes:
       # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
       - quant-data:/app/data
-      # Python 信号库（候选池、事件去重、outbox、全市场初始化进度）
-      - quant-data:/app/signal_system/data
+      # Python 信号库状态（signal_monitor.db：候选池、事件去重、outbox、全市场初始化进度）。
+      # 必须挂在独立的 state/ 目录：signal_system/data 是 Python 源码包目录，不能挂卷覆盖，
+      # 否则镜像内的 market_data.py 等模块会被已有卷内容遮蔽导致导入失败。
+      - quant-signal-data:/app/signal_system/state
       # 分析/扫描结果 JSON
       - quant-output:/app/signal_system/output
       # 行情缓存与日志（可清空，丢失后会自动重建）
@@ -36,6 +38,7 @@ services:
 
 volumes:
   quant-data:
+  quant-signal-data:
   quant-output:
   quant-cache:
   quant-logs:

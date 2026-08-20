@@ -219,7 +219,7 @@ notification:
   push_ai_analysis: true
 
 runtime:
-  database_path: "./data/signal_monitor.db"
+  database_path: "./state/signal_monitor.db"
   output_dir: "./output"
   schedule:
     daily_scan_time: "04:00"
@@ -230,4 +230,4 @@ runtime:
   database:
     enabled: false
     type: "sqlite"
-    path: "./data/signals.db"
+    path: "./state/signals.db"

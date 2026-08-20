@@ -219,7 +219,7 @@ DEFAULT_CONFIG = {
         "database": {
             "enabled": False,
             "type": "sqlite",
-            "path": "./data/signals.db",
+            "path": "./state/signals.db",
         },
     },
 }
@@ -316,7 +316,7 @@ def save_signal_history(scan_result, output_dir='./output'):
         logging.error(f"保存信号历史失败: {e}")
 
 
-def load_positions(positions_file='./data/positions.yaml'):
+def load_positions(positions_file='./state/positions.yaml'):
     """
     加载持仓数据
 
@@ -338,7 +338,7 @@ def load_positions(positions_file='./data/positions.yaml'):
         return []
 
 
-def save_positions(positions, positions_file='./data/positions.yaml'):
+def save_positions(positions, positions_file='./state/positions.yaml'):
     """
     保存持仓数据
 

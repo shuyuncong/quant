@@ -12,3 +12,6 @@ signal_system/.ruff_cache
 signal_system/cache
 signal_system/logs
 signal_system/output
+signal_system/state
+signal_system/data/*.db*
+signal_system/data/*.yaml

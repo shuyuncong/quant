@@ -9,7 +9,19 @@
 
 Web 进程通过子进程调用 `signal_system/web_bridge.py`，因此部署机需要同时具备 Node.js 和 Python。定时任务由 Web 进程内部调度，**一个常驻进程即可跑完整系统**。
 
-> 由于依赖 Python 子进程 + SQLite + 常驻调度器，**无法直接部署到 Vercel / Cloudflare Pages / Netlify 等 Serverless 平台**，建议自托管（Docker 或裸机）。
+> 由于依赖 Python 子进程 + 本地信号 SQLite + 常驻调度器，**无法直接部署到 Vercel / Cloudflare Pages / Netlify 等 Serverless 平台**，建议自托管（Docker 或裸机）。Web 业务数据已经迁移到 Supabase PostgreSQL。
+
+## Supabase 环境变量
+
+Web 控制台现在必须通过 `DATABASE_URL` 连接 Supabase，`DATABASE_URL` 没有默认值。Docker/Oracle 部署时把它放在 Compose 同目录的 `.env`，不要提交到 Git：
+
+```dotenv
+DATABASE_URL=postgresql://postgres.qutqrxicwrnorvujdrvp:<URL编码后的密码>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+DATABASE_SSL_REJECT_UNAUTHORIZED=true
+DATABASE_POOL_MAX=5
+```
+
+`DATABASE_SSL_REJECT_UNAUTHORIZED` 默认是 `true`，`DATABASE_POOL_MAX` 默认是 `5`。Supabase Publishable/Secret key 不需要配置；本地 relay 的特殊 SSL 配置只适用于开发机，不适用于 Oracle。
 
 ## 方式一：Docker 部署（推荐）
 
@@ -19,9 +31,10 @@ Web 进程通过子进程调用 `signal_system/web_bridge.py`，因此部署机�
 # 1. 拉取代码
 git clone https://github.com/shuyuncong/quant.git quant && cd quant/quant-python
 
-# 2.（可选）写环境变量，也可以在 Web 页面里配置
+# 2. 配置 Supabase 连接和可选通知变量（DATABASE_URL 必填）
 cp web/.env.example .env
-# 编辑 .env 填入 TUSHARE_TOKEN、SIGNAL_BARK_DEVICE_KEY 等
+# 编辑 .env 填入 DATABASE_URL，以及需要的 TUSHARE_TOKEN、SIGNAL_BARK_DEVICE_KEY 等
+chmod 600 .env
 
 # 3. 构建并启动（首次构建需要几分钟）
 docker compose up -d --build
@@ -39,15 +52,19 @@ docker compose down
 
 | 卷 | 内容 | 说明 |
 | --- | --- | --- |
-| `quant-data` | Web 数据库（模型/策略/推送/定时/股票池配置） | 必须保留 |
+| `quant-data` | Web 运行时文件和回滚快照（业务数据库在 Supabase） | 建议保留 |
+| `quant-signal-data` | Python 信号引擎状态库（`signal_system/state/signal_monitor.db`：候选池/事件/outbox/全市场初始化进度） | 必须保留 |
 | `quant-output` | 分析/扫描结果 JSON | 必须保留 |
 | `quant-cache` | 行情缓存 | 可清空，会自动重建 |
 | `quant-logs` | Python 引擎日志 | 可清空 |
 
+> ⚠️ 信号引擎的 SQLite 数据库必须挂载在独立的 `state/` 目录，**不能**挂到 `signal_system/data/`。`data/` 目录是 Python 源码包（`market_data.py`、`symbols.py`、`providers/` 等）。命名卷只在第一次创建时从镜像拷贝内容，之后**不会被镜像更新覆盖**：如果把卷挂到源码目录，新构建镜像里的 Python 模块会被旧卷内容遮蔽，导致 `No module named 'data.market_data'` 之类的导入失败。
+
 备份时把卷拷走即可，或直接进容器复制：
 
 ```bash
-docker cp quant-web:/app/data/app.db ./app-backup.db
+# Web 业务数据在 Supabase；/app/data 只保留运行时文件或回滚快照
+docker cp quant-web:/app/signal_system/state/signal_monitor.db ./signal-backup.db
 docker cp quant-web:/app/signal_system/output ./output-backup
 ```
 
@@ -107,8 +124,11 @@ sudo systemctl status quant-web
 
 | 变量 | 作用 |
 | --- | --- |
+| `DATABASE_URL` | Supabase PostgreSQL Session pooler 连接串（必填） |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | PostgreSQL TLS 校验，默认 `true` |
+| `DATABASE_POOL_MAX` | PostgreSQL 连接池上限，默认 `5` |
 | `PYTHON_BIN` | Python 可执行文件（Linux 填 `python3`，Windows 可省略） |
-| `WEB_DATA_DIR` | Web 数据库目录，默认 `web/data` |
+| `WEB_DATA_DIR` | Web 运行时文件目录，默认 `web/data`；不再存放 Web 业务数据库 |
 | `TUSHARE_TOKEN` | Tushare Token |
 | `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook |
 | `SIGNAL_WEBHOOK_URL` / `SIGNAL_WEBHOOK_AUTH` | 通用 Webhook 地址与鉴权 |
@@ -117,24 +137,56 @@ sudo systemctl status quant-web
 
 ## 迁移现有数据
 
-把旧机器（或本机开发环境）上的 `web/data/app.db`（或 `WEB_DATA_DIR` 下的 `app.db`）与 `signal_system/output/` 拷贝到服务器即可，无需重新配置。
+首次从旧 SQLite Web 数据库迁移到 Supabase 时，在旧 Web 写入者停止或暂停后执行：
+
+```bash
+cd quant-python/web
+export DATABASE_URL='postgresql://postgres.qutqrxicwrnorvujdrvp:<URL编码后的密码>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres'
+export DATABASE_SSL_REJECT_UNAUTHORIZED=true
+npm run db:migrate
+npm run db:verify
+```
+
+迁移完成后，Oracle 升级只需配置同一个 `DATABASE_URL` 并重建容器，**不要再次执行 `npm run db:migrate`**。迁移脚本会拒绝覆盖非等价的 Supabase 数据。
+
+Web 的 `app.db` 只作为迁移源或回滚快照，不要再复制到生产容器作为运行时业务库。Python 信号状态和分析输出仍需单独迁移。
 
 以本机开发环境迁移到 Docker 部署的服务器为例：
 
 ```bash
-# 在本机执行：先把数据传到服务器（SQLite WAL 模式下 app.db / -shm / -wal 三个文件要一起拷）
-scp quant-python/web/data/app.db* 用户@服务器IP:/tmp/
+# 在本机执行：只传 Python 信号状态和分析输出
+scp quant-python/signal_system/state/signal_monitor.db* 用户@服务器IP:/tmp/
 scp -r quant-python/signal_system/output 用户@服务器IP:/tmp/
 
-# 在服务器执行：停容器 → 拷入数据卷 → 重新启动
+# 在服务器执行：停容器 → 拷入 Python 状态/输出 → 重新启动
 cd quant/quant-python
 docker compose stop
-docker cp /tmp/app.db quant-web:/app/data/app.db
+docker cp /tmp/signal_monitor.db quant-web:/app/signal_system/state/signal_monitor.db
 docker cp /tmp/output quant-web:/app/signal_system/output
 docker compose up -d
 ```
 
-> 提示：SQLite 使用 WAL 模式，直接拷贝时请把 `app.db`、`app.db-shm`、`app.db-wal` 一并拷贝，避免丢失最近写入的数据；拷贝前最好先正常停止旧实例。
+> 提示：Python 信号库使用 SQLite WAL 模式，直接拷贝时请把 `signal_monitor.db`、`signal_monitor.db-shm`、`signal_monitor.db-wal` 一并拷贝，避免丢失最近写入的数据；拷贝前最好先正常停止旧实例。
+
+### 升级：已有 Docker 部署（旧卷曾挂到 `signal_system/data`）
+
+早于本次修改的部署把 `quant-data` 卷同时挂到 `/app/signal_system/data`。该目录是 Python 源码包，而命名卷只在首次创建时从镜像拷贝内容、之后不会被镜像更新覆盖，因此重建后旧卷内容遮蔽镜像源码，报 `No module named 'data.market_data'`。修复并迁移遗留状态库：
+
+```bash
+cd quant/quant-python
+git pull
+docker compose stop
+
+# 1. 创建新卷 quant-signal-data，并把旧信号状态库从 quant-data 卷拷过来
+#    （SQLite WAL 模式：signal_monitor.db / -wal / -shm 一起拷；旧卷里没有该文件也属正常）
+docker run --rm -v quant-data:/old -v quant-signal-data:/new alpine \
+  sh -c "cp -a /old/signal_monitor.db* /new/ 2>/dev/null || true; ls -la /new"
+
+# 2. 用新配置重建镜像并启动
+docker compose up -d --build
+```
+
+> 注意：旧 `quant-data` 卷里混合了 Web 数据库（`app.db` 等）与信号库，升级命令只拷贝 `signal_monitor.db*`，切勿用整卷数据覆盖新卷。
 
 裸机部署则直接把文件放到 `WEB_DATA_DIR`（默认 `web/data`）和 `signal_system/output/` 对应位置即可。
 

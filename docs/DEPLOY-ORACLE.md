@@ -6,7 +6,8 @@
 
 ```text
 /opt/docker/quant/
-├── data/                # Web 数据库（app.db）——必须保留
+├── data/                # Web 运行时文件/旧 app.db 迁移源（业务库已改用 Supabase）
+├── state/               # Python 信号库 DB（signal_system/state/signal_monitor.db）——必须保留
 ├── output/              # 分析/扫描结果 JSON——必须保留
 ├── cache/               # 行情缓存（可清空，自动重建）
 ├── logs/                # Python 引擎日志
@@ -44,8 +45,8 @@ sudo chown -R ubuntu:ubuntu /opt/docker/quant
 # /opt/docker/quant/quant-python/quant-python/Dockerfile
 git clone https://github.com/shuyuncong/quant.git quant-python
 
-# 创建数据目录（对应容器内 /app/data、/app/signal_system/output 等）
-mkdir -p data output cache logs
+# 创建数据目录（对应容器内 /app/data、/app/signal_system/state、/app/signal_system/output 等）
+mkdir -p data state output cache logs
 
 # 环境变量（DATABASE_URL 必填；.env 必须与 compose 文件同目录）
 cp quant-python/quant-python/web/.env.example quant-python/quant-python/.env
@@ -101,10 +102,11 @@ services:
       SIGNAL_EMAIL_RECEIVER: "${SIGNAL_EMAIL_RECEIVER:-}"
       SIGNAL_BARK_DEVICE_KEY: "${SIGNAL_BARK_DEVICE_KEY:-}"
     volumes:
-      # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
+      # Web 运行时文件；业务数据库已由 DATABASE_URL 指向 Supabase
       - /opt/docker/quant/data:/app/data
-      # Python 信号库（候选池、事件去重、outbox、全市场初始化进度）
-      - /opt/docker/quant/data:/app/signal_system/data
+      # Python 信号库状态（signal_monitor.db：候选池、事件去重、outbox、全市场初始化进度）。
+      # 必须挂到独立的 state/ 目录：signal_system/data 是 Python 源码包目录，不能被挂载遮蔽。
+      - /opt/docker/quant/state:/app/signal_system/state
       # 分析/扫描结果 JSON
       - /opt/docker/quant/output:/app/signal_system/output
       # 行情缓存与日志（可清空，丢失后会自动重建）
@@ -209,11 +211,12 @@ sudo certbot --nginx -d quant.illsky.com
 
 ## 8. 备份脚本（与现有备份保持一致）
 
-在现有备份脚本的 `TARGETS` 中追加以下两项（`quant-web` 备份前会自动停止，打包后自动恢复；停服后打包可避免 SQLite WAL 数据丢失）：
+在现有备份脚本的 `TARGETS` 中追加以下三项（`quant-web` 备份前会自动停止，打包后自动恢复；停服后打包可避免 SQLite WAL 数据丢失）：
 
 ```bash
 TARGETS=(
     "quant-web|/opt/docker/quant/data"
+    "quant-web|/opt/docker/quant/state"
     "quant-web|/opt/docker/quant/output"
     # 其他服务按同样格式追加，例如：
     # "memos|/opt/memos"
@@ -243,6 +246,7 @@ DATE=$(date +%Y%m%d_%H%M%S)
 # -------------------------------------------
 TARGETS=(
     "quant-web|/opt/docker/quant/data"
+    "quant-web|/opt/docker/quant/state"
     "quant-web|/opt/docker/quant/output"
     # 其他服务按同样格式追加，例如：
     # "memos|/opt/memos"
@@ -350,41 +354,141 @@ Python 信号状态和分析结果仍然保存在 Oracle 本地，首次上线�
 
 ```bash
 # 在本机执行
+scp quant-python/signal_system/state/signal_monitor.db* ubuntu@服务器IP:/opt/docker/quant/state/
 scp -r quant-python/signal_system/output/* ubuntu@服务器IP:/opt/docker/quant/output/
 ```
 
+> **旧版升级（曾把 `data` 目录挂到 `/app/signal_system/data`）**：改版前服务器上信号库 DB 落在 `/opt/docker/quant/data/signal_monitor.db`，而 `signal_system/data` 是 Python 源码包目录，bind mount 会遮蔽镜像源码，导致 `No module named 'data.market_data'`。升级时先停服、把遗留状态库搬到新 `state/` 目录，再用新 Compose 重建：
+>
+> ```bash
+> cd /opt/docker/quant/quant-python/quant-python
+> docker compose -f docker-compose.oracle.yml down
+> mkdir -p /opt/docker/quant/state
+> cp -a /opt/docker/quant/data/signal_monitor.db* /opt/docker/quant/state/ 2>/dev/null || true
+> git pull
+> docker compose -f docker-compose.oracle.yml up -d --build
+> ```
+
 ## 自动部署（推送即更新，可选）
 
-push 到 master 后由 GitHub Actions 触发服务器自动拉取并重建，无需手动 ssh：
+push 到 `master` 后由 GitHub Actions 触发服务器自动拉取并重建，无需手动 SSH：
 
 ```text
 推送代码 → GitHub Actions → SSH 执行 /home/ubuntu/ops/deploy-quant.sh → git pull + docker compose up -d --build
 ```
 
-仓库已包含 `.github/workflows/deploy-oracle.yml` 与 `docs/ops/deploy-quant.sh`，服务器上一次性配置：
+仓库已经包含以下文件：
+
+- `.github/workflows/deploy-oracle.yml`：监听 `master` 分支并通过 SSH 触发部署。
+- `docs/ops/deploy-quant.sh`：服务器端拉取代码、重建容器并记录日志。
+
+只需要完成下面的一次性配置。
+
+### 1. 在 Oracle 服务器安装部署脚本
 
 ```bash
-# 1. 服务器：放置部署脚本（内容见 docs/ops/deploy-quant.sh）
 mkdir -p /home/ubuntu/ops
-# 把 docs/ops/deploy-quant.sh 的内容保存为 /home/ubuntu/ops/deploy-quant.sh
+cp /opt/docker/quant/quant-python/docs/ops/deploy-quant.sh \
+  /home/ubuntu/ops/deploy-quant.sh
 chmod +x /home/ubuntu/ops/deploy-quant.sh
-
-# 2. 本机：生成部署专用密钥（和你的登录密钥分开）
-ssh-keygen -t ed25519 -f ~/.ssh/oracle_deploy -C "github-actions"
-ssh-copy-id -i ~/.ssh/oracle_deploy.pub ubuntu@服务器IP
 ```
 
-> 安全加固（可选但推荐）：在服务器 `~/.ssh/authorized_keys` 中给部署公钥加限制，只允许执行部署脚本、禁止登录 shell：
+先手动执行一次，确认脚本、Git 权限和 Docker Compose 都正常：
+
+```bash
+/home/ubuntu/ops/deploy-quant.sh
+
+# 检查部署日志、容器和本机端口
+tail -100 /home/ubuntu/ops/deploy-quant.log
+docker ps --filter name=quant-web
+curl -I http://127.0.0.1:3111
+```
+
+如果当前已经是最新提交，脚本显示“无新提交，跳过部署”属于正常情况。
+
+### 2. 创建 GitHub Actions 专用 SSH 密钥
+
+密钥应与日常登录服务器的密钥分开。在 Windows PowerShell 中执行：
+
+```powershell
+ssh-keygen -t ed25519 `
+  -f "$env:USERPROFILE\.ssh\oracle_deploy" `
+  -C "github-actions"
+
+Get-Content "$env:USERPROFILE\.ssh\oracle_deploy.pub" |
+  ssh ubuntu@服务器公网IP "umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys"
+```
+
+Linux 或 macOS 可以使用：
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/oracle_deploy -C "github-actions"
+ssh-copy-id -i ~/.ssh/oracle_deploy.pub ubuntu@服务器公网IP
+```
+
+> 安全加固（可选但推荐）：在服务器 `~/.ssh/authorized_keys` 中给部署公钥加限制，只允许执行部署脚本并禁止登录 shell：
 > `command="/home/ubuntu/ops/deploy-quant.sh",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA... github-actions`
 
-```bash
-# 3. GitHub 仓库 → Settings → Secrets and variables → Actions 添加三个 Secret：
-#    ORACLE_HOST    服务器公网 IP
-#    ORACLE_USER    ubuntu
-#    ORACLE_SSH_KEY 部署私钥内容（~/.ssh/oracle_deploy 的完整内容）
+### 3. 配置 GitHub Actions Secrets
+
+进入 GitHub 仓库的 `Settings → Secrets and variables → Actions → New repository secret`，添加：
+
+| Secret | 内容 |
+| --- | --- |
+| `ORACLE_HOST` | Oracle 服务器公网 IP |
+| `ORACLE_USER` | `ubuntu` |
+| `ORACLE_SSH_KEY` | `oracle_deploy` 私钥的完整内容，包括 BEGIN/END 行 |
+
+在 Windows PowerShell 中查看私钥内容：
+
+```powershell
+Get-Content -Raw "$env:USERPROFILE\.ssh\oracle_deploy"
 ```
 
-之后每次 push 涉及 `web/`、`signal_system/`、`core/`、`Dockerfile` 等路径时自动部署；纯文档提交不触发（workflow 里有 paths 过滤）。日志在服务器 `/home/ubuntu/ops/deploy-quant.log`，执行记录可在 GitHub 仓库 Actions 页查看。
+不要把私钥提交到 Git 仓库，也不要把公钥内容误填到 `ORACLE_SSH_KEY`。
+
+### 4. 推送并验证自动部署
+
+当前 workflow 只监听 `master` 分支，而且只有以下路径发生变化时才会触发：
+
+```text
+quant-python/Dockerfile
+quant-python/docker-compose*.yml
+quant-python/web/**
+quant-python/signal_system/**
+quant-python/core/**
+quant-python/backtest/**
+```
+
+正常提交并推送即可触发：
+
+```bash
+git push origin master
+```
+
+纯文档提交不会触发自动部署。执行过程可在 GitHub 仓库的 `Actions` 页面查看，服务器端日志位于：
+
+```bash
+tail -f /home/ubuntu/ops/deploy-quant.log
+```
+
+部署完成后验证：
+
+```bash
+cd /opt/docker/quant/quant-python/quant-python
+docker compose -f docker-compose.oracle.yml ps
+curl -I http://127.0.0.1:3111
+curl -I https://quant.illsky.com
+```
+
+常见失败检查：
+
+- GitHub Actions 报 SSH 连接失败：检查 `ORACLE_HOST`、`ORACLE_USER`、私钥内容和 Oracle 防火墙的 TCP 22 入站规则。
+- 脚本执行 `git fetch` 失败：检查服务器仓库的 GitHub 访问权限和远程仓库地址。
+- `git pull --ff-only` 失败：服务器工作区存在本地提交或冲突，应先人工检查，部署脚本不会覆盖这些内容。
+- Docker 构建失败：查看 GitHub Actions 输出和 `/home/ubuntu/ops/deploy-quant.log`，旧容器通常仍会继续运行。
+
+### 5. 不使用 GitHub Actions 时采用定时轮询
 
 不想用 Actions 时，也可以 cron 每 5 分钟轮询一次 master（服务器主动拉取，零入站依赖）：
 

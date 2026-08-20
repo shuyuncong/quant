@@ -15,7 +15,7 @@ from utils.time_utils import now_shanghai
 
 
 class SignalStore:
-    def __init__(self, path: str = "./data/signal_monitor.db"):
+    def __init__(self, path: str = "./state/signal_monitor.db"):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()

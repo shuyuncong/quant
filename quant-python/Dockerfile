@@ -39,7 +39,8 @@ RUN /opt/venv/bin/pip install --no-cache-dir -r /app/signal_system/requirements.
     && mkdir -p /app/data \
     /app/signal_system/output \
     /app/signal_system/cache \
-    /app/signal_system/logs
+    /app/signal_system/logs \
+    /app/signal_system/state
 
 EXPOSE 3111
 
