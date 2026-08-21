@@ -2,6 +2,7 @@ import { getModel, listModels } from "./db";
 import type { ModelProfile } from "./types";
 import { normalizeSymbol } from "./symbols";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
+import type { Response } from "undici";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -26,6 +27,16 @@ export async function pickChatModel(): Promise<ModelProfile | null> {
   return (await enabledModels())[0] ?? null;
 }
 
+/**
+ * AI 解读的超时。生成大报告解读时模型响应常超过 60s，
+ * 用 MODEL_TIMEOUT_SECONDS 环境变量可调（默认 180，下限 30）。
+ */
+function interpretTimeoutMs(): number {
+  const seconds = Number(process.env.MODEL_TIMEOUT_SECONDS);
+  const valid = Number.isFinite(seconds) && seconds >= 30;
+  return (valid ? seconds : 180) * 1_000;
+}
+
 function stripJsonFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
 }
@@ -33,7 +44,8 @@ function stripJsonFences(text: string): string {
 async function chatCompletion(
   profile: ModelProfile,
   messages: ChatMessage[],
-  timeoutMs = 60_000
+  timeoutMs = 60_000,
+  stream = false,
 ): Promise<string> {
   const apiKey = resolveApiKey(profile);
   if (!apiKey) throw new Error("模型未配置 API Key");
@@ -42,6 +54,7 @@ async function chatCompletion(
     model: profile.model,
     messages,
     temperature: 0.2,
+    ...(stream ? { stream: true } : {}),
   };
   const doFetch = async () => {
     const response = await undiciFetch(url, {
@@ -58,6 +71,7 @@ async function chatCompletion(
       const detail = await response.text().catch(() => "");
       throw new Error(`HTTP ${response.status}: ${detail.slice(0, 300)}`);
     }
+    if (stream) return await readStreamContent(response);
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
       error?: { message?: string };
@@ -71,14 +85,50 @@ async function chatCompletion(
   try {
     return await doFetch();
   } catch (error) {
-    // one retry for transient network/timeout failures
-    if (error instanceof Error && /timeout|ECONNRESET|fetch failed|ETIMEDOUT|ENOTFOUND/i.test(error.message)) {
+    // one retry for transient network/timeout failures (including upstream HTTP 524)
+    if (error instanceof Error && /timeout|ECONNRESET|fetch failed|ETIMEDOUT|ENOTFOUND|HTTP 524/i.test(error.message)) {
       return doFetch();
     }
     throw error;
   } finally {
     if (dispatcher) dispatcher.close().catch(() => undefined);
   }
+}
+
+/**
+ * OpenAI 兼容 SSE 流式返回解析。
+ * 解读类请求用流式：首个 token 到达后连接保持活跃，
+ * 可避开上游 Cloudflare 的源站响应超时（HTTP 524）即使完整生成耗时数分钟。
+ */
+export async function readStreamContent(response: Response): Promise<string> {
+  if (!response.body) throw new Error("模型流式响应无 body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const chunk = JSON.parse(payload) as {
+          choices?: Array<{ delta?: { content?: string } }>;
+        };
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) content += delta;
+      } catch {
+        /* 忽略无法解析的心跳/元数据行 */
+      }
+    }
+  }
+  if (!content) throw new Error("模型流式返回内容为空");
+  return content;
 }
 
 export async function testProfile(profile: ModelProfile): Promise<{ ok: boolean; detail: string }> {
@@ -244,6 +294,7 @@ export async function interpretReport(
       },
       { role: "user", content: context },
     ],
-    90_000
+    interpretTimeoutMs(),
+    true  /* stream — avoid Cloudflare 524 origin timeout */
   );
 }

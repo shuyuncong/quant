@@ -66,6 +66,12 @@ quant-python/signal_system/data/*.db
 quant-python/signal_system/data/*.db-*
 quant-python/signal_system/**/__pycache__/
 
+# Backtest artifacts
+quant-python/signal_system/backtest_report*.json
+quant-python/signal_system/backtest_report*_trades.jsonl
+quant-python/signal_system/bt*.json
+quant-python/signal_system/bt*_trades.jsonl
+
 # Server-only Docker Compose environment
 quant-python/.env
 
