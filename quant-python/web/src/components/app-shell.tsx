@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Menu className="size-4" />
         </button>
         <span className="min-w-0 truncate text-sm font-semibold">
-          {currentPage?.label ?? "缠论信号监控"}
+          {currentPage?.label ?? "量化学习"}
         </span>
         </div>
         <ThemeToggle />
@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className="hidden w-52 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-4">
-          <span className="text-sm font-semibold tracking-wide">缠论信号监控</span>
+          <span className="text-sm font-semibold tracking-wide">量化学习</span>
         </div>
         {navigation()}
         <div className="flex items-center justify-between gap-2 border-t border-sidebar-border p-2 pl-3">
@@ -115,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <aside className="surface-glass relative flex h-full w-64 max-w-[85vw] flex-col border-r border-sidebar-border text-sidebar-foreground shadow-2xl">
             <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-4">
-              <span className="text-sm font-semibold tracking-wide">缠论信号监控</span>
+              <span className="text-sm font-semibold tracking-wide">量化学习</span>
               <button
                 type="button"
                 aria-label="关闭导航"

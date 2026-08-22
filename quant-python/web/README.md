@@ -1,4 +1,4 @@
-# 缠论信号监控 Web 控制台
+# 量化学习
 
 基于 Next.js 16（App Router / React 19 / TypeScript / Tailwind CSS 4 / shadcn-ui + Base UI）的本地控制台，复用 `quant-python/signal_system` 的现有分析引擎。
 

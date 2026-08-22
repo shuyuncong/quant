@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "缠论信号监控控制台",
-  description: "A股缠论多周期信号监控 Web 控制台",
+  title: "量化学习",
+  description: "A股量化学习与分析平台",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
