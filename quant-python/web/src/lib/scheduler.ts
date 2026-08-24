@@ -256,6 +256,9 @@ export async function getSchedulerStatus(): Promise<SchedulerStatus> {
 }
 
 export async function ensureScheduler(): Promise<void> {
+  if (process.env.SCHEDULER_DISABLED) {
+    return;
+  }
   const globalState = globalThis as typeof globalThis & {
     __webSchedulerStarted?: boolean;
     __webSchedulerLeader?: PoolClient;
