@@ -501,7 +501,7 @@ export interface JobWithNote extends JobRow {
   note: AnalysisNote | null;
 }
 
-/** 任务列表并附各自最新的 AI 解读（无解读时为 null）。 */
+/** 任务列表并附各自最新的 AI 解读（无解读时为 null）。解读子任务 interpret-report 是内部实现，不展示。 */
 export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobWithNote[]> {
   const client = await resolveDb(db);
   const result = await client.query(
@@ -514,6 +514,7 @@ export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobW
        WHERE job_id = j.id
        ORDER BY id DESC LIMIT 1
      ) n ON true
+     WHERE j.kind <> 'interpret-report'
      ORDER BY j.id DESC LIMIT $1`,
     [limit],
   );
