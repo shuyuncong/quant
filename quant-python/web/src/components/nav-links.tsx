@@ -8,7 +8,6 @@ import {
   Clock3,
   Database,
   LayoutDashboard,
-  MessageSquareText,
   ScrollText,
   SlidersHorizontal,
   Wallet,
@@ -18,7 +17,6 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/results", label: "结果", icon: LayoutDashboard },
-  { href: "/interpretations", label: "AI 解读", icon: MessageSquareText },
   { href: "/strategies", label: "策略配置", icon: SlidersHorizontal },
   { href: "/notifications", label: "推送配置", icon: Bell },
   { href: "/models", label: "模型配置", icon: BrainCircuit },

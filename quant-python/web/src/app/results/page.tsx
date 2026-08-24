@@ -35,9 +35,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Play, RefreshCw, Sparkles } from "lucide-react";
+import { Eye, Play, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
 import { SymbolCombobox } from "@/components/symbol-combobox";
+
+interface NoteRow {
+  id: number;
+  content: string;
+  model: string;
+  created_at: string;
+}
 
 interface JobRow {
   id: number;
@@ -48,12 +55,7 @@ interface JobRow {
   error: string | null;
   created_at: string;
   finished_at: string | null;
-}
-
-interface ResultItem {
-  file: string;
-  mtime: number;
-  summary: Record<string, unknown>;
+  note: NoteRow | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -66,12 +68,24 @@ const KIND_LABEL: Record<string, string> = {
   "dispatch-outbox": "补投队列",
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  success: "成功",
+  running: "运行中",
+  pending: "等待中",
+  failed: "失败",
+};
+
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   success: "default",
   running: "secondary",
   pending: "outline",
   failed: "destructive",
 };
+
+function fileName(resultPath: string | null): string {
+  if (!resultPath) return "-";
+  return resultPath.split(/[\\/]/).pop() ?? resultPath;
+}
 
 async function postJson(url: string, body: unknown) {
   const response = await fetch(url, {
@@ -85,30 +99,11 @@ async function postJson(url: string, body: unknown) {
 }
 
 export default function ResultsPage() {
-  const [results, setResults] = useState<ResultItem[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [symbolsInput, setSymbolsInput] = useState("");
   const [notify, setNotify] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [detailFile, setDetailFile] = useState<string | null>(null);
-  const [detail, setDetail] = useState<{
-    report: Record<string, unknown>;
-    notes: Array<{ id: number; content: string; model: string; created_at: string }>;
-  } | null>(null);
+  const [selectedJob, setSelectedJob] = useState<JobRow | null>(null);
   const [interpreting, setInterpreting] = useState(false);
-
-  const loadResults = useCallback(async () => {
-    try {
-      const response = await fetch("/api/results");
-      if (!response.ok) throw new Error("加载结果失败");
-      const data = (await response.json()) as { results: ResultItem[] };
-      setResults(data.results);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载结果失败");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -123,26 +118,12 @@ export default function ResultsPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadResults();
     void loadJobs();
     const timer = setInterval(() => {
       void loadJobs();
     }, 5000);
     return () => clearInterval(timer);
-  }, [loadResults, loadJobs]);
-
-  const openDetail = useCallback(async (file: string) => {
-    setDetailFile(file);
-    setDetail(null);
-    try {
-      const response = await fetch(`/api/results/${encodeURIComponent(file)}`);
-      if (!response.ok) throw new Error("加载详情失败");
-      const data = (await response.json()) as typeof detail;
-      setDetail(data);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载详情失败");
-    }
-  }, []);
+  }, [loadJobs]);
 
   const runJob = useCallback(
     async (kind: string, extra: Record<string, unknown> = {}) => {
@@ -150,41 +131,36 @@ export default function ResultsPage() {
         const data = (await postJson("/api/run", { kind, notify, ...extra })) as { jobId?: number };
         toast.success(`任务已启动 #${data.jobId ?? ""}`);
         void loadJobs();
-        setTimeout(() => void loadResults(), 1500);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "启动失败");
       }
     },
-    [notify, loadJobs, loadResults]
+    [notify, loadJobs]
   );
 
   const interpret = useCallback(async () => {
-    if (!detailFile) return;
+    if (!selectedJob) return;
     setInterpreting(true);
     try {
-      const data = (await postJson(`/api/results/${encodeURIComponent(detailFile)}/interpret`, {})) as {
+      const data = (await postJson(`/api/jobs/${selectedJob.id}/interpret`, {})) as {
         content?: string;
         model?: string;
       };
       toast.success("AI 解读已生成");
-      setDetail((prev) => ({
-        report: prev?.report ?? {},
-        notes: [
-          {
-            id: Date.now(),
-            content: data.content ?? "",
-            model: data.model ?? "",
-            created_at: new Date().toISOString(),
-          },
-          ...(prev?.notes ?? []),
-        ],
-      }));
+      const note: NoteRow = {
+        id: Date.now(),
+        content: data.content ?? "",
+        model: data.model ?? "",
+        created_at: new Date().toISOString(),
+      };
+      setSelectedJob((prev) => (prev ? { ...prev, note } : prev));
+      setJobs((prev) => prev.map((job) => (job.id === selectedJob.id ? { ...job, note } : job)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "AI 解读失败");
     } finally {
       setInterpreting(false);
     }
-  }, [detailFile]);
+  }, [selectedJob]);
 
   const running = jobs.some((job) => job.status === "running" || job.status === "pending");
 
@@ -193,7 +169,7 @@ export default function ResultsPage() {
       <Card>
         <CardHeader>
           <CardTitle>手动运行</CardTitle>
-          <CardDescription>立即触发一次分析/扫描/监控，结果写入 output 目录并显示在下方列表。</CardDescription>
+          <CardDescription>立即触发一次分析/扫描/监控，完成后自动生成 AI 解读，在下方最近任务中查看。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -303,9 +279,6 @@ export default function ResultsPage() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button variant="ghost" onClick={() => void loadResults()} disabled={loading}>
-              <RefreshCw className="size-4" /> 刷新结果
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -313,7 +286,9 @@ export default function ResultsPage() {
       <Card>
         <CardHeader>
           <CardTitle>最近任务</CardTitle>
-          <CardDescription>Web 与定时触发的任务都会记录在这里（每 5 秒自动刷新）。</CardDescription>
+          <CardDescription>
+            任务完成后自动调用模型生成 AI 解读，点「查看 AI 分析」直接阅读；未生成的可手动触发（每 5 秒自动刷新）。
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -324,25 +299,33 @@ export default function ResultsPage() {
                 <TableHead>状态</TableHead>
                 <TableHead>创建时间</TableHead>
                 <TableHead>结果/错误</TableHead>
+                <TableHead className="w-28">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {jobs.slice(0, 20).map((job) => (
+              {jobs.slice(0, 50).map((job) => (
                 <TableRow key={job.id}>
                   <TableCell className="font-mono text-xs">#{job.id}</TableCell>
                   <TableCell>{KIND_LABEL[job.kind] ?? job.kind}</TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[job.status] ?? "outline"}>{job.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[job.status] ?? "outline"}>
+                      {STATUS_LABEL[job.status] ?? job.status}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
                   <TableCell className="max-w-64 truncate text-xs text-muted-foreground">
-                    {job.status === "failed" ? job.error : job.result_path ?? "-"}
+                    {job.status === "failed" ? job.error : fileName(job.result_path)}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedJob(job)}>
+                      <Eye className="size-4" /> 查看 AI 分析
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
               {jobs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     暂无任务
                   </TableCell>
                 </TableRow>
@@ -352,78 +335,43 @@ export default function ResultsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>分析结果</CardTitle>
-          <CardDescription>来自 signal_system/output 目录，按修改时间倒序。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>文件</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>时间</TableHead>
-                <TableHead>摘要</TableHead>
-                <TableHead className="w-24">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {results.map((item) => (
-                <TableRow key={item.file}>
-                  <TableCell className="font-mono text-xs">{item.file}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{String(item.summary.mode ?? "?")}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {String(item.summary.scanned_at ?? "")}
-                  </TableCell>
-                  <TableCell className="max-w-80 truncate text-xs text-muted-foreground">
-                    {JSON.stringify(item.summary).slice(0, 160)}
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => void openDetail(item.file)}>
-                      查看
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {results.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    {loading ? "加载中..." : "暂无结果，先运行一次分析"}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Dialog open={detailFile !== null} onOpenChange={(open) => !open && setDetailFile(null)}>
-        <DialogContent className="max-h-[85vh] max-w-7xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>结果详情：{detailFile}</DialogTitle>
-            <DialogDescription>AI 解读为补充字段，不影响原始分析结果。</DialogDescription>
+      <Dialog open={selectedJob !== null} onOpenChange={(open) => !open && setSelectedJob(null)}>
+        <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 gap-1 border-b pb-4 pl-6 pr-16 pt-4">
+            <DialogTitle>
+              AI 分析 #{selectedJob?.id}（{selectedJob ? KIND_LABEL[selectedJob.kind] ?? selectedJob.kind : ""}）
+            </DialogTitle>
+            <DialogDescription>
+              {selectedJob?.created_at}
+              {selectedJob?.note?.model ? " · 模型：" + selectedJob.note.model : ""}
+              {selectedJob?.result_path ? " · " + fileName(selectedJob.result_path) : ""}
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => void interpret()} disabled={interpreting}>
-              <Sparkles className="size-4" />
-              {interpreting ? "生成中..." : "生成 AI 解读"}
-            </Button>
-          </div>
-          {detail?.notes.map((note) => (
-            <div key={note.id} className="rounded-lg border p-3">
-              <div className="mb-1 text-xs text-muted-foreground">
-                模型：{note.model} · {note.created_at}
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            {selectedJob?.status === "running" || selectedJob?.status === "pending" ? (
+              <p className="text-sm text-muted-foreground">任务正在运行，结果生成后会自动解读并在本页出现。</p>
+            ) : selectedJob?.status === "failed" ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                {selectedJob.error || "任务失败，无解读"}
               </div>
-              <MarkdownContent content={note.content} />
-            </div>
-          ))}
-          <Separator />
-          <pre className="max-h-96 overflow-auto rounded-lg bg-muted/50 p-3 text-xs">
-            {JSON.stringify(detail?.report ?? null, null, 2)}
-          </pre>
+            ) : selectedJob?.note ? (
+              <MarkdownContent content={selectedJob.note.content} />
+            ) : (
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-sm text-muted-foreground">该任务暂无 AI 解读，点击下方按钮手动生成。</p>
+                <Button onClick={() => void interpret()} disabled={interpreting}>
+                  <Sparkles className="size-4" />
+                  {interpreting ? "生成中..." : "生成 AI 解读"}
+                </Button>
+                {selectedJob?.result_path && (
+                  <>
+                    <Separator />
+                    <pre className="text-xs text-muted-foreground">{selectedJob.result_path}</pre>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -11,7 +11,6 @@ import {
   Clock3,
   Database,
   Menu,
-  MessageSquareText,
   ScrollText,
   Wallet,
   Workflow,
@@ -22,7 +21,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { href: "/results", label: "个股分析", icon: BarChart3 },
-  { href: "/interpretations", label: "AI 解读", icon: MessageSquareText },
   { href: "/strategies", label: "策略配置", icon: Activity },
   { href: "/notifications", label: "推送配置", icon: Bell },
   { href: "/models", label: "模型配置", icon: BrainCircuit },

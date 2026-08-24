@@ -497,13 +497,41 @@ export async function getJob(id: number, db?: DbClient): Promise<JobRow | null> 
   return result.rows[0] ? rowToJob(result.rows[0]) : null;
 }
 
-export async function findJobByResultPath(resultPath: string, db?: DbClient): Promise<JobRow | null> {
+export interface JobWithNote extends JobRow {
+  note: AnalysisNote | null;
+}
+
+/** 任务列表并附各自最新的 AI 解读（无解读时为 null）。 */
+export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobWithNote[]> {
   const client = await resolveDb(db);
   const result = await client.query(
-    "SELECT * FROM quant.jobs WHERE result_path = $1 ORDER BY id DESC LIMIT 1",
-    [resultPath],
+    `SELECT j.*, n.id AS note_id, n.content AS note_content, n.model AS note_model,
+            n.created_at AS note_created_at
+     FROM quant.jobs j
+     LEFT JOIN LATERAL (
+       SELECT id, content, model, created_at
+       FROM quant.analysis_notes
+       WHERE job_id = j.id
+       ORDER BY id DESC LIMIT 1
+     ) n ON true
+     ORDER BY j.id DESC LIMIT $1`,
+    [limit],
   );
-  return result.rows[0] ? rowToJob(result.rows[0]) : null;
+  return result.rows.map((row) => ({
+    ...rowToJob(row),
+    note:
+      row.note_id == null
+        ? null
+        : {
+            id: Number(row.note_id),
+            job_id: Number(row.id),
+            symbol: "",
+            content: String(row.note_content ?? ""),
+            model: String(row.note_model ?? ""),
+            result_path: null,
+            created_at: String(row.note_created_at ?? ""),
+          },
+  }));
 }
 
 export async function listJobs(limit = 100, db?: DbClient): Promise<JobRow[]> {
@@ -615,25 +643,6 @@ export async function listNotesByJob(jobId: number, db?: DbClient): Promise<Anal
     [jobId],
   );
   return result.rows.map(rowToNote);
-}
-
-export interface NoteWithJob extends AnalysisNote {
-  job_kind: string | null;
-}
-
-export async function listNotes(limit = 200, db?: DbClient): Promise<NoteWithJob[]> {
-  const client = await resolveDb(db);
-  const result = await client.query(
-    `SELECT n.*, j.kind AS job_kind
-     FROM quant.analysis_notes n
-     LEFT JOIN quant.jobs j ON j.id = n.job_id
-     ORDER BY n.id DESC LIMIT $1`,
-    [limit],
-  );
-  return result.rows.map((row) => ({
-    ...rowToNote(row),
-    job_kind: row.job_kind == null ? null : String(row.job_kind),
-  }));
 }
 
 // ---------- schedule ----------
