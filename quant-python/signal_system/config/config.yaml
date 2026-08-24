@@ -106,6 +106,21 @@ selector:
   price_change_soft_min: -0.03
   price_change_soft_max: 0.03
 
+# MACD 主扫描与回测共用的前置股票池。金额单位见字段注释。
+stock_pool:
+  enabled: true
+  min_market_cap: 50               # 信号当日流通市值下限，亿元
+  max_market_cap: 3000             # 信号当日流通市值上限，亿元
+  amount_window: 20                # 平均成交额统计窗口，交易日
+  min_avg_amount: 1.0              # 最低平均成交额，亿元
+  turnover_window: 20              # 平均换手率统计窗口，交易日
+  min_avg_turnover_rate: 0.5       # 最低平均换手率，百分比
+  max_avg_turnover_rate: 8.0       # 最高平均换手率，百分比
+  min_listing_trade_days: 120      # 上市后至少经过的交易日数
+  exclude_st: true
+  exclude_delisting: true
+  missing_data_policy: "reject"    # reject=缺指标拒绝；allow=记录警告后放行
+
 entry_filters:
   market_gate_enabled: true         # 日线候选必须通过指数状态闸门
   market_index_code: "000001.SH"
@@ -152,12 +167,25 @@ t_trading:
 
 backtest:
   initial_cash: 100000
+  adjustment: "qfq"                # 回测独立使用前复权，不改变实时分钟线口径
+  history_bars: 800                 # MA250 之前保留足够预热历史
+  fetch_missing_adjusted: true      # 缺少/过短 QFQ 缓存时主动拉取，禁止回退 none
   commission_pct: 0.0003
+  minimum_commission: 5.0           # 券商每笔佣金最低5元
   stamp_tax_pct: 0.001
   slippage_pct: 0.0005
   lot_size: 100
   t_plus_one: true
   price_limit_model: "conservative"
+  st_symbols: []                    # 需手工维护历史ST代码；配置后按5%涨跌停
+  intrabar_conflict: "stop_first"   # 日线无法判断高低点先后，止损优先更保守
+  market_gate_slope_bars: 5         # MA250 与5根K线前比较，和实时扫描一致
+  signal_priority:
+    - "macd_golden_cross_pullback_confirmed_above"
+    - "macd_golden_cross_pullback_confirmed_near"
+    - "buy_1"
+    - "buy_2"
+    - "buy_3"
   chan_zero_axis:
     allowed_zones: ["above", "near"]
     min_confirmations: 2

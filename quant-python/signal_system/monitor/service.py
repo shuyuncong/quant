@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, time as clock_time
 import json
 import logging
@@ -14,6 +15,7 @@ from models import SignalEvent
 from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
+from strategy.stock_pool import evaluate_stock_pool, resolve_stock_pool_config
 from utils.time_utils import now_shanghai
 
 
@@ -47,7 +49,16 @@ class SignalMonitor:
         self.max_scan_symbols = int(monitor.get("max_scan_symbols_per_run", 500))
         self.max_monitor_symbols = max(1, int(monitor.get("max_symbols_per_cycle", 20)))
         self.daily_scan_time = str(monitor.get("daily_scan_time", "15:20"))
-        self.min_daily_bars = int(config.get("market_data", {}).get("min_listing_trade_days", 120))
+        stock_pool = config.get("stock_pool", {})
+        configured_listing_days = int(
+            stock_pool.get(
+                "min_listing_trade_days",
+                config.get("market_data", {}).get("min_listing_trade_days", 120),
+            )
+        )
+        # MACD/Chan analysis still needs a minimum warm-up even when the listing
+        # filter is deliberately configured below its normal 120-day default.
+        self.min_daily_bars = max(60, configured_listing_days)
         notification = config.get("notification", {})
         self.push_trade_signal = bool(notification.get("push_trade_signal", True))
         self.push_candidate_pool = bool(notification.get("push_candidate_pool", True))
@@ -431,11 +442,21 @@ class SignalMonitor:
                 batch = remaining[: self.max_scan_symbols]
         candidates: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
+        stock_pool_rejections: Counter = Counter()
+        stock_pool_rejection_details: list[dict[str, Any]] = []
+        stock_pool_data_errors: list[dict[str, str]] = []
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
         market_context = self._market_entry_context()
         entry_filters = self.config.get("entry_filters", {})
         position_gate_enabled = bool(entry_filters.get("position_gate_enabled", False))
+        stock_pool_settings = resolve_stock_pool_config(self.config)
+        stock_pool_history_limit = max(
+            300,
+            stock_pool_settings["amount_window"],
+            stock_pool_settings["turnover_window"],
+            stock_pool_settings["min_listing_trade_days"],
+        )
         batch_names = self._resolve_names([normalize_symbol(str(row["code"])) for row in batch])
         for row in batch:
             symbol = normalize_symbol(row["code"])
@@ -474,6 +495,46 @@ class SignalMonitor:
                     and market_context.get("allows_entries", False)
                     and (not position_gate_enabled or position_ready)
                 ):
+                    stock_pool_history = daily
+                    stock_pool_fetch_error = ""
+                    if stock_pool_settings["enabled"]:
+                        try:
+                            stock_pool_history = self.market.get_stock_pool_history(
+                                symbol,
+                                limit=stock_pool_history_limit,
+                                end=latest_date,
+                            )
+                        except Exception as exc:
+                            stock_pool_fetch_error = str(exc)
+                            stock_pool_data_errors.append(
+                                {"symbol": symbol, "error": stock_pool_fetch_error}
+                            )
+                            logger.warning("股票池指标 %s 获取失败: %s", symbol, exc)
+                    stock_pool_evaluation = evaluate_stock_pool(
+                        stock_pool_history,
+                        latest_date,
+                        self.config,
+                        name=name,
+                    )
+                    if stock_pool_fetch_error:
+                        stock_pool_evaluation["warnings"] = list(
+                            dict.fromkeys(
+                                stock_pool_evaluation["warnings"]
+                                + ["stock_pool_history_fetch_failed"]
+                            )
+                        )
+                    if not stock_pool_evaluation["passed"]:
+                        stock_pool_rejections.update(stock_pool_evaluation["reasons"])
+                        stock_pool_rejection_details.append(
+                            {
+                                "symbol": symbol,
+                                "name": name,
+                                "reasons": stock_pool_evaluation["reasons"],
+                                "warnings": stock_pool_evaluation["warnings"],
+                                "metrics": stock_pool_evaluation["metrics"],
+                            }
+                        )
+                        continue
                     zone_priority = {"above": 3, "near": 2, "below": 1}.get(zone, 0)
                     strategy_score = int(daily_report.get("buy_score", 0))
                     candidates.append(
@@ -500,6 +561,8 @@ class SignalMonitor:
                             "position_ready": position_ready,
                             "position_risk_flags": indicators.get("position_risk_flags", []),
                             "market_context": market_context,
+                            "stock_pool_metrics": stock_pool_evaluation["metrics"],
+                            "stock_pool_warnings": stock_pool_evaluation["warnings"],
                             "confirmation_items": indicators.get("confirmation_items", []),
                             "confirmation_count": indicators.get("confirmation_count", 0),
                             "chan_signals": daily_report.get("chan", {}).get("fresh_signals", []),
@@ -583,6 +646,13 @@ class SignalMonitor:
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
             "market_context": market_context,
+            "stock_pool": {
+                "config": stock_pool_settings,
+                "rejections": dict(stock_pool_rejections),
+                "rejected_candidates": len(stock_pool_rejection_details),
+                "rejection_details": stock_pool_rejection_details,
+                "data_errors": stock_pool_data_errors,
+            },
             "snapshot_histories_updated": snapshot_updates,
             "candidate_count": len(candidates),
             "candidates": sorted_candidates,

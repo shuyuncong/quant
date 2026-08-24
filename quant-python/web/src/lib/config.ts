@@ -148,6 +148,7 @@ interface FieldDef {
   type: FieldType;
   min?: number;
   max?: number;
+  integer?: boolean;
   enum?: string[];
   optional?: boolean;
 }
@@ -170,6 +171,18 @@ const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
   "monitor.bar_limit": { type: "number", min: 30 },
   "monitor.max_symbols_per_cycle": { type: "number", min: 1, max: 100 },
   "scan.universe_mode": { type: "enum", enum: ["watchlist", "all_a"] },
+  "stock_pool.enabled": { type: "boolean" },
+  "stock_pool.min_market_cap": { type: "number", min: 0 },
+  "stock_pool.max_market_cap": { type: "number", min: 0 },
+  "stock_pool.amount_window": { type: "number", min: 1, max: 250, integer: true },
+  "stock_pool.min_avg_amount": { type: "number", min: 0 },
+  "stock_pool.turnover_window": { type: "number", min: 1, max: 250, integer: true },
+  "stock_pool.min_avg_turnover_rate": { type: "number", min: 0, max: 100 },
+  "stock_pool.max_avg_turnover_rate": { type: "number", min: 0, max: 100 },
+  "stock_pool.min_listing_trade_days": { type: "number", min: 0, max: 5000, integer: true },
+  "stock_pool.exclude_st": { type: "boolean" },
+  "stock_pool.exclude_delisting": { type: "boolean" },
+  "stock_pool.missing_data_policy": { type: "enum", enum: ["reject", "allow"] },
 };
 
 const NOTIFICATION_SCHEMA: Record<string, FieldDef> = {
@@ -224,6 +237,7 @@ export function validateSection(
         errors.push(`${key} 必须是数字`);
         continue;
       }
+      if (def.integer && !Number.isInteger(num)) errors.push(`${key} 必须是整数`);
       if (def.min !== undefined && num < def.min) errors.push(`${key} 不能小于 ${def.min}`);
       if (def.max !== undefined && num > def.max) errors.push(`${key} 不能大于 ${def.max}`);
       normalized[key] = num;
@@ -260,6 +274,16 @@ export function validateSection(
     const maxVolume = Number(normalized["signal_strategy.macd.moderate_volume_max"]);
     if (Number.isFinite(minVolume) && Number.isFinite(maxVolume) && minVolume > maxVolume) {
       errors.push("温和放量下限不能大于上限");
+    }
+    const minMarketCap = Number(normalized["stock_pool.min_market_cap"]);
+    const maxMarketCap = Number(normalized["stock_pool.max_market_cap"]);
+    if (Number.isFinite(minMarketCap) && Number.isFinite(maxMarketCap) && minMarketCap > maxMarketCap) {
+      errors.push("流通市值下限不能大于上限");
+    }
+    const minTurnover = Number(normalized["stock_pool.min_avg_turnover_rate"]);
+    const maxTurnover = Number(normalized["stock_pool.max_avg_turnover_rate"]);
+    if (Number.isFinite(minTurnover) && Number.isFinite(maxTurnover) && minTurnover > maxTurnover) {
+      errors.push("平均换手率下限不能大于上限");
     }
   }
   return { ok: errors.length === 0, errors, normalized };

@@ -101,6 +101,61 @@ class MarketDataTests(unittest.TestCase):
             result = client.get_stock_list()
             self.assertEqual(["000001"], result["code"].tolist())
 
+    def test_stock_pool_history_parses_turnover_and_causal_market_cap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {
+                    "market_data": {
+                        "cache_dir": directory,
+                        "volume_unit_shares": 100,
+                    }
+                }
+            )
+            client._throttle = lambda: None
+            client._http_json = lambda *args, **kwargs: {
+                "data": {
+                    "klines": [
+                        "2025-01-02,9.80,10.00,10.10,9.70,200000,200000000,4.00,2.00,0.20,2.00"
+                    ]
+                }
+            }
+            frame = client.get_stock_pool_history(
+                "000001",
+                limit=300,
+                end=date(2025, 1, 2),
+            )
+            self.assertEqual(2.0, frame.iloc[0]["turnover_rate"])
+            self.assertEqual(100.0, frame.iloc[0]["circulating_market_cap"])
+            self.assertEqual(200_000_000.0, frame.iloc[0]["amount"])
+            self.assertEqual(date(2025, 1, 2), frame.iloc[0]["datetime"].date())
+
+    def test_stock_pool_history_falls_back_to_akshare_sina(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._http_json = MagicMock(side_effect=RuntimeError("eastmoney unavailable"))
+            ak = MagicMock()
+            ak.stock_zh_a_daily.return_value = pd.DataFrame(
+                [
+                    {
+                        "date": date(2025, 1, 2),
+                        "close": 10.0,
+                        "volume": 20_000_000.0,
+                        "amount": 200_000_000.0,
+                        "outstanding_share": 1_000_000_000.0,
+                        "turnover": 0.02,
+                    }
+                ]
+            )
+            client._get_akshare = lambda: ak
+            frame = client.get_stock_pool_history(
+                "000001",
+                limit=300,
+                end=date(2025, 1, 2),
+            )
+            self.assertEqual(2.0, frame.iloc[0]["turnover_rate"])
+            self.assertEqual(100.0, frame.iloc[0]["circulating_market_cap"])
+
     def test_suspended_zero_snapshot_is_not_written_as_fresh_daily_bar(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient({"market_data": {"cache_dir": directory}})

@@ -207,9 +207,18 @@ def resample_session_bars(
 class MarketDataClient:
     def __init__(self, config: dict[str, Any]):
         data_config = config.get("market_data", config.get("data_source", {}))
+        stock_pool_config = config.get("stock_pool", {})
         self.provider = str(data_config.get("provider", "auto")).lower()
         self.adjust = str(data_config.get("adjust", "none")).strip().lower() or "none"
-        self.min_listing_trade_days = int(data_config.get("min_listing_trade_days", 120))
+        self.min_listing_trade_days = int(
+            stock_pool_config.get(
+                "min_listing_trade_days",
+                data_config.get("min_listing_trade_days", 120),
+            )
+        )
+        self.exclude_st = bool(stock_pool_config.get("exclude_st", True))
+        self.exclude_delisting = bool(stock_pool_config.get("exclude_delisting", True))
+        self.volume_unit_shares = float(data_config.get("volume_unit_shares", 100))
         self.minute_timestamp = str(data_config.get("minute_timestamp", "end"))
         self.cache_dir = Path(data_config.get("cache_dir", "./cache"))
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -519,7 +528,10 @@ class MarketDataClient:
         return updated
 
     def get_stock_list(self) -> pd.DataFrame:
-        cache_key = f"stock_list_v3_{self.min_listing_trade_days}"
+        cache_key = (
+            f"stock_list_v4_{self.min_listing_trade_days}_"
+            f"{int(self.exclude_st)}_{int(self.exclude_delisting)}"
+        )
         cached = self._cached(cache_key, 24 * 3600)
         if cached is not None:
             return cached
@@ -584,7 +596,12 @@ class MarketDataClient:
                     ]
                 )
         result["code"] = result["code"].map(normalize_symbol)
-        result = result[~result["name"].astype(str).str.contains("ST|退", case=False, na=False)]
+        names = result["name"].astype(str)
+        if self.exclude_st:
+            result = result[~names.str.contains(r"\*?ST|SST", case=False, na=False, regex=True)]
+            names = result["name"].astype(str)
+        if self.exclude_delisting:
+            result = result[~names.str.contains("退", case=False, na=False)]
         if "list_date" in result.columns and self.min_listing_trade_days > 0:
             raw_dates = result["list_date"].astype(str).str.replace(r"\.0$", "", regex=True)
             listing_dates = pd.to_datetime(raw_dates, format="%Y%m%d", errors="coerce")
@@ -593,6 +610,174 @@ class MarketDataClient:
         result = result.drop_duplicates("code").reset_index(drop=True)
         self._save_cache(cache_key, result)
         return result
+
+    def get_stock_pool_history(
+        self,
+        symbol: str,
+        limit: int = 300,
+        end: date | None = None,
+    ) -> pd.DataFrame:
+        """Return unadjusted daily liquidity metrics for causal stock-pool gates.
+
+        Eastmoney's historical kline payload includes daily turnover rate.  Combined
+        with unadjusted close and volume, this lets us reconstruct the signal-day
+        circulating market cap without substituting today's market cap in a backtest.
+        Values exposed to the strategy use percent, CNY and 100-million-CNY units.
+        """
+        end_day = end or self._latest_expected_trade_date()
+        requested = max(int(limit), 1)
+        cache_key = (
+            f"stock_pool_history_v1|{normalize_symbol(symbol)}|"
+            f"{requested}|{end_day.isoformat()}"
+        )
+        cached = self._cached(cache_key, 24 * 3600)
+        if cached is not None:
+            return cached.tail(requested).reset_index(drop=True)
+
+        klines: list[Any] = []
+        try:
+            self._throttle()
+            payload = self._http_json(
+                "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                {
+                    "secid": eastmoney_secid(symbol),
+                    "klt": "101",
+                    "fqt": 0,
+                    "beg": 0,
+                    "end": end_day.strftime("%Y%m%d"),
+                    "lmt": max(requested, 300),
+                    "fields1": "f1,f2,f3,f4,f5,f6",
+                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                },
+            )
+            klines = (payload.get("data") or {}).get("klines") or []
+        except Exception as exc:
+            logger.warning("东方财富股票池历史失败，降级 AkShare/Sina: %s", exc)
+        rows: list[dict[str, Any]] = []
+        for line in klines:
+            fields = str(line).split(",")
+            if len(fields) < 11:
+                continue
+            close = pd.to_numeric(fields[2], errors="coerce")
+            volume = pd.to_numeric(fields[5], errors="coerce")
+            amount = pd.to_numeric(fields[6], errors="coerce")
+            turnover = pd.to_numeric(fields[10], errors="coerce")
+            market_cap = None
+            if (
+                pd.notna(close)
+                and pd.notna(volume)
+                and pd.notna(turnover)
+                and float(turnover) > 0
+            ):
+                circulating_shares = (
+                    float(volume) * self.volume_unit_shares / (float(turnover) / 100.0)
+                )
+                market_cap = float(close) * circulating_shares / 100_000_000.0
+            rows.append(
+                {
+                    "datetime": fields[0],
+                    "close": close,
+                    "volume": volume,
+                    "amount": amount,
+                    "turnover_rate": turnover,
+                    "circulating_market_cap": market_cap,
+                    "is_closed": True,
+                }
+            )
+        if not rows:
+            try:
+                self._throttle()
+                start_day = end_day - timedelta(days=max(requested * 2, 400))
+                raw = self._get_akshare().stock_zh_a_daily(
+                    symbol=tencent_symbol(symbol),
+                    start_date=start_day.strftime("%Y%m%d"),
+                    end_date=end_day.strftime("%Y%m%d"),
+                    adjust="",
+                )
+                if raw is not None and not raw.empty:
+                    normalized = raw.rename(
+                        columns={
+                            "date": "datetime",
+                            "outstanding_share": "circulating_shares",
+                            "turnover": "turnover_rate",
+                        }
+                    ).copy()
+                    for column in (
+                        "close",
+                        "volume",
+                        "amount",
+                        "circulating_shares",
+                        "turnover_rate",
+                    ):
+                        if column in normalized.columns:
+                            normalized[column] = pd.to_numeric(
+                                normalized[column], errors="coerce"
+                            )
+                    if (
+                        "turnover_rate" in normalized.columns
+                        and not normalized["turnover_rate"].dropna().empty
+                        and normalized["turnover_rate"].dropna().abs().max() <= 1.0
+                    ):
+                        normalized["turnover_rate"] *= 100.0
+                    for _, item in normalized.iterrows():
+                        market_cap = None
+                        circulating_shares = item.get("circulating_shares")
+                        if pd.notna(item.get("close")) and pd.notna(circulating_shares):
+                            market_cap = (
+                                float(item["close"])
+                                * float(circulating_shares)
+                                / 100_000_000.0
+                            )
+                        elif (
+                            pd.notna(item.get("close"))
+                            and pd.notna(item.get("volume"))
+                            and pd.notna(item.get("turnover_rate"))
+                            and float(item["turnover_rate"]) > 0
+                        ):
+                            derived_shares = float(item["volume"]) / (
+                                float(item["turnover_rate"]) / 100.0
+                            )
+                            market_cap = (
+                                float(item["close"])
+                                * derived_shares
+                                / 100_000_000.0
+                            )
+                        rows.append(
+                            {
+                                "datetime": item.get("datetime"),
+                                "close": item.get("close"),
+                                "volume": item.get("volume"),
+                                "amount": item.get("amount"),
+                                "turnover_rate": item.get("turnover_rate"),
+                                "circulating_market_cap": market_cap,
+                                "is_closed": True,
+                            }
+                        )
+            except Exception as exc:
+                logger.warning("AkShare/Sina 股票池历史失败: %s", exc)
+        frame = pd.DataFrame(
+            rows,
+            columns=[
+                "datetime",
+                "close",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "circulating_market_cap",
+                "is_closed",
+            ],
+        )
+        if not frame.empty:
+            frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
+            frame = (
+                frame.dropna(subset=["datetime", "close"])
+                .sort_values("datetime")
+                .drop_duplicates("datetime", keep="last")
+                .tail(requested)
+                .reset_index(drop=True)
+            )
+        self._save_cache(cache_key, frame)
+        return frame
 
     def get_index_bars(self, symbol: str = "000001.SH", limit: int = 300) -> pd.DataFrame:
         """Fetch closed daily index bars for the market-regime gate."""

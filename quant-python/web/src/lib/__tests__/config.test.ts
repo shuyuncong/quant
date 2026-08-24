@@ -44,10 +44,23 @@ describe("validateSection", () => {
     const { ok, errors, normalized } = validateSection("strategies", {
       "signal_strategy.chan.min_bi_bars": "4",
       "signal_strategy.chan.divergence_ratio": "0.9",
+      "stock_pool.enabled": true,
+      "stock_pool.min_market_cap": "50",
+      "stock_pool.max_market_cap": "3000",
+      "stock_pool.amount_window": "20",
+      "stock_pool.min_avg_amount": "1",
+      "stock_pool.turnover_window": "20",
+      "stock_pool.min_avg_turnover_rate": "0.5",
+      "stock_pool.max_avg_turnover_rate": "8",
+      "stock_pool.min_listing_trade_days": "120",
+      "stock_pool.exclude_st": true,
+      "stock_pool.exclude_delisting": true,
+      "stock_pool.missing_data_policy": "reject",
     });
     expect(ok).toBe(true);
     expect(errors).toEqual([]);
     expect(normalized["signal_strategy.chan.min_bi_bars"]).toBe(4);
+    expect(normalized["stock_pool.min_market_cap"]).toBe(50);
   });
 
   it("rejects unknown keys and out-of-range numbers", () => {
@@ -57,5 +70,28 @@ describe("validateSection", () => {
     });
     expect(ok).toBe(false);
     expect(errors.some((item) => item.includes("未知配置项"))).toBe(true);
+  });
+
+  it("rejects inverted stock pool ranges", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "stock_pool.min_market_cap": 3001,
+      "stock_pool.max_market_cap": 3000,
+      "stock_pool.min_avg_turnover_rate": 8.1,
+      "stock_pool.max_avg_turnover_rate": 8,
+    });
+    expect(ok).toBe(false);
+    expect(errors).toContain("流通市值下限不能大于上限");
+    expect(errors).toContain("平均换手率下限不能大于上限");
+  });
+
+  it("rejects invalid stock pool windows and missing policy", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "stock_pool.amount_window": 0,
+      "stock_pool.turnover_window": 20.5,
+      "stock_pool.missing_data_policy": "ignore",
+    });
+    expect(ok).toBe(false);
+    expect(errors.length).toBeGreaterThanOrEqual(3);
+    expect(errors.some((item) => item.includes("必须是整数"))).toBe(true);
   });
 });
