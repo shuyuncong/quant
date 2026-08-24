@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInterpretationContext, readStreamContent } from "../llm";
+import { buildInterpretationContext, readStreamContent, resolveProxy } from "../llm";
 
 function bars(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -26,6 +26,35 @@ function sseBody(pieces: string[]): { body: globalThis.ReadableStream } {
     }),
   };
 }
+
+describe("resolveProxy", () => {
+  const profile = { proxy: "http://db-proxy:7890" } as never;
+
+  it("prefers MODEL_PROXY over the DB proxy", () => {
+    process.env.MODEL_PROXY = "http://env-model:1";
+    delete process.env.HTTPS_PROXY;
+    delete process.env.HTTP_PROXY;
+    expect(resolveProxy(profile)).toBe("http://env-model:1");
+    delete process.env.MODEL_PROXY;
+  });
+
+  it("falls back to HTTPS_PROXY then HTTP_PROXY", () => {
+    delete process.env.MODEL_PROXY;
+    process.env.HTTPS_PROXY = "http://env-https:2";
+    expect(resolveProxy(profile)).toBe("http://env-https:2");
+    delete process.env.HTTPS_PROXY;
+    process.env.HTTP_PROXY = "http://env-http:3";
+    expect(resolveProxy(profile)).toBe("http://env-http:3");
+    delete process.env.HTTP_PROXY;
+  });
+
+  it("uses the DB proxy when no env var is set", () => {
+    delete process.env.MODEL_PROXY;
+    delete process.env.HTTPS_PROXY;
+    delete process.env.HTTP_PROXY;
+    expect(resolveProxy(profile)).toBe("http://db-proxy:7890");
+  });
+});
 
 describe("readStreamContent", () => {
   it("accumulates content across SSE chunks and stops at [DONE]", async () => {

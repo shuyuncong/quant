@@ -14,6 +14,21 @@ export function resolveApiKey(profile: ModelProfile): string {
   return fromEnv || profile.api_key;
 }
 
+/**
+ * 模型代理解析，与 resolveApiKey 相同的"环境变量优先"约定：
+ * MODEL_PROXY → HTTPS_PROXY → HTTP_PROXY → DB proxy。
+ * DB 只存中性值，本地/线上各自通过环境变量指定出口，避免共享库互相踩配置。
+ * 用 MODEL_PROXY 而非直接依赖 HTTPS_PROXY：该变量不会被子进程（Python 数据桥）继承。
+ */
+export function resolveProxy(profile: ModelProfile): string {
+  return (
+    process.env.MODEL_PROXY?.trim() ||
+    process.env.HTTPS_PROXY?.trim() ||
+    process.env.HTTP_PROXY?.trim() ||
+    profile.proxy.trim()
+  );
+}
+
 export async function enabledModels(): Promise<ModelProfile[]> {
   return (await listModels()).filter((model) => model.enabled && resolveApiKey(model));
 }
@@ -81,7 +96,8 @@ async function chatCompletion(
     if (!content) throw new Error("模型返回内容为空");
     return content;
   };
-  const dispatcher = profile.proxy?.trim() ? new ProxyAgent(profile.proxy.trim()) : undefined;
+  const proxy = resolveProxy(profile);
+  const dispatcher = proxy ? new ProxyAgent(proxy) : undefined;
   try {
     return await doFetch();
   } catch (error) {

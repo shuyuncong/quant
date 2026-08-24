@@ -270,7 +270,7 @@ export default function ModelsPage() {
               <Input value={form.env_key} onChange={(event) => setForm((prev) => ({ ...prev, env_key: event.target.value }))} placeholder="DEEPSEEK_API_KEY" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>代理地址（可选，通过代理访问模型接口）</Label>
+              <Label>代理地址（可选；留空时依次使用 MODEL_PROXY / HTTPS_PROXY / HTTP_PROXY 环境变量，均无则直连）</Label>
               <Input value={form.proxy} onChange={(event) => setForm((prev) => ({ ...prev, proxy: event.target.value }))} placeholder="http://127.0.0.1:7890" />
             </div>
             <div className="flex items-center gap-6">
