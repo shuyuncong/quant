@@ -54,6 +54,94 @@ class SignalMonitor:
         self.push_ai_analysis = bool(notification.get("push_ai_analysis", True))
         self._name_map: dict[str, str] | None = None
 
+    def _market_entry_context(self) -> dict[str, Any]:
+        """Evaluate the index once per daily scan and fail closed when enabled."""
+        filters = self.config.get("entry_filters", {})
+        if not filters.get("market_gate_enabled", False):
+            return {"enabled": False, "allows_entries": True, "regime": "disabled"}
+
+        index_code = str(
+            filters.get("market_index_code")
+            or self.config.get("regime", {}).get("index_code", "000001.SH")
+        )
+        try:
+            index_bars = self.market.get_index_bars(index_code, limit=300)
+            analysis = self.analyzer.analyze(index_code, "市场指数", {"1d": index_bars})
+            daily_report = analysis.get("timeframes", {}).get("1d", {})
+            indicators = daily_report.get("indicators", {})
+            if daily_report.get("status") != "ok" or indicators.get("ma_long") is None:
+                raise ValueError("指数长期趋势数据不足")
+
+            fresh_chan = daily_report.get("chan", {}).get("fresh_signals", [])
+            bearish_structure = any(
+                item.get("side") == "sell" and item.get("signal_type") in {"sell_1", "sell_2", "sell_3"}
+                for item in fresh_chan
+            )
+            death_cross = bool(indicators.get("death_cross") or bearish_structure)
+            if death_cross or indicators.get("ma_long_down") or not indicators.get("above_ma_long"):
+                regime = "bear"
+            elif indicators.get("ma_long_up"):
+                regime = "bull"
+            else:
+                regime = "range"
+            return {
+                "enabled": True,
+                "index_code": index_code,
+                "allows_entries": regime != "bear",
+                "regime": regime,
+                "death_cross": death_cross,
+                "above_ma_long": bool(indicators.get("above_ma_long")),
+                "ma_long_up": bool(indicators.get("ma_long_up")),
+            }
+        except Exception as exc:
+            fail_open = bool(filters.get("market_gate_fail_open", False))
+            logger.warning("指数状态闸门不可用: %s", exc)
+            return {
+                "enabled": True,
+                "index_code": index_code,
+                "allows_entries": fail_open,
+                "regime": "unknown",
+                "error": str(exc),
+            }
+
+    @staticmethod
+    def _daily_macd_notification_events(
+        event_objects: list[SignalEvent],
+        daily_report: dict[str, Any],
+    ) -> list[SignalEvent]:
+        """Keep raw-cross watches and actionable pullback confirmations."""
+        indicators = daily_report.get("indicators", {})
+        raw_zone = str(indicators.get("golden_cross_zone", ""))
+        entry_zone = str(
+            indicators.get("golden_cross_entry_zone")
+            or indicators.get("golden_cross_zone", "")
+        )
+        raw_ready = bool(
+            indicators.get("golden_cross")
+            and raw_zone in {"above", "near"}
+        )
+        confirmed_ready = bool(
+            indicators.get("golden_cross_entry_ready")
+            and entry_zone in {"above", "near"}
+        )
+        filtered_events = []
+        for event in event_objects:
+            if event.timeframe != "1d":
+                continue
+            components = set(event.evidence.get("components", []))
+            is_watch = event.evidence.get("signal_level") == "watch"
+            is_confirmation = any(
+                str(component).startswith(
+                    "macd_golden_cross_pullback_confirmed_"
+                )
+                for component in components
+            )
+            if (raw_ready and is_watch) or (
+                confirmed_ready and is_confirmation
+            ):
+                filtered_events.append(event)
+        return filtered_events
+
     def _save_report(self, prefix: str, report: dict[str, Any]) -> Path:
         timestamp = now_shanghai().strftime("%Y%m%d_%H%M%S")
         path = self.output_dir / f"{prefix}_{timestamp}.json"
@@ -140,11 +228,6 @@ class SignalMonitor:
         new_event_count = 0
         stale_event_count = 0
         channels = self.notifier.active_channels()
-        buy_threshold = int(
-            self.config.get("signal_strategy", {})
-            .get("scoring", {})
-            .get("buy_threshold", 60)
-        )
         for requested_symbol in symbols:
             symbol = normalize_symbol(requested_symbol)
             try:
@@ -156,20 +239,12 @@ class SignalMonitor:
                 analysis = self.analyzer.analyze(symbol, names.get(symbol, ""), bars, errors)
                 event_objects = analysis.pop("event_objects")
                 if only_daily_above_cross:
-                    # 盘中监控只推送日线 0 轴上方金叉且买入评分达阈值的事件
+                    # 日线监控推送两级 MACD 事件：金叉观察预警，以及评分达标的回落确认。
                     daily_report = analysis.get("timeframes", {}).get("1d", {})
-                    indicators = daily_report.get("indicators", {})
-                    qualifies = (
-                        bool(indicators.get("golden_cross"))
-                        and str(indicators.get("golden_cross_zone", "")) == "above"
-                        and int(daily_report.get("buy_score", 0)) >= buy_threshold
+                    event_objects = self._daily_macd_notification_events(
+                        event_objects,
+                        daily_report,
                     )
-                    if not qualifies:
-                        event_objects = []
-                    else:
-                        event_objects = [
-                            event for event in event_objects if event.timeframe == "1d"
-                        ]
                 if notify and self.push_trade_signal:
                     for event in event_objects:
                         if not self._event_is_current(event):
@@ -358,6 +433,9 @@ class SignalMonitor:
         errors: list[dict[str, str]] = []
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
+        market_context = self._market_entry_context()
+        entry_filters = self.config.get("entry_filters", {})
+        position_gate_enabled = bool(entry_filters.get("position_gate_enabled", False))
         batch_names = self._resolve_names([normalize_symbol(str(row["code"])) for row in batch])
         for row in batch:
             symbol = normalize_symbol(row["code"])
@@ -382,8 +460,20 @@ class SignalMonitor:
                 analysis.pop("event_objects")
                 daily_report = analysis["timeframes"].get("1d", {})
                 indicators = daily_report.get("indicators", {})
-                if indicators.get("golden_cross"):
-                    zone = str(indicators.get("golden_cross_zone", "near"))
+                zone = str(
+                    indicators.get("golden_cross_entry_zone")
+                    or indicators.get("golden_cross_zone", "near")
+                )
+                entry_ready = bool(indicators.get("golden_cross_entry_ready", False))
+                position_ready = bool(
+                    indicators.get("above_ma_long") and indicators.get("ma_long_up")
+                )
+                if (
+                    entry_ready
+                    and zone in {"above", "near"}
+                    and market_context.get("allows_entries", False)
+                    and (not position_gate_enabled or position_ready)
+                ):
                     zone_priority = {"above": 3, "near": 2, "below": 1}.get(zone, 0)
                     strategy_score = int(daily_report.get("buy_score", 0))
                     candidates.append(
@@ -404,6 +494,12 @@ class SignalMonitor:
                             "golden_cross_zone_label": indicators.get("golden_cross_zone_label"),
                             "golden_cross_quality": indicators.get("golden_cross_quality"),
                             "golden_cross_risk": indicators.get("golden_cross_risk"),
+                            "golden_cross_state": indicators.get("golden_cross_state"),
+                            "golden_cross_entry_ready": entry_ready,
+                            "golden_cross_confirmation_bars": indicators.get("golden_cross_confirmation_bars"),
+                            "position_ready": position_ready,
+                            "position_risk_flags": indicators.get("position_risk_flags", []),
+                            "market_context": market_context,
                             "confirmation_items": indicators.get("confirmation_items", []),
                             "confirmation_count": indicators.get("confirmation_count", 0),
                             "chan_signals": daily_report.get("chan", {}).get("fresh_signals", []),
@@ -486,6 +582,7 @@ class SignalMonitor:
             "coverage": coverage,
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
+            "market_context": market_context,
             "snapshot_histories_updated": snapshot_updates,
             "candidate_count": len(candidates),
             "candidates": sorted_candidates,

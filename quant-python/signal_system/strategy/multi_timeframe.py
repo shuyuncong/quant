@@ -31,6 +31,12 @@ class MultiTimeframeAnalyzer:
         self.zero_axis_tolerance = float(macd.get("zero_axis_tolerance", 0.005))
         self.moderate_volume_min = float(macd.get("moderate_volume_min", 1.0))
         self.moderate_volume_max = float(macd.get("moderate_volume_max", 2.0))
+        self.pullback_confirmation_bars = int(macd.get("pullback_confirmation_bars", 5))
+        self.long_ma_period = int(macd.get("long_ma_period", 250))
+        self.position_lookback = int(macd.get("position_lookback", 20))
+        self.max_long_ma_distance = float(macd.get("max_long_ma_distance", 0.35))
+        self.max_recent_return = float(macd.get("max_recent_return", 0.30))
+        self.high_position_volume_ratio = float(macd.get("high_position_volume_ratio", 3.0))
         self.min_bi_bars = int(chan.get("min_bi_bars", 4))
         self.divergence_ratio = float(chan.get("divergence_ratio", 0.9))
         self.fresh_signal_bars = int(chan.get("fresh_signal_bars", 1))
@@ -86,6 +92,12 @@ class MultiTimeframeAnalyzer:
             zero_axis_tolerance=self.zero_axis_tolerance,
             moderate_volume_min=self.moderate_volume_min,
             moderate_volume_max=self.moderate_volume_max,
+            pullback_confirmation_bars=self.pullback_confirmation_bars,
+            long_ma_period=self.long_ma_period if timeframe == "1d" else None,
+            position_lookback=self.position_lookback,
+            max_long_ma_distance=self.max_long_ma_distance,
+            max_recent_return=self.max_recent_return,
+            high_position_volume_ratio=self.high_position_volume_ratio,
         )
         source_indicators = {
             "bar_count": len(closed),
@@ -191,9 +203,9 @@ class MultiTimeframeAnalyzer:
         reasons: list[str] = []
         score = 0
         if side == "buy":
-            golden_cross = indicators.get("golden_cross") or indicators.get("zero_axis_golden_cross")
+            golden_cross = bool(indicators.get("golden_cross_entry_ready"))
             if golden_cross:
-                zone = str(indicators.get("golden_cross_zone", "near"))
+                zone = str(indicators.get("golden_cross_entry_zone") or indicators.get("golden_cross_zone", "near"))
                 points = GOLDEN_CROSS_POINTS.get(zone, GOLDEN_CROSS_POINTS["near"])
                 score += points
                 reasons.append(f"MACD {indicators.get('golden_cross_zone_label', '0轴附近金叉')} +{points}")
@@ -201,6 +213,8 @@ class MultiTimeframeAnalyzer:
                 if confirmation_points:
                     score += confirmation_points
                     reasons.append(f"金叉确认条件 {indicators.get('confirmation_count')} 项 +{confirmation_points}")
+            elif indicators.get("golden_cross"):
+                reasons.append(f"金叉{indicators.get('golden_cross_state', '等待回落确认')}")
             buy_types = [item["signal_type"] for item in fresh if item["side"] == "buy"]
             if buy_types:
                 best = max(buy_types, key=lambda item: CHAN_BUY_POINTS.get(item, 0))
@@ -217,6 +231,12 @@ class MultiTimeframeAnalyzer:
             if indicators.get("above_ma60") and indicators.get("ma60_up"):
                 score += 10
                 reasons.append("站上上行MA60 +10")
+            if indicators.get("high_position_risk"):
+                score -= 20
+                reasons.append("高位偏离长期均线/近期涨幅过大 -20")
+            if indicators.get("high_volume_risk"):
+                score -= 20
+                reasons.append("高位放量上涨 -20")
             if indicators.get("volume_ratio", 0) >= 1:
                 score += 5
                 reasons.append("量比不低于1 +5")
@@ -262,26 +282,76 @@ class MultiTimeframeAnalyzer:
     ) -> list[SignalEvent]:
         indicators = report.indicators
         fresh = [item for item in report.chan.get("fresh_signals", []) if item["side"] == side]
+        events: list[SignalEvent] = []
         cross = (
-            indicators.get("golden_cross") or indicators.get("zero_axis_golden_cross")
+            indicators.get("golden_cross_entry_ready")
             if side == "buy"
             else indicators.get("zero_axis_death_cross")
         )
+        entry_zone = str(indicators.get("golden_cross_entry_zone") or indicators.get("golden_cross_zone", "near"))
+        if side == "buy" and entry_zone == "below":
+            cross = False
+
+        raw_cross_zone = str(indicators.get("golden_cross_zone", "near"))
+        raw_cross = bool(
+            side == "buy"
+            and indicators.get("golden_cross")
+            and not indicators.get("golden_cross_entry_ready")
+            and raw_cross_zone in {"above", "near"}
+        )
+        cross_time = str(
+            indicators.get("golden_cross_cross_time")
+            or report.latest_time
+            or now_shanghai().isoformat(timespec="seconds")
+        )
+        setup_id = f"{symbol}|{report.timeframe}|{cross_time}"
+        if raw_cross:
+            signal_type = f"macd_golden_cross_detected_{raw_cross_zone}"
+            watch_reasons = [
+                f"MACD {indicators.get('golden_cross_zone_label', '金叉')}出现",
+                "等待回落触碰金叉K线实体并重新站回后再确认",
+            ]
+            events.append(
+                SignalEvent(
+                    symbol=symbol,
+                    name=name,
+                    timeframe=report.timeframe,
+                    signal_type=signal_type,
+                    side="buy",
+                    price=float(report.latest_price or 0.0),
+                    structure_time=cross_time,
+                    confirmed_at=str(report.latest_time or cross_time),
+                    score=score,
+                    evidence={
+                        "components": [signal_type],
+                        "score_reasons": watch_reasons,
+                        "indicators": indicators,
+                        "chan_signal": None,
+                        "latest_center": report.chan.get("latest_center"),
+                        "timeframe_weight": self.timeframe_weights.get(report.timeframe, 1),
+                        "notification_kind": "trade_signal",
+                        "strong_signal": False,
+                        "signal_level": "watch",
+                        "actionable": False,
+                        "setup_id": setup_id,
+                    },
+                )
+            )
         if not cross and not fresh:
-            return []
+            return events
         threshold = self.buy_threshold if side == "buy" else self.sell_threshold
         strong_signal = score >= threshold
-        if not fresh and not strong_signal:
-            return []
+        standalone_confirmation = bool(side == "buy" and cross)
+        if not fresh and not strong_signal and not standalone_confirmation:
+            return events
         cross_component = None
         if cross:
             cross_component = (
-                f"macd_golden_cross_{indicators.get('golden_cross_zone', 'near')}"
+                f"macd_golden_cross_pullback_confirmed_{entry_zone}"
                 if side == "buy"
                 else "zero_axis_death_cross"
             )
 
-        events: list[SignalEvent] = []
         sources = fresh or [None]
         for chan_signal in sources:
             signal_type = (
@@ -311,8 +381,15 @@ class MultiTimeframeAnalyzer:
                 "timeframe_weight": self.timeframe_weights.get(report.timeframe, 1),
                 "notification_kind": "trade_signal",
                 "strong_signal": strong_signal,
-                "signal_level": "strong" if strong_signal else "structure",
+                "signal_level": (
+                    "strong"
+                    if strong_signal
+                    else ("confirmation" if standalone_confirmation else "structure")
+                ),
+                "actionable": True,
             }
+            if side == "buy" and cross_component:
+                evidence["setup_id"] = setup_id
             events.append(
                 SignalEvent(
                     symbol=symbol,

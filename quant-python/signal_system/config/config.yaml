@@ -75,6 +75,12 @@ signal_strategy:
     zero_axis_tolerance: 0.005       # DIF/DEA 距0轴不超过收盘价的0.5%
     moderate_volume_min: 1.0         # 温和放量下限：当日量/20日均量
     moderate_volume_max: 2.0         # 温和放量上限，避免把异常巨量当作温和放量
+    pullback_confirmation_bars: 5    # 金叉后最多等待5根已收盘K线回落确认
+    long_ma_period: 250              # 日线长期趋势/年线
+    position_lookback: 20            # 近期涨幅风险窗口
+    max_long_ma_distance: 0.35       # 距年线超过35%标记高位风险
+    max_recent_return: 0.30           # 20日涨幅超过30%标记高位风险
+    high_position_volume_ratio: 3.0  # 高位量比达到3倍以上标记诱多风险
   llm_context_bars: 48               # 每周期保留给报告和AI解读的近期K线数
   chan:
     min_bi_bars: 4
@@ -99,6 +105,12 @@ selector:
   near_ma_threshold: 0.05
   price_change_soft_min: -0.03
   price_change_soft_max: 0.03
+
+entry_filters:
+  market_gate_enabled: true         # 日线候选必须通过指数状态闸门
+  market_index_code: "000001.SH"
+  market_gate_fail_open: false      # 指数数据不可用时不新增候选
+  position_gate_enabled: true       # 日线候选要求站在上行长期均线之上
 
 regime:
   mode: "auto"

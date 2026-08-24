@@ -28,6 +28,65 @@ class MonitorTimeTests(unittest.TestCase):
         }
         return SignalMonitor(config)
 
+    def test_daily_macd_notification_filter_keeps_watch_and_confirmation(self):
+        watch = SignalEvent(
+            symbol="000001",
+            name="A",
+            timeframe="1d",
+            signal_type="macd_golden_cross_detected_near",
+            side="buy",
+            price=10,
+            structure_time="2025-01-01T15:00:00",
+            confirmed_at="2025-01-01T15:00:00",
+            score=20,
+            evidence={
+                "components": ["macd_golden_cross_detected_near"],
+                "signal_level": "watch",
+            },
+        )
+        confirmation = SignalEvent(
+            symbol="000001",
+            name="A",
+            timeframe="1d",
+            signal_type="macd_golden_cross_pullback_confirmed_near",
+            side="buy",
+            price=10.2,
+            structure_time="2025-01-01T15:00:00",
+            confirmed_at="2025-01-03T15:00:00",
+            score=70,
+            evidence={
+                "components": ["macd_golden_cross_pullback_confirmed_near"],
+                "signal_level": "strong",
+            },
+        )
+        raw_report = {
+            "buy_score": 20,
+            "indicators": {
+                "golden_cross": True,
+                "golden_cross_zone": "near",
+            },
+        }
+        self.assertEqual(
+            [watch],
+            SignalMonitor._daily_macd_notification_events(
+                [watch, confirmation], raw_report
+            ),
+        )
+
+        confirmed_report = {
+            "buy_score": 70,
+            "indicators": {
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "near",
+            },
+        }
+        self.assertEqual(
+            [confirmation],
+            SignalMonitor._daily_macd_notification_events(
+                [watch, confirmation], confirmed_report
+            ),
+        )
+
     def test_sessions_and_holiday_calendar(self):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)
@@ -340,7 +399,7 @@ class MonitorTimeTests(unittest.TestCase):
             monitor.analyzer.analyze = lambda *args, **kwargs: {
                 "event_objects": [],
                 "timeframes": {
-                    "1d": {"indicators": {"golden_cross": True, "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
                 },
             }
             monitor.notifier.active_channels = MagicMock(return_value=["webhook"])
@@ -385,7 +444,7 @@ class MonitorTimeTests(unittest.TestCase):
             monitor.analyzer.analyze = lambda *args, **kwargs: {
                 "event_objects": [],
                 "timeframes": {
-                    "1d": {"indicators": {"golden_cross": True, "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
                 },
             }
             monitor.notifier.active_channels = MagicMock(return_value=["webhook"])

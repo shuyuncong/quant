@@ -42,6 +42,55 @@ class _BarkErrorResponse(_Response):
 
 
 class NotifierAndConfigTests(unittest.TestCase):
+    def test_watch_signal_markdown_is_labeled_as_non_actionable_alert(self):
+        markdown = SignalNotifier._markdown(
+            {
+                "event_id": "watch-1",
+                "side": "buy",
+                "symbol": "000001",
+                "name": "平安银行",
+                "timeframe": "1d",
+                "signal_type": "macd_golden_cross_detected_above",
+                "price": 10.0,
+                "score": 25,
+                "confirmed_at": "2025-01-01T15:00:00",
+                "risk_notice": "test",
+                "evidence": {
+                    "notification_kind": "trade_signal",
+                    "signal_level": "watch",
+                    "strong_signal": False,
+                    "score_reasons": ["等待回落确认"],
+                },
+            }
+        )
+        self.assertIn("MACD 金叉预警", markdown)
+        self.assertIn("观察信号（等待回落确认）", markdown)
+        self.assertIn("等待回落确认", markdown)
+
+    def test_confirmation_markdown_is_distinct_from_raw_cross_watch(self):
+        markdown = SignalNotifier._markdown(
+            {
+                "event_id": "confirmation-1",
+                "side": "buy",
+                "symbol": "000001",
+                "name": "平安银行",
+                "timeframe": "1d",
+                "signal_type": "macd_golden_cross_pullback_confirmed_above",
+                "price": 10.3,
+                "score": 40,
+                "confirmed_at": "2025-01-03T15:00:00",
+                "risk_notice": "test",
+                "evidence": {
+                    "notification_kind": "trade_signal",
+                    "signal_level": "confirmation",
+                    "strong_signal": False,
+                    "score_reasons": ["回落后重新站回"],
+                },
+            }
+        )
+        self.assertIn("MACD 回落确认", markdown)
+        self.assertIn("确认信号（进入候选评估）", markdown)
+
     def test_candidate_markdown_contains_zone_and_confirmations(self):
         payload = {
             "event_id": "candidate-1",

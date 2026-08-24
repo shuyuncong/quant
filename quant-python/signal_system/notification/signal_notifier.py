@@ -68,8 +68,16 @@ class SignalNotifier:
                 f"> {payload['risk_notice']}\n"
                 f"> event_id: `{payload['event_id']}`"
             )
-        side = "🟢 买入观察" if payload["side"] == "buy" else "🔴 卖出观察"
-        level = "强共振" if evidence.get("strong_signal") else "缠论结构"
+        signal_level = evidence.get("signal_level")
+        if signal_level == "watch":
+            side = "🟡 MACD 金叉预警"
+            level = "观察信号（等待回落确认）"
+        elif signal_level == "confirmation":
+            side = "🟢 MACD 回落确认"
+            level = "确认信号（进入候选评估）"
+        else:
+            side = "🟢 买入观察" if payload["side"] == "buy" else "🔴 卖出观察"
+            level = "强共振" if evidence.get("strong_signal") else "缠论结构"
         reasons = evidence.get("score_reasons", [])
         center = evidence.get("latest_center")
         center_text = "无已确认中枢"
@@ -169,10 +177,27 @@ class SignalNotifier:
                 f"风险: {evidence.get('risk_text', '需结合趋势复核')}"
             )
         else:
-            side = "买入观察" if payload["side"] == "buy" else "卖出观察"
+            signal_level = evidence.get("signal_level")
+            side = (
+                "MACD金叉预警"
+                if signal_level == "watch"
+                else (
+                    "MACD回落确认"
+                    if signal_level == "confirmation"
+                    else ("买入观察" if payload["side"] == "buy" else "卖出观察")
+                )
+            )
             title = f"{side} {payload.get('name', '')} {payload['symbol']} {payload['timeframe']}".strip()
             reasons = evidence.get("score_reasons", [])
-            level = "强共振" if evidence.get("strong_signal") else "缠论结构"
+            level = (
+                "观察信号（等待回落确认）"
+                if signal_level == "watch"
+                else (
+                    "确认信号（进入候选评估）"
+                    if signal_level == "confirmation"
+                    else ("强共振" if evidence.get("strong_signal") else "缠论结构")
+                )
+            )
             body = (
                 f"信号: {payload['signal_type']}\n"
                 f"级别: {level}\n"
@@ -213,6 +238,10 @@ class SignalNotifier:
             subject_side = "AI自动解读"
         elif kind == "candidate":
             subject_side = "MACD金叉候选"
+        elif payload.get("evidence", {}).get("signal_level") == "watch":
+            subject_side = "MACD金叉预警"
+        elif payload.get("evidence", {}).get("signal_level") == "confirmation":
+            subject_side = "MACD回落确认"
         else:
             subject_side = "买入观察" if payload["side"] == "buy" else "卖出观察"
         message = MIMEText(self._markdown(payload), "plain", "utf-8")

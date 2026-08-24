@@ -98,6 +98,14 @@ DEFAULT_CONFIG = {
             "max_turnover_rate": 5,
             "volume_burst_ratio": 0.8,
         },
+        "macd": {
+            "pullback_confirmation_bars": 5,
+            "long_ma_period": 250,
+            "position_lookback": 20,
+            "max_long_ma_distance": 0.35,
+            "max_recent_return": 0.30,
+            "high_position_volume_ratio": 3.0,
+        },
         "enabled": {
             "trend_following": True,
             "mean_reversion": False,
@@ -111,6 +119,12 @@ DEFAULT_CONFIG = {
         "near_ma_threshold": 0.05,
         "price_change_soft_min": -0.03,
         "price_change_soft_max": 0.03,
+    },
+    "entry_filters": {
+        "market_gate_enabled": True,
+        "market_index_code": "000001.SH",
+        "market_gate_fail_open": False,
+        "position_gate_enabled": True,
     },
     "regime": {
         "mode": "auto",

@@ -6,8 +6,8 @@ which brings full-market runtime from ~5h down to ~3 minutes.
 Method:
 - Chan signals (buy_1/2/3, sell_1/2/3): full-history analyze_chan, uses
   `confirmed_at` as signal day (locked strokes are immutable).
-- MACD golden/death cross days: vectorised pandas over full history.
-- Entry: signal day D → next-trading-day open (T+1, lot 100).
+- MACD death-cross days plus pullback-confirmed golden crosses over full history.
+- Entry: confirmation day D → next-trading-day open (T+1, lot 100).
 - Exit: first Chan sell or zero-axis death cross after entry day;
   fallback to max_holding_bars=40 periods else window-close.
 - Costs: config backtest section.
@@ -36,7 +36,11 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from strategy.chan import analyze_chan
-from strategy.macd import calculate_macd, classify_zero_axis_zone
+from strategy.macd import (
+    calculate_macd,
+    classify_zero_axis_zone,
+    find_golden_cross_entries,
+)
 from utils.helpers import load_config
 
 logger = logging.getLogger(__name__)
@@ -60,12 +64,20 @@ def find_signals(history: pd.DataFrame, config: dict) -> dict[str, list[dict]]:
     if closed.empty or len(closed) < 60:
         return {"buy": [], "sell": []}
 
-    chan = config.get("signal_strategy", {}).get("chan", {})
+    strategy = config.get("signal_strategy", {})
+    chan = strategy.get("chan", {})
+    macd_config = strategy.get("macd", {})
+    zero_tol = float(macd_config.get("zero_axis_tolerance", 0.005))
     min_bi_bars = int(chan.get("min_bi_bars", 4))
     divergence_ratio = float(chan.get("divergence_ratio", 0.9))
 
     # Chan needs the MACD columns (hist area divergence for type-1 points).
-    macd_frame = calculate_macd(closed["close"], fast=12, slow=26, signal=9)
+    macd_frame = calculate_macd(
+        closed["close"],
+        fast=int(macd_config.get("fast", 12)),
+        slow=int(macd_config.get("slow", 26)),
+        signal=int(macd_config.get("signal", 9)),
+    )
     enriched = closed.join(macd_frame)
     chan_result = analyze_chan(enriched, min_bi_bars=min_bi_bars, divergence_ratio=divergence_ratio)
     chan_signals = chan_result.get("signals", [])
@@ -88,15 +100,51 @@ def find_signals(history: pd.DataFrame, config: dict) -> dict[str, list[dict]]:
         elif sig["signal_type"] in SELL_TYPES:
             sells.append(record)
 
-    # --- Vectorised MACD crosses ---
+    # --- Pullback-confirmed MACD golden crosses ---
+    backtest_macd = config.get("backtest", {}).get("chan_zero_axis", {})
+    allowed_zones = tuple(
+        str(item).lower()
+        for item in backtest_macd.get("allowed_zones", ["above", "near"])
+    )
+    confirmation_bars = int(
+        backtest_macd.get(
+            "cross_window_bars",
+            macd_config.get("pullback_confirmation_bars", 5),
+        )
+    )
+    golden_entries = find_golden_cross_entries(
+        closed,
+        fast=int(macd_config.get("fast", 12)),
+        slow=int(macd_config.get("slow", 26)),
+        signal=int(macd_config.get("signal", 9)),
+        zero_axis_tolerance=zero_tol,
+        confirmation_bars=confirmation_bars,
+        allowed_zones=allowed_zones,
+    )
+    dates = pd.to_datetime(closed["datetime"])
+    for entry in golden_entries:
+        confirmation_index = int(entry["confirmation_index"])
+        raw_date = dates.iloc[confirmation_index]
+        cross_date = dates.iloc[int(entry["cross_index"])]
+        buys.append(
+            {
+                "day": raw_date.date().isoformat(),
+                "cross_day": cross_date.date().isoformat(),
+                "signal_type": f"macd_golden_cross_pullback_confirmed_{entry['zone']}",
+                "side": "buy",
+                "price": float(entry["confirmation_price"]),
+                "confirmed_at": str(raw_date),
+                "confirmation_bars": int(entry["confirmation_bars"]),
+            }
+        )
+
+    # --- Vectorised MACD death crosses ---
     dif = macd_frame["dif"]
     dea = macd_frame["dea"]
     prev_dif = dif.shift(1)
     prev_dea = dea.shift(1)
     dates = pd.to_datetime(closed["datetime"])
     closes = closed["close"]
-    zero_tol = float(config.get("signal_strategy", {}).get("macd", {}).get("zero_axis_tolerance", 0.005))
-
     for i in range(1, len(closed)):
         raw_date = dates.iloc[i]
         d = raw_date.date()
@@ -112,18 +160,6 @@ def find_signals(history: pd.DataFrame, config: dict) -> dict[str, list[dict]]:
                 float(dif.iloc[i]), float(dea.iloc[i]), float(closes.iloc[i]), zero_tol,
             )
 
-        if gc:
-            # Only above-axis crosses clear the buy_threshold (60) as standalone
-            # events (zone points 50 + confirmations); near/below crosses are
-            # events only when a Chan buy point coexists (already covered above).
-            if zone == "above":
-                buys.append({
-                    "day": d.isoformat(),
-                    "signal_type": "macd_golden_cross_above",
-                    "side": "buy",
-                    "price": float(closes.iloc[i]),
-                    "confirmed_at": str(raw_date),
-                })
         if dc and zone == "near":
             sells.append({
                 "day": d.isoformat(),
@@ -164,6 +200,8 @@ def simulate(
     max_holding_bars = int(costs.get("chan_zero_axis", {}).get("max_holding_bars", 40))
 
     trades: list[dict] = []
+    last_exit_idx = -1
+    seen_entry_indices: set[int] = set()
     for buy in buys:
         day = date.fromisoformat(buy["day"])
         if day < start or day > end:
@@ -171,6 +209,11 @@ def simulate(
         entry_idx = next_bar_index(closed, dates, day)
         if entry_idx is None:
             continue
+        # A signal on the same bar, or during an existing position, cannot
+        # create a second independent trade for this symbol.
+        if entry_idx in seen_entry_indices or entry_idx <= last_exit_idx:
+            continue
+        seen_entry_indices.add(entry_idx)
         open_price = float(closed.iloc[entry_idx]["open"])
         if open_price <= 0:
             continue
@@ -184,6 +227,7 @@ def simulate(
                 exit_idx = by_day.get(s_day)
                 exit_day = s_day
                 if exit_idx is not None:
+                    exit_reason = str(sell.get("signal_type") or "chan_sell")
                     break
         if exit_idx is not None and exit_idx <= entry_idx:
             exit_idx = None
@@ -202,11 +246,14 @@ def simulate(
             exit_price = float(closed.iloc[exit_idx]["close"])
         if exit_price <= 0:
             continue
+        # Keep the position occupied through the exit fill bar so a second
+        # signal cannot reuse that bar's opening price.
+        last_exit_idx = fill_idx if fill_idx is not None else exit_idx
 
         buy_cost = open_price * (1 + commission_pct + slippage_pct)
         sell_gain = exit_price * (1 - commission_pct - stamp_pct - slippage_pct)
         pnl_pct = (sell_gain - buy_cost) / buy_cost * 100.0
-        pnl_cash = pnl_pct * open_price * lot / 100.0
+        pnl_cash = (sell_gain - buy_cost) * lot
         holding_days = max((exit_day - day).days, 0)
 
         trades.append({
@@ -214,6 +261,8 @@ def simulate(
             "entry_day": day.isoformat(),
             "exit_day": exit_day.isoformat(),
             "signal_type": buy["signal_type"],
+            "cross_day": buy.get("cross_day"),
+            "confirmation_bars": buy.get("confirmation_bars"),
             "entry_price": round(open_price, 3),
             "exit_price": round(exit_price, 3),
             "pnl_pct": round(pnl_pct, 2),
@@ -232,12 +281,24 @@ def summarize(trades: list[dict]) -> dict:
             "avg_pnl_pct": None,
             "median_pnl_pct": None,
             "total_pnl_cash": 0.0,
+            "gross_profit": 0.0,
+            "gross_loss": 0.0,
+            "gross_profit_pct": 0.0,
+            "gross_loss_pct": 0.0,
+            "avg_win_loss_ratio": None,
+            "profit_factor": None,
         }
     wins = [t for t in trades if t["pnl_pct"] > 0]
     pnls = [t["pnl_pct"] for t in trades]
     avg_win = sum(t["pnl_pct"] for t in wins) / len(wins) if wins else 0.0
     losses = [t["pnl_pct"] for t in trades if t["pnl_pct"] <= 0]
     avg_loss = sum(losses) / len(losses) if losses else 0.0
+    gross_profit = sum(t["pnl_cash"] for t in trades if t["pnl_cash"] > 0)
+    gross_loss = sum(t["pnl_cash"] for t in trades if t["pnl_cash"] < 0)
+    gross_profit_pct = sum(t["pnl_pct"] for t in trades if t["pnl_pct"] > 0)
+    gross_loss_pct = sum(t["pnl_pct"] for t in trades if t["pnl_pct"] < 0)
+    avg_win_loss_ratio = abs(avg_win / avg_loss) if avg_loss else None
+    profit_factor = gross_profit / abs(gross_loss) if gross_loss else None
     return {
         "count": len(trades),
         "win_rate": round(len(wins) / len(trades) * 100, 2),
@@ -245,7 +306,12 @@ def summarize(trades: list[dict]) -> dict:
         "median_pnl_pct": round(sorted(pnls)[len(pnls) // 2], 2),
         "avg_win_pct": round(avg_win, 2),
         "avg_loss_pct": round(avg_loss, 2),
-        "profit_factor": round(abs(avg_win / avg_loss), 2) if avg_loss else None,
+        "gross_profit": round(gross_profit, 2),
+        "gross_loss": round(gross_loss, 2),
+        "gross_profit_pct": round(gross_profit_pct, 2),
+        "gross_loss_pct": round(gross_loss_pct, 2),
+        "avg_win_loss_ratio": round(avg_win_loss_ratio, 2) if avg_win_loss_ratio is not None else None,
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
         "total_pnl_cash": round(sum(t["pnl_cash"] for t in trades), 2),
         "avg_holding_days": round(sum(t["holding_days"] for t in trades) / len(trades), 1),
     }

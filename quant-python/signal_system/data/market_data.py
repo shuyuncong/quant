@@ -53,6 +53,16 @@ def eastmoney_secid(symbol: str) -> str:
     return f"{market}.{code}"
 
 
+def eastmoney_index_secid(symbol: str) -> str:
+    text = str(symbol).strip().upper()
+    code = normalize_symbol(text)
+    if text.endswith(".SZ"):
+        return f"0.{code}"
+    if text.endswith(".SH") or code.startswith("000"):
+        return f"1.{code}"
+    return eastmoney_secid(text)
+
+
 def tencent_symbol(symbol: str) -> str:
     code = normalize_symbol(symbol)
     if code.startswith(("5", "6", "9")):
@@ -583,6 +593,49 @@ class MarketDataClient:
         result = result.drop_duplicates("code").reset_index(drop=True)
         self._save_cache(cache_key, result)
         return result
+
+    def get_index_bars(self, symbol: str = "000001.SH", limit: int = 300) -> pd.DataFrame:
+        """Fetch closed daily index bars for the market-regime gate."""
+        key = f"index_bars|{str(symbol).upper()}|1d|{limit}"
+        cached = self._cached(key, 4 * 3600)
+        if cached is not None:
+            return cached.tail(limit).reset_index(drop=True)
+
+        self._throttle()
+        payload = self._http_json(
+            "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+            {
+                "secid": eastmoney_index_secid(symbol),
+                "klt": "101",
+                "fqt": 0,
+                "beg": 0,
+                "end": "20500101",
+                "lmt": max(limit, 300),
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+            },
+        )
+        klines = (payload.get("data") or {}).get("klines") or []
+        rows = []
+        for line in klines:
+            fields = str(line).split(",")
+            if len(fields) < 7:
+                continue
+            rows.append(
+                {
+                    "datetime": fields[0],
+                    "open": fields[1],
+                    "close": fields[2],
+                    "high": fields[3],
+                    "low": fields[4],
+                    "volume": fields[5],
+                    "amount": fields[6],
+                }
+            )
+        frame = standardize_bars(pd.DataFrame(rows), "1d", "eastmoney-index", adjust="none")
+        frame = frame[frame["is_closed"]].tail(limit).reset_index(drop=True)
+        self._save_cache(key, frame)
+        return frame
 
     def _fetch_akshare(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
         ak = self._get_akshare()

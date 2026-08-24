@@ -28,7 +28,8 @@ class ScoringAndStorageTests(unittest.TestCase):
             timeframe="60m",
             status="ok",
             indicators={
-                "zero_axis_golden_cross": True,
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "near",
                 "above_ma60": True,
                 "ma60_up": True,
                 "volume_ratio": 1.2,
@@ -115,13 +116,89 @@ class ScoringAndStorageTests(unittest.TestCase):
         self.assertFalse(event.evidence["strong_signal"])
         self.assertEqual("structure", event.evidence["signal_level"])
 
+    def test_raw_golden_cross_and_pullback_confirmation_are_separate_events(self):
+        cross_time = "2025-01-01T10:00:00"
+        raw_report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time=cross_time,
+            latest_price=10.0,
+            indicators={
+                "golden_cross": True,
+                "golden_cross_state": "pending_pullback",
+                "golden_cross_zone": "above",
+                "golden_cross_zone_label": "0轴上方金叉",
+                "golden_cross_cross_time": cross_time,
+            },
+        )
+        raw_events = self.analyzer._events(
+            "000001.SZ", "平安银行", raw_report, "buy", 25, []
+        )
+        self.assertEqual(1, len(raw_events))
+        watch = raw_events[0]
+        self.assertEqual("macd_golden_cross_detected_above", watch.signal_type)
+        self.assertEqual("watch", watch.evidence["signal_level"])
+        self.assertFalse(watch.evidence["actionable"])
+
+        confirmed_report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2025-01-03T10:00:00",
+            latest_price=10.3,
+            indicators={
+                "golden_cross": False,
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "above",
+                "golden_cross_cross_time": cross_time,
+            },
+        )
+        confirmed_events = self.analyzer._events(
+            "000001.SZ", "平安银行", confirmed_report, "buy", 40, []
+        )
+        self.assertEqual(1, len(confirmed_events))
+        confirmation = confirmed_events[0]
+        self.assertEqual(
+            "macd_golden_cross_pullback_confirmed_above",
+            confirmation.signal_type,
+        )
+        self.assertTrue(confirmation.evidence["actionable"])
+        self.assertEqual("confirmation", confirmation.evidence["signal_level"])
+        self.assertEqual(
+            watch.evidence["setup_id"],
+            confirmation.evidence["setup_id"],
+        )
+        self.assertNotEqual(watch.event_id, confirmation.event_id)
+
+    def test_below_zero_raw_golden_cross_does_not_create_watch_event(self):
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2025-01-01T10:00:00",
+            latest_price=10.0,
+            indicators={
+                "golden_cross": True,
+                "golden_cross_zone": "below",
+            },
+        )
+        self.assertEqual(
+            [],
+            self.analyzer._events(
+                "000001.SZ", "平安银行", report, "buy", 30, []
+            ),
+        )
+
     def test_each_fresh_chan_point_creates_a_stable_event(self):
         report = TimeframeReport(
             timeframe="15m",
             status="ok",
             latest_time="2025-01-01T10:15:00",
             latest_price=10.0,
-            indicators={"golden_cross": True, "golden_cross_zone": "above"},
+            indicators={
+                "golden_cross": True,
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "above",
+                "golden_cross_zone": "above",
+            },
             chan={
                 "fresh_signals": [
                     {
@@ -145,7 +222,13 @@ class ScoringAndStorageTests(unittest.TestCase):
             ["2025-01-01T10:00:00", "2025-01-01T10:15:00"],
             [event.confirmed_at for event in events],
         )
-        self.assertTrue(all("macd_golden_cross_above" in event.evidence["components"] for event in events))
+        self.assertTrue(
+            all(
+                "macd_golden_cross_pullback_confirmed_above"
+                in event.evidence["components"]
+                for event in events
+            )
+        )
 
     def test_list_outbox_log_joins_event_details_and_order(self):
         with tempfile.TemporaryDirectory() as directory:
