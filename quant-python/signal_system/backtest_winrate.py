@@ -34,6 +34,7 @@ from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
     resolve_market_gate_settings,
+    resolve_min_confirmations,
 )
 from strategy.signal_policy import (
     partition_entry_signals,
@@ -343,7 +344,7 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
             macd_config.get("pullback_confirmation_bars", 5),
         )
     )
-    min_confirmations = max(int(backtest_macd.get("min_confirmations", 0)), 0)
+    min_confirmations = resolve_min_confirmations(config)
     entries = find_golden_cross_entries(
         closed,
         fast=int(macd_config.get("fast", 12)),
@@ -354,13 +355,31 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
         allowed_zones=allowed_zones,
     )
     dates = pd.to_datetime(closed["datetime"])
+    # Quality filters for macd_above entries (backtest.profile.tighten_*)
+    profile = config.get("backtest", {}).get("profile", {})
+    require_confirmations = max(int(profile.get("require_confirmations", 0)), 0)
+    require_weekly_strong = bool(profile.get("require_weekly_strong", False))
+    reject_top_divergence = bool(profile.get("reject_top_divergence", False))
+    require_moderate_volume = bool(profile.get("require_moderate_volume", False))
     for entry in entries:
         confirmation_index = int(entry["confirmation_index"])
         confirmation_items, confirmation_count = _confirmation_details(
             enriched, confirmation_index, macd_config
         )
-        if confirmation_count < min_confirmations:
+        if confirmation_count < max(min_confirmations, require_confirmations):
             continue
+        apply_quality = bool(require_weekly_strong or reject_top_divergence or require_moderate_volume)
+        if apply_quality and entry["zone"] in {"above", "near"}:
+            if require_weekly_strong and not _weekly_strong(
+                enriched, confirmation_index, macd_config
+            ):
+                continue
+            if reject_top_divergence and _top_divergence_risk(
+                enriched, confirmation_index, macd_config
+            ):
+                continue
+            if require_moderate_volume and not _moderate_volume_ok(confirmation_items):
+                continue
         raw_date = dates.iloc[confirmation_index]
         cross_date = dates.iloc[int(entry["cross_index"])]
         buys.append(
@@ -408,6 +427,100 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
                 }
             )
     return {"buy": buys, "sell": sells}
+
+
+def _weekly_strong(
+    enriched: pd.DataFrame,
+    confirmation_index: int,
+    macd_config: dict[str, Any],
+) -> bool:
+    """Return True when the closed week containing the confirmation is in a
+    strong MACD regime on the weekly frame (dif > 0 and dif > dea).
+
+    No-lookahead: only bars up to and including the confirmation are used.
+    """
+    if confirmation_index < 0:
+        return False
+    frame = enriched.iloc[: confirmation_index + 1].copy()
+    if frame.empty or "datetime" not in frame.columns:
+        return False
+    frame["_dt"] = pd.to_datetime(frame["datetime"])
+    frame["_week"] = frame["_dt"].dt.to_period("W").apply(lambda p: p.start_time)
+    weekly = frame.groupby("_week", as_index=False)["close"].last()
+    if len(weekly) < 60:
+        return False
+    wmacd = calculate_macd(
+        weekly["close"],
+        fast=int(macd_config.get("fast", 12)),
+        slow=int(macd_config.get("slow", 26)),
+        signal=int(macd_config.get("signal", 9)),
+    )
+    dif = wmacd["dif"]
+    dea = wmacd["dea"]
+    if pd.isna(dif.iloc[-1]) or pd.isna(dea.iloc[-1]):
+        return False
+    return bool(float(dif.iloc[-1]) > 0 and float(dif.iloc[-1]) > float(dea.iloc[-1]))
+
+
+def _top_divergence_risk(
+    enriched: pd.DataFrame,
+    confirmation_index: int,
+    macd_config: dict[str, Any],
+) -> bool:
+    """Detect a MACD area top divergence using consecutive cross cycles.
+
+    A top divergence exists when price makes a higher high while the positive
+    MACD hist area of the latest up-cycle is smaller than the prior one.
+    Only data up to the confirmation bar is used (no lookahead).
+    """
+    if confirmation_index < 3:
+        return False
+    frame = enriched.iloc[: confirmation_index + 1].reset_index(drop=True)
+    dif = frame["dif"]
+    dea = frame["dea"]
+    hist = frame["hist"].fillna(0.0)
+    closes = frame["close"]
+
+    # Collect golden/death cross indices
+    crosses: list[tuple[int, str]] = []
+    for i in range(1, len(frame)):
+        if pd.isna(dif.iloc[i]) or pd.isna(dea.iloc[i]):
+            continue
+        if dif.iloc[i] > dea.iloc[i] and dif.iloc[i - 1] <= dea.iloc[i - 1]:
+            crosses.append((i, "golden"))
+        elif dif.iloc[i] < dea.iloc[i] and dif.iloc[i - 1] >= dea.iloc[i - 1]:
+            crosses.append((i, "death"))
+
+    # Split into up-cycles: golden→death spans, incomplete final uses confirmation
+    cycles: list[dict[str, float]] = []
+    for j in range(len(crosses) - 1):
+        if crosses[j][1] != "golden":
+            continue
+        start = crosses[j][0]
+        end = crosses[j + 1][0]
+        if crosses[j + 1][1] != "death":
+            end = confirmation_index
+            if end <= start:
+                continue
+        segment_hist = hist.iloc[start:end]
+        positive_area = float(segment_hist[segment_hist > 0].sum())
+        if positive_area <= 0:
+            continue
+        segment_high = float(closes.iloc[start:end].max())
+        cycles.append({"high": segment_high, "area": positive_area})
+
+    if len(cycles) < 2:
+        return False
+    latest = cycles[-1]
+    prior = cycles[-2]
+    high_raised = bool(latest["high"] > prior["high"])
+    area_shrunk = bool(latest["area"] < prior["area"])
+    return bool(high_raised and area_shrunk)
+
+
+def _moderate_volume_ok(confirmation_items: list[str]) -> bool:
+    """Return True when a moderate-volume confirmation is present."""
+    return "moderate_volume" in (confirmation_items or [])
 
 
 def _long_ma_period(config: dict[str, Any]) -> int:
@@ -1503,7 +1616,7 @@ def main() -> int:
                 )
             ),
             "stock_pool_rejected_candidates": len(stock_pool_rejection_details),
-            "min_confirmations": execution.get("chan_zero_axis", {}).get("min_confirmations"),
+            "min_confirmations": resolve_min_confirmations(config),
             "manual_st_symbols": len(execution["st_symbols"]),
         },
         "artifacts": {},

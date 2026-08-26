@@ -21,6 +21,22 @@ def normalize_fast_gate_mode(value: Any) -> str:
     return mode if mode in VALID_FAST_GATE_MODES else "none"
 
 
+def resolve_min_confirmations(config: dict[str, Any]) -> int:
+    """Return the shared minimum-confirmation threshold.
+
+    Single source of truth is signal_strategy.macd.min_confirmations (used by
+    both live analysis and backtests). Backward compatible fallback to
+    backtest.chan_zero_axis.min_confirmations when the macd key is absent.
+    """
+    macd = config.get("signal_strategy", {}).get("macd", {})
+    if isinstance(macd, dict) and macd.get("min_confirmations") is not None:
+        return max(int(macd["min_confirmations"]), 0)
+    chan_zero = config.get("backtest", {}).get("chan_zero_axis", {})
+    if isinstance(chan_zero, dict) and chan_zero.get("min_confirmations") is not None:
+        return max(int(chan_zero["min_confirmations"]), 0)
+    return 0
+
+
 def resolve_market_gate_settings(config: dict[str, Any]) -> dict[str, Any]:
     """Resolve the effective market-gate settings used by live and backtest."""
     entry_filters = config.get("entry_filters", {})

@@ -76,6 +76,7 @@ signal_strategy:
     moderate_volume_min: 1.0         # 温和放量下限：当日量/20日均量
     moderate_volume_max: 2.0         # 温和放量上限，避免把异常巨量当作温和放量
     pullback_confirmation_bars: 5    # 金叉后最多等待5根已收盘K线回落确认
+    min_confirmations: 0             # 默认不设确认条件数门槛，保留为可调实验参数
     long_ma_period: 250              # 日线长期趋势/年线
     position_lookback: 20            # 近期涨幅风险窗口
     max_long_ma_distance: 0.35       # 距年线超过35%标记高位风险
@@ -210,7 +211,7 @@ backtest:
     - "buy_3"
   chan_zero_axis:
     allowed_zones: ["above", "near"]
-    min_confirmations: 2
+    min_confirmations: 0
     cross_window_bars: 5
     max_holding_bars: 40
 

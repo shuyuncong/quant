@@ -169,6 +169,7 @@ const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
   "signal_strategy.macd.zero_axis_tolerance": { type: "number", min: 0 },
   "signal_strategy.macd.moderate_volume_min": { type: "number", min: 0 },
   "signal_strategy.macd.moderate_volume_max": { type: "number", min: 0 },
+  "signal_strategy.macd.min_confirmations": { type: "number", min: 0, max: 3 },
   "signal_strategy.llm_context_bars": { type: "number", min: 10, max: 200 },
   "signal_strategy.scoring.buy_threshold": { type: "number", min: 0, max: 100 },
   "signal_strategy.scoring.sell_threshold": { type: "number", min: 0, max: 100 },

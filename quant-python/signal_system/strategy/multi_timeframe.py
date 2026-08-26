@@ -9,6 +9,7 @@ import pandas as pd
 from models import SignalEvent, TimeframeReport
 from strategy.chan import analyze_chan
 from strategy.macd import analyze_macd
+from strategy.market_gate import resolve_min_confirmations
 from strategy.signal_policy import (
     effective_signal_execution_mode,
     resolve_signal_execution_policy,
@@ -51,6 +52,7 @@ class MultiTimeframeAnalyzer:
         self.context_bars = max(10, int(strategy.get("llm_context_bars", 48)))
         self.volume_unit_shares = float(config.get("market_data", {}).get("volume_unit_shares", 100))
         self.signal_execution_policy = resolve_signal_execution_policy(config)
+        self.min_confirmations = resolve_min_confirmations(config)
 
     def _fresh_signals(self, signals: list[dict[str, Any]], frame: pd.DataFrame) -> list[dict[str, Any]]:
         if not signals or frame.empty:
@@ -420,6 +422,17 @@ class MultiTimeframeAnalyzer:
             event_is_confirmation = bool(
                 side == "buy" and chan_signal is None and cross_component
             )
+            confirmation_count = int(indicators.get("confirmation_count", 0) or 0)
+            confirmation_threshold_met = (
+                not event_is_confirmation
+                or confirmation_count >= self.min_confirmations
+            )
+            if (
+                event_is_confirmation
+                and not confirmation_threshold_met
+                and execution_mode == "enabled"
+            ):
+                execution_mode = "observe_only"
             technical_signal_level = (
                 "strong"
                 if strong_signal
@@ -443,6 +456,8 @@ class MultiTimeframeAnalyzer:
             }
             if event_is_confirmation:
                 evidence["setup_id"] = setup_id
+                evidence["min_confirmations"] = self.min_confirmations
+                evidence["confirmation_threshold_met"] = confirmation_threshold_met
             events.append(
                 SignalEvent(
                     symbol=symbol,

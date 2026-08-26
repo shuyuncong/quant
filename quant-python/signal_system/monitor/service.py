@@ -22,6 +22,7 @@ from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
     resolve_market_gate_settings,
+    resolve_min_confirmations,
 )
 from strategy.signal_policy import (
     resolve_signal_execution_policy,
@@ -221,8 +222,14 @@ class SignalMonitor:
     def _daily_macd_notification_events(
         event_objects: list[SignalEvent],
         daily_report: dict[str, Any],
+        min_confirmations: int = 0,
     ) -> list[SignalEvent]:
-        """Keep raw-cross watches and actionable pullback confirmations."""
+        """Keep raw-cross watches and actionable pullback confirmations.
+
+        A raw golden-cross watch is always kept (no confirmation threshold);
+        only the actionable pullback-confirmation events require
+        confirmation_count >= min_confirmations.
+        """
         indicators = daily_report.get("indicators", {})
         raw_zone = str(indicators.get("golden_cross_zone", ""))
         entry_zone = str(
@@ -237,6 +244,10 @@ class SignalMonitor:
             indicators.get("golden_cross_entry_ready")
             and entry_zone in {"above", "near"}
         )
+        event_confirmation_count = int(
+            indicators.get("confirmation_count", 0) or 0
+        )
+        confirmation_met = event_confirmation_count >= min_confirmations
         filtered_events = []
         for event in event_objects:
             if event.timeframe != "1d":
@@ -250,7 +261,7 @@ class SignalMonitor:
                 for component in components
             )
             if (raw_ready and is_watch) or (
-                confirmed_ready and is_confirmation
+                confirmed_ready and is_confirmation and confirmation_met
             ):
                 filtered_events.append(event)
         return filtered_events
@@ -367,6 +378,7 @@ class SignalMonitor:
                     event_objects = self._daily_macd_notification_events(
                         event_objects,
                         daily_report,
+                        resolve_min_confirmations(self.config),
                     )
                 if notify and self.push_trade_signal:
                     for event in event_objects:
@@ -605,10 +617,13 @@ class SignalMonitor:
                     or indicators.get("golden_cross_zone", "near")
                 )
                 entry_ready = bool(indicators.get("golden_cross_entry_ready", False))
+                confirmation_count = int(indicators.get("confirmation_count", 0) or 0)
+                min_confirmations = resolve_min_confirmations(self.config)
+                confirmation_met = confirmation_count >= min_confirmations
                 position_ready = bool(
                     indicators.get("above_ma_long") and indicators.get("ma_long_up")
                 )
-                if entry_ready and zone in {"above", "near"}:
+                if entry_ready and zone in {"above", "near"} and confirmation_met:
                     signal_type = (
                         "macd_golden_cross_pullback_confirmed_"
                         f"{zone}"

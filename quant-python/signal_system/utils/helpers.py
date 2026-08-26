@@ -202,7 +202,7 @@ DEFAULT_CONFIG = {
         ],
         "chan_zero_axis": {
             "allowed_zones": ["above", "near"],
-            "min_confirmations": 2,
+            "min_confirmations": 0,
             "cross_window_bars": 5,
             "max_holding_bars": 40,
         },

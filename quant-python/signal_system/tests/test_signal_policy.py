@@ -193,6 +193,115 @@ class SignalExecutionPolicyTests(unittest.TestCase):
         self.assertEqual("watch", ranged[0].evidence["signal_level"])
         self.assertEqual("observe_only", ranged[0].evidence["execution_mode"])
 
+    def test_multi_timeframe_confirmation_threshold_tightens_macd_event(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {"signal_strategy": {"macd": {"min_confirmations": 2}}}
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2026-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "above",
+                "confirmation_count": 1,
+            },
+            chan={},
+        )
+
+        event = analyzer._events(
+            "000001", "sample", report, "buy", 70, [], "bull"
+        )[0]
+
+        self.assertFalse(event.evidence["actionable"])
+        self.assertEqual("watch", event.evidence["signal_level"])
+        self.assertEqual("observe_only", event.evidence["execution_mode"])
+        self.assertEqual(2, event.evidence["min_confirmations"])
+        self.assertFalse(event.evidence["confirmation_threshold_met"])
+
+    def test_multi_timeframe_confirmation_threshold_allows_qualified_macd_event(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {"signal_strategy": {"macd": {"min_confirmations": 2}}}
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2026-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "above",
+                "confirmation_count": 2,
+            },
+            chan={},
+        )
+
+        event = analyzer._events(
+            "000001", "sample", report, "buy", 70, [], "bull"
+        )[0]
+
+        self.assertTrue(event.evidence["actionable"])
+        self.assertEqual("enabled", event.evidence["execution_mode"])
+        self.assertTrue(event.evidence["confirmation_threshold_met"])
+
+    def test_multi_timeframe_confirmation_threshold_does_not_tighten_chan_buy(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {"signal_strategy": {"macd": {"min_confirmations": 2}}}
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2026-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={"confirmation_count": 0},
+            chan={
+                "fresh_signals": [
+                    {
+                        "side": "buy",
+                        "signal_type": "buy_1",
+                        "confirmed_at": "2026-01-01T15:00:00",
+                        "structure_time": "2025-12-31T15:00:00",
+                    }
+                ]
+            },
+        )
+
+        event = analyzer._events(
+            "000001", "sample", report, "buy", 70, [], "bull"
+        )[0]
+
+        self.assertEqual("buy_1", event.signal_type)
+        self.assertTrue(event.evidence["actionable"])
+        self.assertEqual("enabled", event.evidence["execution_mode"])
+
+    def test_multi_timeframe_confirmation_threshold_keeps_raw_cross_watch_event(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {"signal_strategy": {"macd": {"min_confirmations": 2}}}
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2026-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={
+                "golden_cross": True,
+                "golden_cross_entry_ready": False,
+                "golden_cross_zone": "above",
+                "confirmation_count": 0,
+            },
+            chan={},
+        )
+
+        event = analyzer._events(
+            "000001", "sample", report, "buy", 30, [], "bull"
+        )[0]
+
+        self.assertEqual("macd_golden_cross_detected_above", event.signal_type)
+        self.assertFalse(event.evidence["actionable"])
+        self.assertEqual("watch", event.evidence["signal_level"])
+        self.assertEqual("observe_only", event.evidence["execution_mode"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,7 @@ interface StrategiesForm {
   zero_axis_tolerance: string;
   moderate_volume_min: string;
   moderate_volume_max: string;
+  min_confirmations: string;
   llm_context_bars: string;
   buy_threshold: string;
   sell_threshold: string;
@@ -143,6 +144,7 @@ export default function StrategiesPage() {
     zero_axis_tolerance: "",
     moderate_volume_min: "",
     moderate_volume_max: "",
+    min_confirmations: "",
     llm_context_bars: "",
     buy_threshold: "",
     sell_threshold: "",
@@ -195,6 +197,7 @@ export default function StrategiesPage() {
         zero_axis_tolerance: num(signal.macd?.zero_axis_tolerance, "0.005"),
         moderate_volume_min: num(signal.macd?.moderate_volume_min, "1"),
         moderate_volume_max: num(signal.macd?.moderate_volume_max, "2"),
+        min_confirmations: num(signal.macd?.min_confirmations ?? signal.chan_zero_axis?.min_confirmations, "0"),
         llm_context_bars: num(signal.llm_context_bars, "48"),
         buy_threshold: num(signal.scoring?.buy_threshold, "60"),
         sell_threshold: num(signal.scoring?.sell_threshold, "60"),
@@ -272,6 +275,7 @@ export default function StrategiesPage() {
       "signal_strategy.macd.zero_axis_tolerance": Number(form.zero_axis_tolerance),
       "signal_strategy.macd.moderate_volume_min": Number(form.moderate_volume_min),
       "signal_strategy.macd.moderate_volume_max": Number(form.moderate_volume_max),
+      "signal_strategy.macd.min_confirmations": Number(form.min_confirmations),
       "signal_strategy.llm_context_bars": Number(form.llm_context_bars),
       "signal_strategy.scoring.buy_threshold": Number(form.buy_threshold),
       "signal_strategy.scoring.sell_threshold": Number(form.sell_threshold),
@@ -350,6 +354,7 @@ export default function StrategiesPage() {
               <NumberField id="zero-axis-tolerance" label="MACD：0轴容差" value={form.zero_axis_tolerance} onChange={set("zero_axis_tolerance")} />
               <NumberField id="moderate-volume-min" label="温和放量下限" value={form.moderate_volume_min} onChange={set("moderate_volume_min")} />
               <NumberField id="moderate-volume-max" label="温和放量上限" value={form.moderate_volume_max} onChange={set("moderate_volume_max")} />
+              <NumberField id="min-confirmations" label="确认条件数下限" value={form.min_confirmations} onChange={set("min_confirmations")} />
               <NumberField id="buy-threshold" label="买入评分阈值" value={form.buy_threshold} onChange={set("buy_threshold")} />
               <NumberField id="sell-threshold" label="卖出评分阈值" value={form.sell_threshold} onChange={set("sell_threshold")} />
               <NumberField id="bar-limit" label="K线数量（bar_limit）" value={form.bar_limit} onChange={set("bar_limit")} />
