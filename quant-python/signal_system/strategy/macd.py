@@ -210,6 +210,7 @@ def analyze_macd(
     result = result.join(macd)
     result["ma5"] = result["close"].rolling(5, min_periods=5).mean()
     result["ma10"] = result["close"].rolling(10, min_periods=10).mean()
+    result["ma20"] = result["close"].rolling(20, min_periods=20).mean()
     result["ma60"] = result["close"].rolling(ma_period, min_periods=ma_period).mean()
     if long_ma_period:
         result["ma_long"] = result["close"].rolling(
@@ -401,11 +402,17 @@ def analyze_macd(
         "zero_axis_death_cross": bool(death_cross and near_zero),
         "ma5": None if pd.isna(current["ma5"]) else float(current["ma5"]),
         "ma10": None if pd.isna(current["ma10"]) else float(current["ma10"]),
+        "ma20": None if pd.isna(current["ma20"]) else float(current["ma20"]),
         "ma60": None if pd.isna(ma_current) else float(ma_current),
         "ma60_up": ma_up,
         "ma60_down": ma_down,
         "above_ma60": bool(pd.notna(ma_current) and current["close"] > ma_current),
         "below_ma60": bool(pd.notna(ma_current) and current["close"] < ma_current),
+        "ma20_above_ma60": bool(
+            pd.notna(current["ma20"])
+            and pd.notna(ma_current)
+            and float(current["ma20"]) > float(ma_current)
+        ),
         "volume_ratio": volume_ratio,
         "moderate_volume": moderate_volume,
         "price_breakout_ma5_ma10": price_breakout,

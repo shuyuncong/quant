@@ -235,6 +235,73 @@ class StockPoolTests(unittest.TestCase):
             )
             self.assertEqual(100.0, report["candidates"][0]["stock_pool_metrics"]["market_cap"])
 
+    def test_live_scan_observes_above_cross_in_range_regime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = object.__new__(SignalMonitor)
+            monitor.config = {
+                **pool_config(enabled=False),
+                "scan": {"universe_mode": "all_a"},
+                "entry_filters": {"position_gate_enabled": False},
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {
+                            "macd_golden_cross_pullback_confirmed_above": "enabled",
+                        },
+                        "by_regime": {
+                            "range": {
+                                "macd_golden_cross_pullback_confirmed_above": "observe_only",
+                            }
+                        },
+                    }
+                },
+            }
+            monitor.market = MagicMock()
+            monitor.market.refresh_daily_histories_from_snapshot.return_value = 0
+            monitor.market.latest_expected_trade_date.return_value = date(2025, 7, 16)
+            monitor.market.get_stock_list.return_value = pd.DataFrame(
+                [{"code": "000001", "name": "观察样本"}]
+            )
+            monitor.market.get_bars.return_value = history(periods=140)
+            monitor.analyzer = MagicMock()
+            monitor.analyzer.analyze.side_effect = lambda *_: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {
+                        "latest_time": "2025-07-16",
+                        "latest_price": 10.0,
+                        "buy_score": 70,
+                        "indicators": {
+                            "golden_cross_entry_ready": True,
+                            "golden_cross_entry_zone": "above",
+                        },
+                        "chan": {"fresh_signals": []},
+                    }
+                },
+            }
+            monitor.store = MagicMock()
+            monitor.store.get_state.return_value = "true"
+            monitor.notifier = MagicMock()
+            monitor.notifier.active_channels.return_value = []
+            monitor.output_dir = Path(directory)
+            monitor.watchlist = []
+            monitor.max_scan_symbols = 500
+            monitor.min_daily_bars = 120
+            monitor.candidate_ttl = 5
+            monitor.candidate_limit = 100
+            monitor.push_candidate_pool = False
+            monitor._name_map = None
+            monitor._market_entry_context = lambda: {
+                "allows_entries": True,
+                "regime": "range",
+            }
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            self.assertEqual(0, report["candidate_count"])
+            self.assertEqual(1, len(report["observed_candidates"]))
+            self.assertEqual("observe_only", report["observed_candidates"][0]["execution_mode"])
+            self.assertEqual("range", report["observed_candidates"][0]["regime"])
+
 
 if __name__ == "__main__":
     unittest.main()

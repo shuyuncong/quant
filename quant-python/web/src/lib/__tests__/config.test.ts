@@ -44,6 +44,8 @@ describe("validateSection", () => {
     const { ok, errors, normalized } = validateSection("strategies", {
       "signal_strategy.chan.min_bi_bars": "4",
       "signal_strategy.chan.divergence_ratio": "0.9",
+      "signal_strategy.execution_policy.default": "enabled",
+      "signal_strategy.execution_policy.signals.buy_2": "observe_only",
       "stock_pool.enabled": true,
       "stock_pool.min_market_cap": "50",
       "stock_pool.max_market_cap": "3000",
@@ -60,6 +62,7 @@ describe("validateSection", () => {
     expect(ok).toBe(true);
     expect(errors).toEqual([]);
     expect(normalized["signal_strategy.chan.min_bi_bars"]).toBe(4);
+    expect(normalized["signal_strategy.execution_policy.signals.buy_2"]).toBe("observe_only");
     expect(normalized["stock_pool.min_market_cap"]).toBe(50);
   });
 
@@ -93,5 +96,14 @@ describe("validateSection", () => {
     expect(ok).toBe(false);
     expect(errors.length).toBeGreaterThanOrEqual(3);
     expect(errors.some((item) => item.includes("必须是整数"))).toBe(true);
+  });
+
+  it("rejects invalid signal execution modes", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "signal_strategy.execution_policy.signals.buy_2": "paper_trade",
+    });
+
+    expect(ok).toBe(false);
+    expect(errors.some((item) => item.includes("enabled/observe_only/disabled"))).toBe(true);
   });
 });

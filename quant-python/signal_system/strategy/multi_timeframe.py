@@ -9,6 +9,11 @@ import pandas as pd
 from models import SignalEvent, TimeframeReport
 from strategy.chan import analyze_chan
 from strategy.macd import analyze_macd
+from strategy.signal_policy import (
+    effective_signal_execution_mode,
+    resolve_signal_execution_policy,
+    signal_execution_mode_with_regime,
+)
 from utils.time_utils import now_shanghai
 
 
@@ -45,6 +50,7 @@ class MultiTimeframeAnalyzer:
         self.timeframe_weights = {**DEFAULT_WEIGHTS, **scoring.get("timeframe_weights", {})}
         self.context_bars = max(10, int(strategy.get("llm_context_bars", 48)))
         self.volume_unit_shares = float(config.get("market_data", {}).get("volume_unit_shares", 100))
+        self.signal_execution_policy = resolve_signal_execution_policy(config)
 
     def _fresh_signals(self, signals: list[dict[str, Any]], frame: pd.DataFrame) -> list[dict[str, Any]]:
         if not signals or frame.empty:
@@ -81,7 +87,12 @@ class MultiTimeframeAnalyzer:
             "amount": amount,
         }
 
-    def _base_report(self, timeframe: str, frame: pd.DataFrame) -> tuple[TimeframeReport, pd.DataFrame]:
+    def _base_report(
+        self,
+        timeframe: str,
+        frame: pd.DataFrame,
+        regime: str | None = None,
+    ) -> tuple[TimeframeReport, pd.DataFrame]:
         source_meta = dict(frame.attrs)
         closed = frame[frame["is_closed"]].copy().reset_index(drop=True)
         enriched, indicators = analyze_macd(
@@ -136,7 +147,22 @@ class MultiTimeframeAnalyzer:
             min_bi_bars=self.min_bi_bars,
             divergence_ratio=self.divergence_ratio,
         )
-        fresh = self._fresh_signals(chan["signals"], enriched)
+        fresh = []
+        for raw_signal in self._fresh_signals(chan["signals"], enriched):
+            signal = dict(raw_signal)
+            execution_mode = (
+                signal_execution_mode_with_regime(
+                    str(signal.get("signal_type", "")),
+                    self.signal_execution_policy,
+                    regime,
+                )
+                if signal.get("side") == "buy"
+                else "enabled"
+            )
+            signal["execution_mode"] = execution_mode
+            signal["actionable"] = execution_mode == "enabled"
+            signal["regime"] = regime
+            fresh.append(signal)
         compact_chan = {
             "status": chan["status"],
             "merged_bar_count": len(chan["merged_bars"]),
@@ -279,6 +305,7 @@ class MultiTimeframeAnalyzer:
         side: str,
         score: int,
         score_reasons: list[str],
+        regime: str | None = None,
     ) -> list[SignalEvent]:
         indicators = report.indicators
         fresh = [item for item in report.chan.get("fresh_signals", []) if item["side"] == side]
@@ -333,6 +360,8 @@ class MultiTimeframeAnalyzer:
                         "strong_signal": False,
                         "signal_level": "watch",
                         "actionable": False,
+                        "execution_mode": "observe_only",
+                        "regime": regime,
                         "setup_id": setup_id,
                     },
                 )
@@ -352,7 +381,12 @@ class MultiTimeframeAnalyzer:
                 else "zero_axis_death_cross"
             )
 
-        sources = fresh or [None]
+        if side == "buy":
+            sources = list(fresh)
+            if cross_component:
+                sources.append(None)
+        else:
+            sources = fresh or [None]
         for chan_signal in sources:
             signal_type = (
                 str(chan_signal["signal_type"])
@@ -370,8 +404,28 @@ class MultiTimeframeAnalyzer:
                 else str(report.latest_time or confirmed_at)
             )
             components = [signal_type]
-            if cross_component and cross_component != signal_type:
+            if side != "buy" and cross_component and cross_component != signal_type:
                 components.append(cross_component)
+            execution_mode = (
+                effective_signal_execution_mode(
+                    components,
+                    self.signal_execution_policy,
+                    regime,
+                )
+                if side == "buy"
+                else "enabled"
+            )
+            if execution_mode == "disabled":
+                continue
+            event_is_confirmation = bool(
+                side == "buy" and chan_signal is None and cross_component
+            )
+            technical_signal_level = (
+                "strong"
+                if strong_signal
+                else ("confirmation" if event_is_confirmation else "structure")
+            )
+            actionable = side != "buy" or execution_mode == "enabled"
             evidence = {
                 "components": components,
                 "score_reasons": score_reasons,
@@ -381,14 +435,13 @@ class MultiTimeframeAnalyzer:
                 "timeframe_weight": self.timeframe_weights.get(report.timeframe, 1),
                 "notification_kind": "trade_signal",
                 "strong_signal": strong_signal,
-                "signal_level": (
-                    "strong"
-                    if strong_signal
-                    else ("confirmation" if standalone_confirmation else "structure")
-                ),
-                "actionable": True,
+                "technical_signal_level": technical_signal_level,
+                "signal_level": technical_signal_level if actionable else "watch",
+                "actionable": actionable,
+                "execution_mode": execution_mode,
+                "regime": regime,
             }
-            if side == "buy" and cross_component:
+            if event_is_confirmation:
                 evidence["setup_id"] = setup_id
             events.append(
                 SignalEvent(
@@ -414,8 +467,11 @@ class MultiTimeframeAnalyzer:
         side: str,
         score: int,
         score_reasons: list[str],
+        regime: str | None = None,
     ) -> SignalEvent | None:
-        events = self._events(symbol, name, report, side, score, score_reasons)
+        events = self._events(
+            symbol, name, report, side, score, score_reasons, regime
+        )
         return events[0] if events else None
 
     def analyze(
@@ -424,6 +480,7 @@ class MultiTimeframeAnalyzer:
         name: str,
         bars_by_timeframe: dict[str, pd.DataFrame],
         errors: dict[str, str] | None = None,
+        regime: str | None = None,
     ) -> dict[str, Any]:
         reports: dict[str, TimeframeReport] = {}
         for timeframe in DEFAULT_ORDER:
@@ -437,7 +494,7 @@ class MultiTimeframeAnalyzer:
                     )
                 continue
             try:
-                report, _ = self._base_report(timeframe, frame)
+                report, _ = self._base_report(timeframe, frame, regime)
                 reports[timeframe] = report
             except Exception as exc:
                 reports[timeframe] = TimeframeReport(
@@ -455,8 +512,12 @@ class MultiTimeframeAnalyzer:
             sell_score, sell_reasons = self._score(report, higher, "sell")
             report.buy_score = buy_score
             report.sell_score = sell_score
-            buy_events = self._events(symbol, name, report, "buy", buy_score, buy_reasons)
-            sell_events = self._events(symbol, name, report, "sell", sell_score, sell_reasons)
+            buy_events = self._events(
+                symbol, name, report, "buy", buy_score, buy_reasons, regime
+            )
+            sell_events = self._events(
+                symbol, name, report, "sell", sell_score, sell_reasons, regime
+            )
             report.events.extend(buy_events)
             report.events.extend(sell_events)
             events.extend(buy_events)

@@ -116,6 +116,121 @@ class ScoringAndStorageTests(unittest.TestCase):
         self.assertFalse(event.evidence["strong_signal"])
         self.assertEqual("structure", event.evidence["signal_level"])
 
+    def test_buy_2_observe_policy_keeps_non_actionable_watch_event(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {"buy_2": "observe_only"},
+                    }
+                }
+            }
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2025-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={},
+            chan={
+                "fresh_signals": [
+                    {
+                        "signal_type": "buy_2",
+                        "side": "buy",
+                        "structure_time": "2025-01-01T14:30:00",
+                        "confirmed_at": "2025-01-01T15:00:00",
+                    }
+                ]
+            },
+        )
+
+        events = analyzer._events("000001.SZ", "平安银行", report, "buy", 25, [])
+
+        self.assertEqual(1, len(events))
+        event = events[0]
+        self.assertEqual("buy_2", event.signal_type)
+        self.assertFalse(event.evidence["actionable"])
+        self.assertEqual("watch", event.evidence["signal_level"])
+        self.assertEqual("observe_only", event.evidence["execution_mode"])
+
+    def test_disabled_buy_signal_does_not_create_event(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {"buy_2": "disabled"},
+                    }
+                }
+            }
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2025-01-01T15:00:00",
+            latest_price=10.0,
+            indicators={},
+            chan={
+                "fresh_signals": [
+                    {
+                        "signal_type": "buy_2",
+                        "side": "buy",
+                        "structure_time": "2025-01-01T14:30:00",
+                        "confirmed_at": "2025-01-01T15:00:00",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(
+            [],
+            analyzer._events("000001.SZ", "平安银行", report, "buy", 25, []),
+        )
+
+    def test_enabled_macd_event_executes_alongside_observed_buy_2(self):
+        analyzer = MultiTimeframeAnalyzer(
+            {
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {"buy_2": "observe_only"},
+                    }
+                }
+            }
+        )
+        report = TimeframeReport(
+            timeframe="1d",
+            status="ok",
+            latest_time="2025-01-03T15:00:00",
+            latest_price=10.3,
+            indicators={
+                "golden_cross_entry_ready": True,
+                "golden_cross_entry_zone": "above",
+            },
+            chan={
+                "fresh_signals": [
+                    {
+                        "signal_type": "buy_2",
+                        "side": "buy",
+                        "structure_time": "2025-01-03T14:30:00",
+                        "confirmed_at": "2025-01-03T15:00:00",
+                    }
+                ]
+            },
+        )
+
+        events = analyzer._events("000001.SZ", "平安银行", report, "buy", 70, [])
+
+        self.assertEqual(2, len(events))
+        buy_2_event = next(event for event in events if event.signal_type == "buy_2")
+        macd_event = next(
+            event
+            for event in events
+            if event.signal_type == "macd_golden_cross_pullback_confirmed_above"
+        )
+        self.assertFalse(buy_2_event.evidence["actionable"])
+        self.assertEqual("observe_only", buy_2_event.evidence["execution_mode"])
+        self.assertTrue(macd_event.evidence["actionable"])
+        self.assertEqual("enabled", macd_event.evidence["execution_mode"])
+
     def test_raw_golden_cross_and_pullback_confirmation_are_separate_events(self):
         cross_time = "2025-01-01T10:00:00"
         raw_report = TimeframeReport(
@@ -217,17 +332,25 @@ class ScoringAndStorageTests(unittest.TestCase):
             },
         )
         events = self.analyzer._events("000001.SZ", "平安银行", report, "buy", 80, [])
-        self.assertEqual(["buy_1", "buy_2"], [event.signal_type for event in events])
         self.assertEqual(
-            ["2025-01-01T10:00:00", "2025-01-01T10:15:00"],
+            [
+                "buy_1",
+                "buy_2",
+                "macd_golden_cross_pullback_confirmed_above",
+            ],
+            [event.signal_type for event in events],
+        )
+        self.assertEqual(
+            [
+                "2025-01-01T10:00:00",
+                "2025-01-01T10:15:00",
+                "2025-01-01T10:15:00",
+            ],
             [event.confirmed_at for event in events],
         )
-        self.assertTrue(
-            all(
-                "macd_golden_cross_pullback_confirmed_above"
-                in event.evidence["components"]
-                for event in events
-            )
+        self.assertEqual(
+            [["buy_1"], ["buy_2"], ["macd_golden_cross_pullback_confirmed_above"]],
+            [event.evidence["components"] for event in events],
         )
 
     def test_list_outbox_log_joins_event_details_and_order(self):

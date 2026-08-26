@@ -30,6 +30,15 @@ if str(BASE_DIR) not in sys.path:
 
 from strategy.chan import analyze_chan
 from strategy.macd import calculate_macd, classify_zero_axis_zone, find_golden_cross_entries
+from strategy.market_gate import (
+    calculate_strict_regime,
+    calculate_trend_gate,
+    resolve_market_gate_settings,
+)
+from strategy.signal_policy import (
+    partition_entry_signals,
+    resolve_signal_execution_policy,
+)
 from strategy.stock_pool import filter_buy_events, resolve_stock_pool_config
 from utils.helpers import load_config
 
@@ -420,20 +429,44 @@ def build_market_gate(
     closed = prepare_closed_bars(index_history)
     if closed.empty:
         return {}
-    macd_config = config.get("signal_strategy", {}).get("macd", {})
+    gate_settings = resolve_market_gate_settings(config)
+    macd_settings = gate_settings["macd"]
     ma_period = _long_ma_period(config)
     slope_bars = max(int(config.get("backtest", {}).get("market_gate_slope_bars", 5)), 1)
     macd = calculate_macd(
         closed["close"],
-        fast=int(macd_config.get("fast", 12)),
-        slow=int(macd_config.get("slow", 26)),
-        signal=int(macd_config.get("signal", 9)),
+        fast=macd_settings["fast"],
+        slow=macd_settings["slow"],
+        signal=macd_settings["signal"],
     )
     ma_long = closed["close"].rolling(ma_period, min_periods=ma_period).mean()
     ma_previous = ma_long.shift(slope_bars)
+    trend_gate_enabled = gate_settings["trend_gate_enabled"]
+    trend_up_by_day = calculate_trend_gate(
+        closed["close"],
+        trend_gate_enabled,
+        gate_settings["trend_fast_ma"],
+        gate_settings["trend_slow_ma"],
+    )
     death_cross = (macd["dif"] < macd["dea"]) & (
         macd["dif"].shift(1) >= macd["dea"].shift(1)
     )
+    golden_cross = (macd["dif"] > macd["dea"]) & (
+        macd["dif"].shift(1) <= macd["dea"].shift(1)
+    )
+    # Strict MA20/MA10 regime (independent of blocked_by, used for by_regime).
+    # Always calculate MA10 so the regime remains valid even when the optional
+    # stateful fast latch is disabled.
+    strict_regime_by_day = calculate_strict_regime(
+        closed["close"], fast_period=10, slow_period=20
+    )
+    ma10 = closed["close"].rolling(10, min_periods=10).mean()
+    ma10_prev = ma10.shift(1)
+    # Fast stateful latch: ma10_latch | macd_death_latch | any_latch
+    fast_gate_mode = gate_settings["fast_gate_mode"]
+    # Latch state: initialized before loop, mutated per-iteration (no future)
+    ma10_latch_bear = False
+    macd_latch_bear = False
     result: dict[str, dict[str, Any]] = {}
     for index, row in closed.iterrows():
         day_key = _day(row["datetime"]).isoformat()
@@ -447,12 +480,16 @@ def build_market_gate(
                 "above_ma_long": False,
                 "ma_long_up": False,
                 "death_cross": bool(death_cross.iloc[index]),
+                "trend_up": False,
+                "ma10_latch_bear": False,
+                "macd_latch_bear": False,
             }
             continue
         above_ma = bool(float(row["close"]) > float(current_ma))
         ma_up = bool(float(current_ma) > float(previous_ma))
         ma_down = bool(float(current_ma) < float(previous_ma))
         is_death_cross = bool(death_cross.iloc[index])
+        trend_up = bool(trend_up_by_day.iloc[index])
         blocked_by: list[str] = []
         if not above_ma:
             blocked_by.append("below_ma_long")
@@ -460,13 +497,41 @@ def build_market_gate(
             blocked_by.append("ma_long_down")
         if is_death_cross:
             blocked_by.append("macd_death_cross")
+        if not trend_up:
+            blocked_by.append("trend_down")
+        # Fast gate latch updates (stateful, persists across days)
+        if fast_gate_mode in ("ma10_latch", "any_latch"):
+            cur_ma10 = ma10.iloc[index]
+            pre_ma10 = ma10_prev.iloc[index]
+            if pd.notna(cur_ma10) and pd.notna(pre_ma10):
+                close_above = float(row["close"]) > float(cur_ma10)
+                ma10_rising = float(cur_ma10) > float(pre_ma10)
+                if not close_above and not ma10_rising:
+                    ma10_latch_bear = True
+                elif close_above and ma10_rising:
+                    ma10_latch_bear = False
+                # otherwise state unchanged
+            if ma10_latch_bear:
+                blocked_by.append("ma10_latch_bear")
+        if fast_gate_mode in ("macd_death_latch", "any_latch"):
+            if bool(golden_cross.iloc[index]):
+                macd_latch_bear = False
+            elif bool(death_cross.iloc[index]):
+                macd_latch_bear = True
+            # else state unchanged
+            if macd_latch_bear:
+                blocked_by.append("macd_latch_bear")
+        strict_regime = str(strict_regime_by_day.iloc[index])
         result[day_key] = {
             "allows_entries": not blocked_by,
-            "regime": "bear" if blocked_by else ("bull" if ma_up else "range"),
+            "regime": strict_regime,
             "blocked_by": blocked_by,
             "above_ma_long": above_ma,
             "ma_long_up": ma_up,
             "death_cross": is_death_cross,
+            "trend_up": trend_up,
+            "ma10_latch_bear": ma10_latch_bear,
+            "macd_latch_bear": macd_latch_bear,
             "ma_long": float(current_ma),
             "close": float(row["close"]),
         }
@@ -1225,6 +1290,8 @@ def main() -> int:
     )
     entry_filters = config.get("entry_filters", {})
     stock_pool_settings = resolve_stock_pool_config(config)
+    market_gate_settings = resolve_market_gate_settings(config)
+    signal_execution_policy = resolve_signal_execution_policy(config)
     market_gate_enabled = bool(entry_filters.get("market_gate_enabled", False))
     market_gate: dict[str, dict[str, Any]] | None = None
     market_gate_meta: dict[str, Any] = {"enabled": market_gate_enabled}
@@ -1259,7 +1326,18 @@ def main() -> int:
         "Backtesting %s symbols, window %s -> %s, mode=%s, adjust=%s, bars=%s",
         len(files), start, end, args.mode, adjustment, history_bars,
     )
+    # Day → market regime for regime-aware signal policy (causal: the regime
+    # of the signal day's close, used only for that day's signal disposition).
+    regime_lookup: dict[str, str] | None = None
+    if market_gate:
+        regime_lookup = {
+            day_key: str(context.get("regime", ""))
+            for day_key, context in market_gate.items()
+            if context.get("regime") in {"bull", "range", "bear"}
+        }
     all_candidates: list[dict[str, Any]] = []
+    observed_signals: list[dict[str, Any]] = []
+    signal_policy_counts: Counter = Counter()
     stock_pool_rejection_details: list[dict[str, Any]] = []
     skipped: Counter = Counter()
     history_sources: Counter = Counter()
@@ -1282,6 +1360,8 @@ def main() -> int:
                 "skipped": {"insufficient_history": 1},
                 "history_source": history_source,
                 "stock_pool_rejections": [],
+                "observed_signals": [],
+                "signal_policy_counts": {},
             }
         events = find_signals(closed, config)
         events = {
@@ -1292,6 +1372,32 @@ def main() -> int:
             ],
             "sell": list(events.get("sell", [])),
         }
+        executable_buys, observed_buys, disabled_buys = partition_entry_signals(
+            events["buy"],
+            signal_execution_policy,
+            regime_lookup=regime_lookup,
+        )
+        policy_counts = Counter(
+            f"{event['execution_mode']}:{event['signal_type']}"
+            for event in executable_buys + observed_buys + disabled_buys
+        )
+        observed_records = [
+            {
+                "symbol": symbol,
+                "day": event.get("day"),
+                "confirmed_at": event.get("confirmed_at"),
+                "signal_type": event.get("signal_type"),
+                "execution_mode": event.get("execution_mode"),
+                "observation_stage": "detected_before_entry_filters",
+                "price": event.get("price"),
+                "cross_day": event.get("cross_day"),
+                "confirmation_bars": event.get("confirmation_bars"),
+                "confirmation_count": event.get("confirmation_count"),
+                "confirmation_items": event.get("confirmation_items"),
+            }
+            for event in observed_buys
+        ]
+        events["buy"] = executable_buys
         events, position_skipped = apply_stock_position_gate(closed, events, config)
         stock_pool_skipped: Counter = Counter()
         stock_pool_details: list[dict[str, Any]] = []
@@ -1326,6 +1432,10 @@ def main() -> int:
         combined = Counter(result["skipped"])
         combined.update(position_skipped)
         combined.update(stock_pool_skipped)
+        if observed_buys:
+            combined["signal_policy_observe_only"] += len(observed_buys)
+        if disabled_buys:
+            combined["signal_policy_disabled"] += len(disabled_buys)
         if stock_pool_fetch_failed:
             combined["stock_pool_history_fetch_failed"] += 1
         return {
@@ -1333,6 +1443,8 @@ def main() -> int:
             "skipped": dict(combined),
             "history_source": history_source,
             "stock_pool_rejections": stock_pool_details,
+            "observed_signals": observed_records,
+            "signal_policy_counts": dict(policy_counts),
         }
 
     with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as pool:
@@ -1341,6 +1453,8 @@ def main() -> int:
             try:
                 result = future.result()
                 all_candidates.extend(result["trades"])
+                observed_signals.extend(result["observed_signals"])
+                signal_policy_counts.update(result["signal_policy_counts"])
                 stock_pool_rejection_details.extend(result["stock_pool_rejections"])
                 skipped.update(result["skipped"])
                 history_sources[result["history_source"]] += 1
@@ -1377,6 +1491,8 @@ def main() -> int:
             "market_gate_enabled": market_gate_enabled,
             "market_index_code": entry_filters.get("market_index_code"),
             "market_gate_history": market_gate_meta,
+            "market_gate_settings": market_gate_settings,
+            "signal_execution_policy": signal_execution_policy,
             "position_gate_enabled": bool(entry_filters.get("position_gate_enabled", False)),
             "stock_pool": stock_pool_settings,
             "stock_pool_rejections": dict(
@@ -1392,6 +1508,22 @@ def main() -> int:
         },
         "artifacts": {},
     }
+    observed_signals.sort(
+        key=lambda event: (
+            str(event.get("day", "")),
+            str(event.get("signal_type", "")),
+            str(event.get("symbol", "")),
+        )
+    )
+    policy_by_mode: dict[str, dict[str, int]] = defaultdict(dict)
+    for key, count in sorted(signal_policy_counts.items()):
+        mode, signal_type = key.split(":", 1)
+        policy_by_mode[mode][signal_type] = count
+    report["signal_policy"] = {
+        "by_mode": dict(policy_by_mode),
+        "observed_count": len(observed_signals),
+        "observation_stage": "detected_before_entry_filters",
+    }
     out_path = Path(args.out)
     if not out_path.is_absolute():
         out_path = BASE_DIR / out_path
@@ -1404,6 +1536,13 @@ def main() -> int:
         _write_jsonl(stock_pool_rejections_path, stock_pool_rejection_details)
         report["artifacts"]["stock_pool_rejections"] = str(stock_pool_rejections_path)
 
+    if observed_signals:
+        observed_signals_path = out_path.with_name(
+            out_path.stem + "_observed_signals.jsonl"
+        )
+        _write_jsonl(observed_signals_path, observed_signals)
+        report["artifacts"]["observed_signals"] = str(observed_signals_path)
+
     if args.mode in {"signal", "both"}:
         public_candidates = [_public_trade(trade) for trade in all_candidates]
         by_signal: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1414,6 +1553,16 @@ def main() -> int:
             "by_signal_type": {name: summarize(trades) for name, trades in sorted(by_signal.items())},
             "exit_reasons": dict(Counter(trade["exit_reason"] for trade in public_candidates)),
             "skipped": dict(skipped),
+        }
+        # Regime × signal_type breakdown from executed trades (by signal day)
+        by_regime_sig: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for trade in public_candidates:
+            day = trade.get("signal_day", "")
+            r = (regime_lookup or {}).get(day, "unknown")
+            key = f"{r}:{trade['signal_type']}"
+            by_regime_sig[key].append(trade)
+        signal_report["by_regime_signal_type"] = {
+            key: summarize(trades) for key, trades in sorted(by_regime_sig.items())
         }
         report["signal"] = signal_report
         report["summary"] = signal_report["summary"]

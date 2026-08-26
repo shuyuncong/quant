@@ -86,6 +86,24 @@ signal_strategy:
     min_bi_bars: 4
     divergence_ratio: 0.90          # 当前同向笔MACD面积小于前一笔的90%
     fresh_signal_bars: 1            # 只推最新已完成K线确认的结构
+  execution_policy:
+    default: "enabled"              # 未单独配置的入场信号保持原有行为
+    signals:
+      buy_1: "enabled"
+      buy_2: "observe_only"         # 继续识别/记录/展示，但不作为独立入场依据
+      buy_3: "enabled"
+      macd_golden_cross_pullback_confirmed_above: "enabled"
+      macd_golden_cross_pullback_confirmed_near: "enabled"
+    by_regime:                      # 按市场状态覆盖信号执行模式（建议仅收紧）
+      bull:
+        macd_golden_cross_pullback_confirmed_above: "enabled"
+        buy_2: "observe_only"       # buy_2 只作实验变量，默认不在牛市启用
+      range:
+        macd_golden_cross_pullback_confirmed_above: "observe_only"
+        buy_2: "observe_only"
+      bear:
+        macd_golden_cross_pullback_confirmed_above: "observe_only"
+        buy_2: "observe_only"
   scoring:
     buy_threshold: 60
     sell_threshold: 60
@@ -125,6 +143,10 @@ entry_filters:
   market_gate_enabled: true         # 日线候选必须通过指数状态闸门
   market_index_code: "000001.SH"
   market_gate_fail_open: false      # 指数数据不可用时不新增候选
+  trend_gate_enabled: true          # 大盘 MA20/MA60 趋势闸门：快线高于慢线才允许开仓
+  trend_fast_ma: 20
+  trend_slow_ma: 60
+  fast_gate_mode: "ma10_latch"       # 快速闸门: none | ma10_latch | macd_death_latch | any_latch
   position_gate_enabled: true       # 日线候选要求站在上行长期均线之上
 
 regime:

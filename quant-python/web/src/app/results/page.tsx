@@ -51,6 +51,7 @@ interface JobRow {
   kind: string;
   status: string;
   payload: Record<string, unknown>;
+  symbol_names: string;
   result_path: string | null;
   error: string | null;
   created_at: string;
@@ -296,9 +297,10 @@ export default function ResultsPage() {
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>类型</TableHead>
-                <TableHead>状态</TableHead>
+                <TableHead>股票名称</TableHead>
+                <TableHead>模型</TableHead>
+                <TableHead>执行结果</TableHead>
                 <TableHead>创建时间</TableHead>
-                <TableHead>结果/错误</TableHead>
                 <TableHead className="w-28">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -307,15 +309,18 @@ export default function ResultsPage() {
                 <TableRow key={job.id}>
                   <TableCell className="font-mono text-xs">#{job.id}</TableCell>
                   <TableCell>{KIND_LABEL[job.kind] ?? job.kind}</TableCell>
+                  <TableCell className="max-w-40 truncate text-xs text-muted-foreground">
+                    {job.symbol_names || "-"}
+                  </TableCell>
+                  <TableCell className="max-w-32 truncate text-xs text-muted-foreground">
+                    {job.note?.model ?? "-"}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[job.status] ?? "outline"}>
                       {STATUS_LABEL[job.status] ?? job.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
-                  <TableCell className="max-w-64 truncate text-xs text-muted-foreground">
-                    {job.status === "failed" ? job.error : fileName(job.result_path)}
-                  </TableCell>
                   <TableCell>
                     <Button variant="outline" size="sm" onClick={() => setSelectedJob(job)}>
                       <Eye className="size-4" /> 查看 AI 分析

@@ -1,0 +1,9 @@
+
+### backtest artifacts (ephemeral) ###
+signal_system/bt_*.json
+signal_system/bt_*.jsonl
+signal_system/bt_*.log
+signal_system/_run_*.py
+signal_system/_config_*.yaml
+signal_system/backtest_report*.json
+signal_system/backtest_report*.jsonl

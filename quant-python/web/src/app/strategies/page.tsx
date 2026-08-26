@@ -29,6 +29,12 @@ interface StrategiesForm {
   llm_context_bars: string;
   buy_threshold: string;
   sell_threshold: string;
+  execution_default: string;
+  buy_1_mode: string;
+  buy_2_mode: string;
+  buy_3_mode: string;
+  macd_above_mode: string;
+  macd_near_mode: string;
   timeframes: string;
   watchlist: string;
   bar_limit: string;
@@ -95,6 +101,37 @@ function NumberField({
   );
 }
 
+function ExecutionModeField({
+  id,
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        className="h-9 rounded-lg border bg-transparent px-3 text-sm"
+        value={value}
+        onChange={onChange}
+      >
+        <option value="enabled">启用</option>
+        <option value="observe_only">仅观察</option>
+        <option value="disabled">禁用</option>
+      </select>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
 export default function StrategiesPage() {
   const [form, setForm] = useState<StrategiesForm>({
     min_bi_bars: "",
@@ -109,6 +146,12 @@ export default function StrategiesPage() {
     llm_context_bars: "",
     buy_threshold: "",
     sell_threshold: "",
+    execution_default: "enabled",
+    buy_1_mode: "enabled",
+    buy_2_mode: "observe_only",
+    buy_3_mode: "enabled",
+    macd_above_mode: "enabled",
+    macd_near_mode: "enabled",
     timeframes: "",
     watchlist: "",
     bar_limit: "",
@@ -137,6 +180,8 @@ export default function StrategiesPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await response.json()) as { config: Record<string, any> };
       const signal = data.config.signal_strategy ?? {};
+      const executionPolicy = signal.execution_policy ?? {};
+      const signalModes = executionPolicy.signals ?? {};
       const monitor = data.config.monitor ?? {};
       const scan = data.config.scan ?? {};
       const stockPool = data.config.stock_pool ?? {};
@@ -153,6 +198,12 @@ export default function StrategiesPage() {
         llm_context_bars: num(signal.llm_context_bars, "48"),
         buy_threshold: num(signal.scoring?.buy_threshold, "60"),
         sell_threshold: num(signal.scoring?.sell_threshold, "60"),
+        execution_default: String(executionPolicy.default ?? "enabled"),
+        buy_1_mode: String(signalModes.buy_1 ?? "enabled"),
+        buy_2_mode: String(signalModes.buy_2 ?? "observe_only"),
+        buy_3_mode: String(signalModes.buy_3 ?? "enabled"),
+        macd_above_mode: String(signalModes.macd_golden_cross_pullback_confirmed_above ?? "enabled"),
+        macd_near_mode: String(signalModes.macd_golden_cross_pullback_confirmed_near ?? "enabled"),
         timeframes: list(monitor.timeframes),
         watchlist: list(monitor.watchlist),
         bar_limit: num(monitor.bar_limit, "300"),
@@ -224,6 +275,12 @@ export default function StrategiesPage() {
       "signal_strategy.llm_context_bars": Number(form.llm_context_bars),
       "signal_strategy.scoring.buy_threshold": Number(form.buy_threshold),
       "signal_strategy.scoring.sell_threshold": Number(form.sell_threshold),
+      "signal_strategy.execution_policy.default": form.execution_default,
+      "signal_strategy.execution_policy.signals.buy_1": form.buy_1_mode,
+      "signal_strategy.execution_policy.signals.buy_2": form.buy_2_mode,
+      "signal_strategy.execution_policy.signals.buy_3": form.buy_3_mode,
+      "signal_strategy.execution_policy.signals.macd_golden_cross_pullback_confirmed_above": form.macd_above_mode,
+      "signal_strategy.execution_policy.signals.macd_golden_cross_pullback_confirmed_near": form.macd_near_mode,
       "monitor.timeframes": form.timeframes.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.watchlist": form.watchlist.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.bar_limit": Number(form.bar_limit),
@@ -298,6 +355,54 @@ export default function StrategiesPage() {
               <NumberField id="bar-limit" label="K线数量（bar_limit）" value={form.bar_limit} onChange={set("bar_limit")} />
               <NumberField id="llm-context-bars" label="AI每周期K线数" value={form.llm_context_bars} onChange={set("llm_context_bars")} />
               <NumberField id="max-symbols-per-cycle" label="盘中每批股票数" value={form.max_symbols_per_cycle} onChange={set("max_symbols_per_cycle")} />
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-4 rounded-xl border p-4">
+            <div>
+              <h2 className="font-medium">入场信号执行策略</h2>
+              <p className="text-sm text-muted-foreground">
+                “仅观察”会继续记录和展示信号，但不会把它作为独立入场依据；卖出与风控退出不受影响。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <ExecutionModeField
+                id="execution-default"
+                label="未配置信号默认策略"
+                value={form.execution_default}
+                onChange={set("execution_default")}
+              />
+              <ExecutionModeField
+                id="buy-1-mode"
+                label="缠论一买"
+                value={form.buy_1_mode}
+                onChange={set("buy_1_mode")}
+              />
+              <ExecutionModeField
+                id="buy-2-mode"
+                label="缠论二买"
+                value={form.buy_2_mode}
+                onChange={set("buy_2_mode")}
+                hint="默认仅观察，不进入回测或实时交易候选。"
+              />
+              <ExecutionModeField
+                id="buy-3-mode"
+                label="缠论三买"
+                value={form.buy_3_mode}
+                onChange={set("buy_3_mode")}
+              />
+              <ExecutionModeField
+                id="macd-above-mode"
+                label="0轴上金叉回落确认"
+                value={form.macd_above_mode}
+                onChange={set("macd_above_mode")}
+              />
+              <ExecutionModeField
+                id="macd-near-mode"
+                label="0轴附近金叉回落确认"
+                value={form.macd_near_mode}
+                onChange={set("macd_near_mode")}
+              />
             </div>
           </section>
 

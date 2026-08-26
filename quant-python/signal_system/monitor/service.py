@@ -10,11 +10,23 @@ from pathlib import Path
 import time
 from typing import Any
 
+import pandas as pd
+
 from data.market_data import MarketDataClient, normalize_symbol
 from models import SignalEvent
 from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
+from strategy.macd import calculate_macd
+from strategy.market_gate import (
+    calculate_strict_regime,
+    calculate_trend_gate,
+    resolve_market_gate_settings,
+)
+from strategy.signal_policy import (
+    resolve_signal_execution_policy,
+    signal_execution_mode_with_regime,
+)
 from strategy.stock_pool import evaluate_stock_pool, resolve_stock_pool_config
 from utils.time_utils import now_shanghai
 
@@ -27,6 +39,55 @@ def _is_stale_data_error(message: str) -> bool:
     current for the expected trade date (e.g. suspended/delisted), so
     retrying within the same trading day will not help."""
     return "日线已过期" in message or "日线为空" in message
+
+
+def _fast_gate_latch_state(
+    bars: pd.DataFrame,
+    mode: str,
+    *,
+    macd_fast: int = 12,
+    macd_slow: int = 26,
+    macd_signal: int = 9,
+) -> dict[str, bool]:
+    """Replay the stateful fast gate (ma10_latch / macd_death_latch / any_latch)
+    over closed index bars and return the latched bear flags at the last bar.
+
+    Mirrors backtest_winrate.build_market_gate so live and backtest gates agree.
+    """
+    closed = bars[bars["is_closed"].fillna(False).astype(bool)].copy().reset_index(drop=True)
+    state = {"ma10_latch_bear": False, "macd_latch_bear": False}
+    if closed.empty:
+        return state
+    mode = str(mode or "none").lower().strip()
+    if mode not in {"ma10_latch", "macd_death_latch", "any_latch"}:
+        return state
+    ma10 = closed["close"].rolling(10, min_periods=10).mean()
+    ma10_prev = ma10.shift(1)
+    macd = calculate_macd(
+        closed["close"],
+        fast=macd_fast,
+        slow=macd_slow,
+        signal=macd_signal,
+    )
+    death_cross = (macd["dif"] < macd["dea"]) & (macd["dif"].shift(1) >= macd["dea"].shift(1))
+    golden_cross = (macd["dif"] > macd["dea"]) & (macd["dif"].shift(1) <= macd["dea"].shift(1))
+    for index, row in closed.iterrows():
+        if mode in ("ma10_latch", "any_latch"):
+            cur = ma10.iloc[index]
+            pre = ma10_prev.iloc[index]
+            if pd.notna(cur) and pd.notna(pre):
+                above = float(row["close"]) > float(cur)
+                rising = float(cur) > float(pre)
+                if not above and not rising:
+                    state["ma10_latch_bear"] = True
+                elif above and rising:
+                    state["ma10_latch_bear"] = False
+        if mode in ("macd_death_latch", "any_latch"):
+            if bool(golden_cross.iloc[index]):
+                state["macd_latch_bear"] = False
+            elif bool(death_cross.iloc[index]):
+                state["macd_latch_bear"] = True
+    return state
 
 
 class SignalMonitor:
@@ -88,21 +149,62 @@ class SignalMonitor:
                 item.get("side") == "sell" and item.get("signal_type") in {"sell_1", "sell_2", "sell_3"}
                 for item in fresh_chan
             )
-            death_cross = bool(indicators.get("death_cross") or bearish_structure)
-            if death_cross or indicators.get("ma_long_down") or not indicators.get("above_ma_long"):
-                regime = "bear"
-            elif indicators.get("ma_long_up"):
-                regime = "bull"
+            # Keep the market gate aligned with the backtest: Chan structure is
+            # exposed as context, but only the configured MACD event blocks here.
+            death_cross = bool(indicators.get("death_cross"))
+            gate_settings = resolve_market_gate_settings(self.config)
+            closed_index_bars = index_bars[
+                index_bars["is_closed"].fillna(False).astype(bool)
+            ].copy().reset_index(drop=True)
+            trend_by_day = calculate_trend_gate(
+                closed_index_bars["close"],
+                gate_settings["trend_gate_enabled"],
+                gate_settings["trend_fast_ma"],
+                gate_settings["trend_slow_ma"],
+            )
+            trend_up = bool(trend_by_day.iloc[-1]) if not trend_by_day.empty else False
+            macd_settings = gate_settings["macd"]
+            fast_gate = _fast_gate_latch_state(
+                index_bars,
+                gate_settings["fast_gate_mode"],
+                macd_fast=macd_settings["fast"],
+                macd_slow=macd_settings["slow"],
+                macd_signal=macd_settings["signal"],
+            )
+            fast_bear = fast_gate.get("ma10_latch_bear", False) or fast_gate.get(
+                "macd_latch_bear", False
+            )
+            # Strict MA20/MA10 regime, aligned with backtest build_market_gate.
+            if not closed_index_bars.empty:
+                strict_regime = str(
+                    calculate_strict_regime(
+                        closed_index_bars["close"], fast_period=10, slow_period=20
+                    ).iloc[-1]
+                )
             else:
-                regime = "range"
+                strict_regime = "unknown"
+            if (
+                death_cross
+                or indicators.get("ma_long_down")
+                or not indicators.get("above_ma_long")
+                or not trend_up
+                or fast_bear
+            ):
+                regime = "bear"
+            else:
+                regime = strict_regime
             return {
                 "enabled": True,
                 "index_code": index_code,
                 "allows_entries": regime != "bear",
                 "regime": regime,
                 "death_cross": death_cross,
+                "bearish_structure": bearish_structure,
                 "above_ma_long": bool(indicators.get("above_ma_long")),
                 "ma_long_up": bool(indicators.get("ma_long_up")),
+                "trend_up": trend_up,
+                "ma10_latch_bear": fast_gate.get("ma10_latch_bear", False),
+                "macd_latch_bear": fast_gate.get("macd_latch_bear", False),
             }
         except Exception as exc:
             fail_open = bool(filters.get("market_gate_fail_open", False))
@@ -238,6 +340,10 @@ class SignalMonitor:
         results: list[dict[str, Any]] = []
         new_event_count = 0
         stale_event_count = 0
+        market_context = self._market_entry_context()
+        market_regime = market_context.get("regime")
+        if market_regime not in {"bull", "range", "bear"}:
+            market_regime = None
         channels = self.notifier.active_channels()
         for requested_symbol in symbols:
             symbol = normalize_symbol(requested_symbol)
@@ -247,7 +353,13 @@ class SignalMonitor:
                     self.timeframes,
                     limit=int(self.config.get("monitor", {}).get("bar_limit", 300)),
                 )
-                analysis = self.analyzer.analyze(symbol, names.get(symbol, ""), bars, errors)
+                analysis = self.analyzer.analyze(
+                    symbol,
+                    names.get(symbol, ""),
+                    bars,
+                    errors,
+                    regime=market_regime,
+                )
                 event_objects = analysis.pop("event_objects")
                 if only_daily_above_cross:
                     # 日线监控推送两级 MACD 事件：金叉观察预警，以及评分达标的回落确认。
@@ -272,10 +384,12 @@ class SignalMonitor:
         report = {
             "mode": "analyze",
             "analyzed_at": now_shanghai().isoformat(timespec="seconds"),
+            "signal_execution_policy": resolve_signal_execution_policy(self.config),
             "symbols": len(symbols),
             "new_events": new_event_count,
             "stale_events_skipped": stale_event_count,
             "delivery": delivery,
+            "market_context": market_context,
             "results": results,
         }
         report.update(report_meta or {})
@@ -445,10 +559,15 @@ class SignalMonitor:
         stock_pool_rejections: Counter = Counter()
         stock_pool_rejection_details: list[dict[str, Any]] = []
         stock_pool_data_errors: list[dict[str, str]] = []
+        observed_candidates: list[dict[str, Any]] = []
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
         market_context = self._market_entry_context()
         entry_filters = self.config.get("entry_filters", {})
+        signal_policy = resolve_signal_execution_policy(self.config)
+        market_regime = market_context.get("regime")
+        if market_regime not in {"bull", "range", "bear"}:
+            market_regime = None
         position_gate_enabled = bool(entry_filters.get("position_gate_enabled", False))
         stock_pool_settings = resolve_stock_pool_config(self.config)
         stock_pool_history_limit = max(
@@ -489,12 +608,41 @@ class SignalMonitor:
                 position_ready = bool(
                     indicators.get("above_ma_long") and indicators.get("ma_long_up")
                 )
-                if (
-                    entry_ready
-                    and zone in {"above", "near"}
-                    and market_context.get("allows_entries", False)
-                    and (not position_gate_enabled or position_ready)
-                ):
+                if entry_ready and zone in {"above", "near"}:
+                    signal_type = (
+                        "macd_golden_cross_pullback_confirmed_"
+                        f"{zone}"
+                    )
+                    execution_mode = signal_execution_mode_with_regime(
+                        signal_type,
+                        signal_policy,
+                        market_regime,
+                    )
+                    if execution_mode == "disabled":
+                        continue
+                    if execution_mode == "observe_only":
+                        observed_candidates.append(
+                            {
+                                "symbol": symbol,
+                                "name": name,
+                                "signal_type": signal_type,
+                                "execution_mode": execution_mode,
+                                "regime": market_regime,
+                                "confirmed_at": daily_report.get("latest_time"),
+                                "price": daily_report.get("latest_price"),
+                                "golden_cross_zone": zone,
+                                "golden_cross_zone_label": indicators.get(
+                                    "golden_cross_zone_label"
+                                ),
+                                "observation_stage": "detected_before_entry_filters",
+                            }
+                        )
+                        continue
+                    if not (
+                        market_context.get("allows_entries", False)
+                        and (not position_gate_enabled or position_ready)
+                    ):
+                        continue
                     stock_pool_history = daily
                     stock_pool_fetch_error = ""
                     if stock_pool_settings["enabled"]:
@@ -556,6 +704,8 @@ class SignalMonitor:
                             "golden_cross_quality": indicators.get("golden_cross_quality"),
                             "golden_cross_risk": indicators.get("golden_cross_risk"),
                             "golden_cross_state": indicators.get("golden_cross_state"),
+                            "signal_type": signal_type,
+                            "execution_mode": execution_mode,
                             "golden_cross_entry_ready": entry_ready,
                             "golden_cross_confirmation_bars": indicators.get("golden_cross_confirmation_bars"),
                             "position_ready": position_ready,
@@ -646,6 +796,8 @@ class SignalMonitor:
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
             "market_context": market_context,
+            "signal_execution_policy": signal_policy,
+            "observed_candidates": observed_candidates,
             "stock_pool": {
                 "config": stock_pool_settings,
                 "rejections": dict(stock_pool_rejections),
