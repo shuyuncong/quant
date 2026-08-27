@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +41,7 @@ export function SymbolCombobox({
 }: SymbolComboboxProps) {
   const [open, setOpen] = useState(false)
   const [holdings, setHoldings] = useState<HoldingOption[]>([])
+  const [focused, setFocused] = useState(false)
   const [rect, setRect] = useState<AnchorRect | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -68,9 +69,11 @@ export function SymbolCombobox({
     setRect({ top: bounds.bottom + 4, left: bounds.left, width: bounds.width })
   }
 
-  const toggleOpen = () => {
-    if (!open) updateRect()
-    setOpen((current) => !current)
+  const openDropdown = () => {
+    if (!open) {
+      updateRect()
+      setOpen(true)
+    }
   }
 
   useEffect(() => {
@@ -108,10 +111,29 @@ export function SymbolCombobox({
       )
     : holdings
 
+  const hasValue = value.trim() !== ""
+
+  // 编辑时保持原始代码（可自由输入/修改）；失焦后把已匹配持仓显示为「名称/代码」。
+  const displayValue = focused
+    ? value
+    : tokens
+        .map((token) => {
+          const holding = holdings.find(
+            (item) => item.symbol.toLowerCase() === token.toLowerCase()
+          )
+          return holding && holding.name ? `${holding.name}/${holding.symbol}` : token
+        })
+        .join(" ")
+
   const addSymbol = (symbol: string) => {
     if (!tokens.includes(symbol)) {
       onChange([...tokens, symbol].join(" "))
     }
+  }
+
+  const clearAll = () => {
+    onChange("")
+    setOpen(false)
   }
 
   return (
@@ -120,13 +142,32 @@ export function SymbolCombobox({
         ref={inputRef}
         id={id}
         placeholder={placeholder}
-        value={value}
+        value={displayValue}
         onChange={(event) => onChange(event.target.value)}
-        className="pr-9"
+        onFocus={() => {
+          setFocused(true)
+          openDropdown()
+        }}
+        onClick={openDropdown}
+        onBlur={() => setFocused(false)}
+        className={cn("pr-9", hasValue && "pr-16")}
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls="symbol-combobox-list"
       />
+      {hasValue && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="清空已输入代码"
+          title="清空已输入代码"
+          className="absolute top-0 right-8 h-full w-8 text-muted-foreground hover:text-foreground"
+          onClick={clearAll}
+        >
+          <X className="size-4" />
+        </Button>
+      )}
       <Button
         type="button"
         variant="ghost"
@@ -136,7 +177,10 @@ export function SymbolCombobox({
         aria-haspopup="listbox"
         aria-expanded={open}
         className="absolute top-0 right-0 h-full w-8 text-muted-foreground"
-        onClick={toggleOpen}
+        onClick={() => {
+          if (!open) updateRect()
+          setOpen((current) => !current)
+        }}
       >
         <ChevronDown
           className={cn("size-4 transition-transform duration-150", open && "rotate-180")}

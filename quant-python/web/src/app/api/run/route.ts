@@ -30,6 +30,10 @@ export async function POST(request: Request) {
   const payload: Record<string, unknown> = {
     notify: body.notify !== false,
   };
+  if (kind === "dispatch-outbox") {
+    // 手动补投：把第 5 次失败终止的投递也重置回队列重试；调度器自动派送不重置。
+    payload.requeue_failed = true;
+  }
   if (kind === "scan") {
     const universeMode = String(body.universe_mode ?? "");
     if (universeMode && !["watchlist", "all_a"].includes(universeMode)) {

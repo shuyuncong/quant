@@ -142,6 +142,21 @@ class SummaryNotificationTests(unittest.TestCase):
         self.assertEqual(0, result)
         monitor.notify_ai_analysis.assert_called_once()
 
+    def test_dispatch_requeues_failed_only_when_requested(self):
+        monitor = mock.MagicMock()
+        monitor.dispatch_outbox.return_value = {"delivered": 0, "failed": 0}
+        with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+            web_bridge._cmd_dispatch(web_bridge._default_config_path(), {})
+            web_bridge._cmd_dispatch(
+                web_bridge._default_config_path(), {"requeue_failed": True}
+            )
+        monitor.dispatch_outbox.assert_has_calls(
+            [
+                mock.call(requeue_failed=False),
+                mock.call(requeue_failed=True),
+            ]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

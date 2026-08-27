@@ -455,6 +455,34 @@ class ScoringAndStorageTests(unittest.TestCase):
             self.assertEqual(0, summary["pending"])
             self.assertEqual(1, summary["failed"])
 
+    def test_requeue_failed_resets_terminal_deliveries_for_manual_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SignalStore(os.path.join(directory, "signals.db"))
+            event = SignalEvent(
+                symbol="000001.SZ",
+                name="平安银行",
+                timeframe="5m",
+                signal_type="buy_1",
+                side="buy",
+                price=10,
+                structure_time="2025-01-01T10:00:00",
+                confirmed_at="2025-01-01T10:01:00",
+                score=20,
+            )
+            store.enqueue_event(event, ["webhook"])
+            claimed = store.claim_deliveries()[0]
+            store.mark_failed(event.event_id, "webhook", 4, "boom", claimed["claim_token"])
+            self.assertEqual(1, store.requeue_failed())
+            summary = store.outbox_summary()
+            self.assertEqual(1, summary["pending"])
+            self.assertEqual(0, summary["failed"])
+            # 重置后可再次被领取投递，且重试次数清零
+            re_claimed = store.claim_deliveries()
+            self.assertEqual(1, len(re_claimed))
+            self.assertEqual(0, re_claimed[0]["attempts"])
+            # 没有 failed 记录时重置为空操作
+            self.assertEqual(0, store.requeue_failed())
+
     def test_insufficient_timeframe_keeps_source_metadata(self):
         frame = pd.DataFrame(
             {

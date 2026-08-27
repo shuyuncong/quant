@@ -307,6 +307,29 @@ class MonitorTimeTests(unittest.TestCase):
                 monitor.store.claim_deliveries.call_args_list,
             )
 
+    def test_dispatch_send_exception_marks_failed_and_continues(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            delivery = {
+                "event_id": "event-1",
+                "channel": "webhook",
+                "attempts": 0,
+                "claim_token": "claim-1",
+                "payload": {"event_id": "event-1"},
+            }
+            monitor.store.claim_deliveries = MagicMock(side_effect=[[delivery], []])
+            monitor.store.requeue_failed = MagicMock(return_value=0)
+            monitor.store.mark_failed = MagicMock(return_value=True)
+            monitor.store.mark_delivered = MagicMock(return_value=True)
+            monitor.notifier.send = MagicMock(side_effect=ValueError("unknown url type"))
+            summary = monitor.dispatch_outbox(requeue_failed=True)
+            self.assertEqual({"delivered": 0, "failed": 1}, summary)
+            monitor.store.requeue_failed.assert_called_once()
+            monitor.store.mark_failed.assert_called_once()
+            error = monitor.store.mark_failed.call_args.args[3]
+            self.assertIn("ValueError", error)
+            monitor.store.mark_delivered.assert_not_called()
+
     def test_monitor_cycle_uses_persistent_round_robin_batches(self):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)

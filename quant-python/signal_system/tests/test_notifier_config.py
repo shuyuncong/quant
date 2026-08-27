@@ -239,6 +239,67 @@ class NotifierAndConfigTests(unittest.TestCase):
         self.assertEqual("买入观察 平安银行 000001 5m", body["title"])
         self.assertIn("MACD 金叉 +30", body["body"])
 
+    def test_bark_truncates_long_ai_body_to_byte_budget(self):
+        notifier = SignalNotifier(
+            {
+                "notification": {
+                    "bark": {
+                        "enabled": True,
+                        "url": "https://api.day.app/push",
+                        "device_key": "test-device-key",
+                    }
+                }
+            }
+        )
+        opener = MagicMock()
+        opener.open.return_value = _BarkOkResponse()
+        payload = {
+            "schema": "quant.signal.v1",
+            "event_id": "event-bark-long-1",
+            "side": "info",
+            "symbol": "SYSTEM",
+            "name": "AI自动解读 #999",
+            "timeframe": "report",
+            "signal_type": "ai_analysis",
+            "price": 0.0,
+            "score": 0,
+            "confirmed_at": "2025-01-01T10:00:00",
+            "risk_notice": "test",
+            "evidence": {
+                "notification_kind": "ai_analysis",
+                # 1600 段约 33KB，远超 APNs 4KB 负载上限（Bark 服务端不拆分正文）
+                "content": "结论：MACD 金叉确认。" + "行情趋势延续。" * 1600,
+            },
+        }
+        with patch("notification.signal_notifier.build_opener", return_value=opener):
+            success, _ = notifier.send("bark", payload)
+        self.assertTrue(success)
+        request = opener.open.call_args.args[0]
+        body = json.loads(request.data.decode("utf-8"))
+        encoded = body["body"].encode("utf-8")
+        self.assertLessEqual(len(encoded), 3500)
+        # 截断后仍是完整 UTF-8（不切断多字节字符），可正常解码
+        body["body"].encode("utf-8").decode("utf-8")
+
+    def test_truncate_utf8_bytes_never_splits_multibyte_chars(self):
+        from notification.signal_notifier import _truncate_utf8_bytes
+
+        text = "行情趋势延续。"  # 7 个 CJK 字符 × 3 字节 = 21 字节
+        self.assertEqual("行情", _truncate_utf8_bytes(text, 6))
+        self.assertEqual("行情趋", _truncate_utf8_bytes(text, 9))
+        self.assertEqual("行情趋势延", _truncate_utf8_bytes(text, 15))
+        self.assertEqual("行情趋势延续", _truncate_utf8_bytes(text, 18))
+        self.assertEqual(text, _truncate_utf8_bytes(text, 21))
+        self.assertEqual(text, _truncate_utf8_bytes(text, 100))
+        self.assertEqual("", _truncate_utf8_bytes(text, 2))
+        ascii_text = "abcdef"
+        self.assertEqual("abc", _truncate_utf8_bytes(ascii_text, 3))
+        mixed = "abc行情"
+        self.assertEqual("abc行", _truncate_utf8_bytes(mixed, 6))
+        result = _truncate_utf8_bytes(mixed, 7)
+        self.assertEqual("abc行", result)
+        self.assertLessEqual(len(result.encode("utf-8")), 7)
+
     def test_bark_application_error_is_failure(self):
         notifier = SignalNotifier(
             {

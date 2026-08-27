@@ -259,7 +259,9 @@ def _cmd_monitor_once(config_path: str, payload: dict[str, Any]) -> int:
 
 def _cmd_dispatch(config_path: str, payload: dict[str, Any]) -> int:
     monitor = _make_monitor(config_path, payload.get("overrides"))
-    return _emit(monitor.dispatch_outbox())
+    return _emit(
+        monitor.dispatch_outbox(requeue_failed=bool(payload.get("requeue_failed", False)))
+    )
 
 
 def _cmd_test_notify(config_path: str, payload: dict[str, Any]) -> int:

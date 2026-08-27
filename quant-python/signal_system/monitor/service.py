@@ -300,14 +300,26 @@ class SignalMonitor:
                 resolved[symbol] = name
         return resolved
 
-    def dispatch_outbox(self) -> dict[str, int]:
+    def dispatch_outbox(self, requeue_failed: bool = False) -> dict[str, int]:
         summary = {"delivered": 0, "failed": 0}
+        if requeue_failed:
+            self.store.requeue_failed()
         for _ in range(100):
             claimed = self.store.claim_deliveries(limit=1)
             if not claimed:
                 break
             delivery = claimed[0]
-            success, detail = self.notifier.send(delivery["channel"], delivery["payload"])
+            try:
+                success, detail = self.notifier.send(delivery["channel"], delivery["payload"])
+            except Exception as exc:
+                # 发送器抛异常（如 URL 非法）不能让整轮派送中断或留下卡死的 sending 行
+                logger.exception(
+                    "信号 %s 通过 %s 推送异常: %s",
+                    delivery["event_id"],
+                    delivery["channel"],
+                    exc,
+                )
+                success, detail = False, f"{type(exc).__name__}: {exc}"
             if success:
                 if self.store.mark_delivered(
                     delivery["event_id"], delivery["channel"], delivery["claim_token"]

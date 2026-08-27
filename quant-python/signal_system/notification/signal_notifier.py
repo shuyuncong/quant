@@ -14,6 +14,23 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 logger = logging.getLogger(__name__)
 
+# APNs 推送负载上限（含 title/aps 等开销）约 4KB，Bark 服务端不拆分长正文，
+# 超限请求会以 HTTP 500 失败。按 UTF-8 字节截断，保留安全余量。
+BARK_BODY_MAX_BYTES = 3500
+
+
+def _truncate_utf8_bytes(text: str, max_bytes: int) -> str:
+    """截断文本使 UTF-8 编码不超过 max_bytes，且不切断多字节字符。"""
+    total = 0
+    end = 0
+    for index, char in enumerate(text):
+        size = len(char.encode("utf-8"))
+        if total + size > max_bytes:
+            break
+        total += size
+        end = index + 1
+    return text[:end]
+
 
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
@@ -162,10 +179,10 @@ class SignalNotifier:
         kind = evidence.get("notification_kind", "trade_signal")
         if kind == "scan_summary":
             title = str(payload.get("name", "每日扫描完成"))
-            body = str(evidence.get("content", ""))[:3500]
+            body = _truncate_utf8_bytes(str(evidence.get("content", "")), BARK_BODY_MAX_BYTES)
         elif kind == "ai_analysis":
             title = payload.get("name", "AI自动解读")
-            body = str(evidence.get("content", ""))[:3500]
+            body = _truncate_utf8_bytes(str(evidence.get("content", "")), BARK_BODY_MAX_BYTES)
         elif kind == "candidate":
             title = f"金叉候选 {payload.get('name', '')} {payload['symbol']}".strip()
             confirmations = evidence.get("confirmation_items", [])

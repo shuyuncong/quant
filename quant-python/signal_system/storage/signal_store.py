@@ -253,6 +253,21 @@ class SignalStore:
             )
         return cursor.rowcount == 1
 
+    def requeue_failed(self) -> int:
+        """把第 5 次失败后终止（status='failed'）的投递重置回 pending，供手动补投重试。"""
+        now = now_shanghai().isoformat(timespec="seconds")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE outbox_delivery
+                SET status='pending', attempts=0, next_attempt_at=?, last_error=NULL,
+                    claimed_at=NULL, claim_token=NULL
+                WHERE status='failed'
+                """,
+                (now,),
+            )
+        return cursor.rowcount
+
     @staticmethod
     def _business_expiry(start: date, business_days: int) -> date:
         current = start
