@@ -382,6 +382,18 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
                 continue
         raw_date = dates.iloc[confirmation_index]
         cross_date = dates.iloc[int(entry["cross_index"])]
+        # P5a features: signal-day close only (no lookahead)
+        row_close = float(closed["close"].iloc[confirmation_index])
+        row_dif = float(macd_frame["dif"].iloc[confirmation_index]) if pd.notna(macd_frame["dif"].iloc[confirmation_index]) else 0.0
+        row_dea = float(macd_frame["dea"].iloc[confirmation_index]) if pd.notna(macd_frame["dea"].iloc[confirmation_index]) else 0.0
+        p5a_features = None
+        if row_close > 0:
+            p5a_features = {
+                # normalized MACD strength: separation of DIF/DEA relative to price
+                "dif_dea_gap": abs(row_dif - row_dea) / row_close,
+                # normalized distance from zero axis (higher = farther from zero)
+                "zero_dist": abs(row_dif) / row_close,
+            }
         buys.append(
             {
                 "day": raw_date.date().isoformat(),
@@ -393,6 +405,7 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
                 "confirmation_bars": int(entry["confirmation_bars"]),
                 "confirmation_items": confirmation_items,
                 "confirmation_count": confirmation_count,
+                "_p5a_features": p5a_features,
             }
         )
 
@@ -866,6 +879,7 @@ def _build_trade(
         "confirmation_bars": buy.get("confirmation_bars"),
         "confirmation_count": buy.get("confirmation_count"),
         "confirmation_items": buy.get("confirmation_items"),
+        "_p5a_features": buy.get("_p5a_features"),
         "stock_pool_metrics": buy.get("stock_pool_metrics"),
         "stock_pool_warnings": buy.get("stock_pool_warnings", []),
         "entry_price": round(entry_price, 4),
@@ -1118,20 +1132,247 @@ def summarize(trades: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+_ZONE_SCORE = {
+    "macd_golden_cross_pullback_confirmed_above": 300,
+    "macd_golden_cross_pullback_confirmed_near": 200,
+    "buy_1": 100,
+    "buy_2": 90,
+    "buy_3": 80,
+}
+
+
+_P5A_VARIANTS = {"C", "G", "Z", "CG", "CZ", "CGZ"}
+
+
+def _is_p5a_variant(mode: str) -> bool:
+    return mode == "P5a" or (mode.startswith("P5a-") and mode[4:] in _P5A_VARIANTS)
+
+
+def _p5a_variant_components(mode: str) -> set[str]:
+    """Return the feature components enabled by a P5a variant mode."""
+    if mode == "P5a":
+        return {"C", "G", "Z"}
+    suffix = mode[4:]
+    return set(suffix)
+
+
+def _apply_p5a_cross_sectional_ranks(
+    candidates: list[dict[str, Any]],
+) -> None:
+    """Replace raw P5a feature values with same-day cross-sectional percentile
+    ranks (0..1), computed per entry day across all symbols' candidates.
+
+    In-place: each candidate gets ``_p5a_pct`` = {"C": .., "G": .., "Z": ..}.
+    Percentile uses a high-is-better formulation over the raw feature.
+    For ``dif_dea_gap`` and ``confirmation_count`` higher is better; for
+    ``zero_dist`` lower is better (nearer the zero axis). Rank = fraction of
+    candidates strictly below within the same entry-day group.
+    """
+    by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for candidate in candidates:
+        entry_day = candidate.get("entry_day") or candidate.get("signal_day")
+        if entry_day:
+            by_day[str(entry_day)].append(candidate)
+    for day, group in by_day.items():
+        if len(group) < 2:
+            for candidate in group:
+                candidate["_p5a_pct"] = {"C": 0.5, "G": 0.5, "Z": 0.5}
+            continue
+        for key, better, raw in (
+            ("C", True, "confirmation_count"),
+            ("G", True, "dif_dea_gap"),
+            ("Z", False, "zero_dist"),
+        ):
+            values = []
+            for candidate in group:
+                if key == "C":
+                    value = float(candidate.get("confirmation_count") or 0)
+                else:
+                    features = candidate.get("_p5a_features") or {}
+                    value = float(features.get(raw) or 0.0)
+                values.append((candidate, value))
+            # high-is-better rank: fraction strictly below
+            for candidate, value in values:
+                below = sum(1 for _, other in values if (other < value) if not (other == value and candidate is candidate))
+                rank = below / (len(group) - 1) if len(group) > 1 else 0.5
+                if not better:
+                    rank = 1.0 - rank
+                candidate.setdefault("_p5a_pct", {})[key] = rank
+
+
+def _p5a_variant_score(
+    candidate: dict[str, Any],
+    mode: str,
+    rank: dict[str, int],
+    *,
+    use_percentile: bool,
+) -> float:
+    """P5a family score. P5a/C/G/Z/CG/CZ/CGZ with optional cross-sectional
+    percentile normalization. Falls back to the base P1 score for non-MACD
+    signal types (buy_1/2/3 carry no MACD features)."""
+    signal_type = str(candidate.get("signal_type", ""))
+    base = float(_ZONE_SCORE.get(signal_type, rank.get(signal_type, 999) * 10.0))
+    confirm_count = float(candidate.get("confirmation_count") or 0)
+    if not signal_type.startswith("macd"):
+        # buy_1/2/3 have no MACD features; keep the P1 base score
+        return base + confirm_count * 10.0
+    components = _p5a_variant_components(mode)
+    if use_percentile:
+        pct = candidate.get("_p5a_pct") or {}
+        score = base
+        if "C" in components:
+            score += float(pct.get("C", 0.5)) * 30.0
+        if "G" in components:
+            score += float(pct.get("G", 0.5)) * 30.0
+        if "Z" in components:
+            score += float(pct.get("Z", 0.5)) * 20.0
+        return score
+    features = candidate.get("_p5a_features") or {}
+    gap = float(features.get("dif_dea_gap") or 0.0)
+    zdist = float(features.get("zero_dist") or 0.0)
+    score = base + confirm_count * 10.0
+    if "G" in components:
+        score += min(gap / 0.05, 1.0) * 30.0
+    if "Z" in components:
+        score += (1.0 - min(zdist / 0.10, 1.0)) * 20.0
+    return score
+
+
+def _candidate_score(
+    candidate: dict[str, Any],
+    mode: str,
+    rank: dict[str, int],
+) -> float:
+    """Compute an orderable score using only information known at entry time."""
+    if _is_p5a_variant(mode):
+        # P5a family: bare "P5a" uses raw clip normalization; P5a-C/G/Z/CG/CZ/CGZ
+        # use cross-sectional percentile ranks (set in _merge_portfolio_candidates).
+        use_pct = mode != "P5a"
+        return _p5a_variant_score(candidate, mode, rank, use_percentile=use_pct)
+    signal_type = str(candidate.get("signal_type", ""))
+    base = float(_ZONE_SCORE.get(signal_type, rank.get(signal_type, 999) * 10.0))
+    confirm_count = float(candidate.get("confirmation_count") or 0)
+    total = base + confirm_count * 10.0
+    if mode in {"P2", "P3"}:
+        bars = candidate.get("confirmation_bars")
+        freshness = 0.0
+        if isinstance(bars, (int, float)) and bars is not None:
+            freshness = max(0.0, 5.0 - float(bars))
+        total += freshness * 5.0
+    if mode == "P3":
+        context = candidate.get("market_context") or {}
+        risk = 0.0
+        ma_long = context.get("ma_long")
+        close = context.get("close")
+        if isinstance(ma_long, (int, float)) and isinstance(close, (int, float)) and ma_long:
+            distance = abs(float(close) - float(ma_long)) / float(ma_long)
+            if distance > 0.35:
+                risk += 50.0
+        if context.get("death_cross"):
+            risk += 30.0
+        if context.get("ma10_latch_bear") or context.get("macd_latch_bear"):
+            risk += 40.0
+        total -= risk
+    return total
+
+
 def _merge_portfolio_candidates(
     candidates: list[dict[str, Any]],
     signal_priority: list[str] | tuple[str, ...],
+    seed: int | None = None,
+    score_mode: str = "P0",
+    tie_break: str = "symbol_asc",
 ) -> list[dict[str, Any]]:
     rank = {name: index for index, name in enumerate(signal_priority)}
+    if _is_p5a_variant(score_mode) and score_mode != "P5a":
+        _apply_p5a_cross_sectional_ranks(candidates)
+    rng = None
+    if seed is not None:
+        import random as _random
+
+        rng = _random.Random(seed)
+
+    def order_bucket(bucket: list[dict[str, Any]], score_key) -> list[dict[str, Any]]:
+        """Order candidates within an equal-priority / equal-score bucket."""
+        if tie_break == "symbol_asc":
+            return sorted(bucket, key=lambda item: (str(item["symbol"]), str(item["signal_day"])))
+        if tie_break == "symbol_desc":
+            return sorted(
+                bucket,
+                key=lambda item: (str(item["symbol"]), str(item["signal_day"])),
+                reverse=True,
+            )
+        if tie_break == "hash":
+            import hashlib
+
+            return sorted(
+                bucket,
+                key=lambda item: hashlib.sha256(
+                    f"{item['symbol']}|{item['signal_day']}|fixed-seed".encode()
+                ).hexdigest(),
+            )
+        if tie_break == "rotate":
+            rotated = sorted(
+                bucket,
+                key=lambda item: (str(item["symbol"]), str(item["signal_day"])),
+            )
+            if rotated:
+                day = str(bucket[0].get("entry_day", ""))
+                offset = sum(ord(char) for char in day) % len(rotated)
+                rotated = rotated[offset:] + rotated[:offset]
+            return rotated
+        # random (uses rng when seeded; deterministic fallback symbol_asc)
+        if rng is not None:
+            shuffled = list(bucket)
+            rng.shuffle(shuffled)
+            return shuffled
+        return sorted(bucket, key=lambda item: (str(item["symbol"]), str(item["signal_day"])))
+
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for candidate in candidates:
         grouped[(str(candidate["symbol"]), str(candidate["signal_day"]))].append(candidate)
     merged: list[dict[str, Any]] = []
     for items in grouped.values():
-        ordered = sorted(
-            items,
-            key=lambda item: (rank.get(str(item["signal_type"]), 999), str(item["signal_type"])),
-        )
+        if score_mode == "P0":
+            ordered = sorted(
+                items,
+                key=lambda item: (
+                    rank.get(str(item["signal_type"]), 999),
+                    str(item["signal_type"]),
+                ),
+            )
+            # Reorder within equal-priority buckets by tie_break
+            from itertools import groupby
+
+            ordered = [
+                candidate
+                for _, bucket in groupby(
+                    ordered,
+                    key=lambda item: (
+                        rank.get(str(item["signal_type"]), 999),
+                        str(item["signal_type"]),
+                    ),
+                )
+                for candidate in order_bucket(list(bucket), None)
+            ]
+        else:
+            ordered = sorted(
+                items,
+                key=lambda item: (
+                    -_candidate_score(item, score_mode, rank),
+                    str(item["symbol"]),
+                ),
+            )
+            from itertools import groupby
+
+            ordered = [
+                candidate
+                for _, bucket in groupby(
+                    ordered,
+                    key=lambda item: -_candidate_score(item, score_mode, rank),
+                )
+                for candidate in order_bucket(list(bucket), None)
+            ]
         primary = dict(ordered[0])
         signal_types = sorted(
             {str(item["signal_type"]) for item in items},
@@ -1139,16 +1380,100 @@ def _merge_portfolio_candidates(
         )
         primary["signal_types"] = signal_types
         primary["signal_type"] = signal_types[0]
+        primary["_rank_score"] = _candidate_score(primary, score_mode, rank)
         merged.append(primary)
-    return sorted(
-        merged,
-        key=lambda item: (
+    if score_mode == "P0":
+        order_key = lambda item: (
+            str(item["entry_day"]),
+            rank.get(str(item["signal_type"]), 999),
+        )
+        sort_key = lambda item: (
             str(item["entry_day"]),
             rank.get(str(item["signal_type"]), 999),
             str(item["symbol"]),
             str(item["signal_day"]),
-        ),
-    )
+        )
+        final_order = sorted(merged, key=sort_key)
+    else:
+        order_key = lambda item: (
+            str(item["entry_day"]),
+            -_candidate_score(item, score_mode, rank),
+        )
+        final_order = sorted(
+            merged,
+            key=lambda item: (
+                str(item["entry_day"]),
+                -_candidate_score(item, score_mode, rank),
+                str(item["symbol"]),
+                str(item["signal_day"]),
+            ),
+        )
+    # Group final order by (entry_day, score/priority) and apply tie_break inside.
+    from itertools import groupby
+
+    grouped_final: list[dict[str, Any]] = []
+    for _, bucket in groupby(final_order, key=order_key):
+        bucket_list = list(bucket)
+        grouped_final.extend(order_bucket(bucket_list, None))
+    final_order = grouped_final
+    if score_mode == "P4":
+        # P4: fair rotation per day
+        entries_by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in final_order:
+            entries_by_day[str(item["entry_day"])].append(item)
+        rotated: list[dict[str, Any]] = []
+        for day in sorted(entries_by_day):
+            day_items = list(entries_by_day[day])
+            offset = sum(ord(char) for char in day) % max(len(day_items), 1)
+            sorted_day = day_items[offset:] + day_items[:offset] if day_items else day_items
+            sorted_day.sort(key=lambda item: rank.get(str(item["signal_type"]), 999))
+            rotated.extend(sorted_day)
+        return rotated
+    if rng is not None and tie_break in {"random", "rotate", "hash"}:
+        # Final same-day tie randomization for seeded sweeps.
+        entries_by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in final_order:
+            entries_by_day[str(item["entry_day"])].append(item)
+        result: list[dict[str, Any]] = []
+        for day in sorted(entries_by_day):
+            day_items = list(entries_by_day[day])
+            bucket_map: dict[Any, list[dict[str, Any]]] = defaultdict(list)
+            for item in day_items:
+                if score_mode == "P0":
+                    bucket_map[(rank.get(str(item["signal_type"]), 999), str(item["signal_type"]))].append(item)
+                else:
+                    bucket_map[round(-_candidate_score(item, score_mode, rank), 6)].append(item)
+            flat: list[dict[str, Any]] = []
+            if score_mode == "P0":
+                for key in sorted(bucket_map):
+                    bucket = list(bucket_map[key])
+                    if tie_break == "random":
+                        rng.shuffle(bucket)
+                    else:
+                        bucket = order_bucket(bucket, None)
+                    flat.extend(bucket)
+            else:
+                # bucket keys are -score; ascending iter gives highest score first.
+                for key in sorted(bucket_map):
+                    bucket = list(bucket_map[key])
+                    if tie_break == "random":
+                        rng.shuffle(bucket)
+                    else:
+                        bucket = order_bucket(bucket, None)
+                    flat.extend(bucket)
+            result.extend(flat)
+        return result
+    return final_order
+
+
+def _group_by_key(
+    items: list[dict[str, Any]],
+    key_fn,
+):
+    grouped = defaultdict(list)
+    for item in items:
+        grouped[key_fn(item)].append(item)
+    return grouped.items()
 
 
 def _mark_price(trade: dict[str, Any], day_key: str) -> float:
@@ -1178,12 +1503,15 @@ def run_portfolio(
 ) -> dict[str, Any]:
     """Allocate independent candidates into a funded long-only portfolio."""
     execution = _execution_values(costs)
+    seed = portfolio_config.get("seed")
     initial_cash = float(portfolio_config.get("initial_cash", costs.get("initial_cash", 100000.0)))
     max_positions = max(int(portfolio_config.get("max_positions", 4)), 1)
     position_size_pct = max(float(portfolio_config.get("position_size_pct", 0.25)), 0.0)
     lot_size = max(int(portfolio_config.get("lot_size", execution["lot_size"])), 1)
     priority = portfolio_config.get("signal_priority", list(DEFAULT_SIGNAL_PRIORITY))
-    merged = _merge_portfolio_candidates(candidates, priority)
+    score_mode = str(portfolio_config.get("score_mode", "P0"))
+    tie_break = str(portfolio_config.get("tie_break", "symbol_asc"))
+    merged = _merge_portfolio_candidates(candidates, priority, seed, score_mode, tie_break)
     entries_by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
     all_days: set[str] = set()
     for candidate in merged:
@@ -1386,6 +1714,50 @@ def main() -> int:
         action="store_true",
         help="include right-censored trades and exit them at the last close",
     )
+    parser.add_argument(
+        "--stop-loss-pct", type=float, default=None,
+        help="override stop-loss threshold (e.g. 0.10)",
+    )
+    parser.add_argument(
+        "--take-profit-pct", type=float, default=None,
+        help="override take-profit threshold (e.g. 0.20)",
+    )
+    parser.add_argument(
+        "--portfolio-max-positions", type=int, default=None,
+        help="override portfolio max concurrent positions",
+    )
+    parser.add_argument(
+        "--position-size-pct", type=float, default=None,
+        help="override per-position budget as fraction of initial cash",
+    )
+    parser.add_argument(
+        "--portfolio-seed", type=int, default=None,
+        help="seed for randomizing same-priority candidate order (unset = deterministic)",
+    )
+    parser.add_argument(
+        "--portfolio-seed-sweep", type=int, default=0,
+        help="run N random-seed portfolio sweeps and append distribution to report",
+    )
+    parser.add_argument(
+        "--portfolio-score-mode",
+        choices=("P0", "P1", "P2", "P3", "P4", "P5a",
+                 "P5a-C", "P5a-G", "P5a-Z", "P5a-CG", "P5a-CZ", "P5a-CGZ"),
+        default="P0",
+        help="candidate ordering within same day: P0 priority, P1 score, P2 +freshness, "
+        "P3 +risk penalty, P4 fair rotation, P5a +continuous MACD quality; "
+        "P5a-C/G/Z/CG/CZ/CGZ use cross-sectional percentile normalization "
+        "(C=confirmation, G=DIF/DEA gap, Z=zero-axis distance)",
+    )
+    parser.add_argument(
+        "--portfolio-tie-break", choices=("symbol_asc", "symbol_desc", "hash", "rotate", "random"),
+        default="symbol_asc",
+        help="tie-break for equal-priority/equal-score candidates",
+    )
+    parser.add_argument(
+        "--portfolio-multi-modes", type=str, default="",
+        help="comma list of score_modes to run in one pass (e.g. P0,P1hash,P1random); "
+        "each mode writes its own report and portfolio outputs",
+    )
     args = parser.parse_args()
     start = date.fromisoformat(args.start)
     end = date.fromisoformat(args.end)
@@ -1393,6 +1765,10 @@ def main() -> int:
         parser.error("--end must be on or after --start")
     config = load_config(BASE_DIR / "config" / "config.yaml")
     execution = _resolve_execution_config(config)
+    if args.stop_loss_pct is not None:
+        execution["stop_loss_pct"] = max(float(args.stop_loss_pct), 0.0)
+    if args.take_profit_pct is not None:
+        execution["take_profit_pct"] = max(float(args.take_profit_pct), 0.0)
     backtest_config = config.get("backtest", {})
     adjustment = str(args.adjust or backtest_config.get("adjustment", "qfq")).lower()
     history_bars = max(int(args.history_bars or backtest_config.get("history_bars", 800)), 300)
@@ -1687,33 +2063,110 @@ def main() -> int:
 
     if args.mode in {"portfolio", "both"}:
         position = config.get("position", {})
-        portfolio = run_portfolio(
-            all_candidates,
-            execution,
-            {
+        multi_modes_raw = str(args.portfolio_multi_modes or "").strip()
+        if multi_modes_raw:
+            parsed_modes: list[tuple[str, str, str]] = []
+            for item in multi_modes_raw.split(","):
+                tag = item.strip()
+                if not tag:
+                    continue
+                if tag == "P0":
+                    parsed_modes.append((tag, "P0", "symbol_asc"))
+                elif tag == "P1hash":
+                    parsed_modes.append((tag, "P1", "hash"))
+                elif tag == "P1random":
+                    parsed_modes.append((tag, "P1", "random"))
+                elif tag.startswith("P5a-") and tag.endswith("random"):
+                    base_mode = tag[: -len("random")]
+                    parsed_modes.append((tag, base_mode, "random"))
+                elif tag.startswith("P5a-") and tag.endswith("hash"):
+                    base_mode = tag[: -len("hash")]
+                    parsed_modes.append((tag, base_mode, "hash"))
+                elif tag in ("P5a", "P5a-C", "P5a-G", "P5a-Z", "P5a-CG", "P5a-CZ", "P5a-CGZ"):
+                    parsed_modes.append((tag, tag, "hash"))
+                else:
+                    parsed_modes.append((tag, args.portfolio_score_mode, args.portfolio_tie_break))
+            modes_to_run = parsed_modes
+        else:
+            modes_to_run = [
+                ("default", args.portfolio_score_mode, args.portfolio_tie_break)
+            ]
+
+        def run_one_mode(mode_tag: str, score_mode: str, tie_break: str, mode_out: Path) -> dict[str, Any]:
+            base_cfg = {
                 "initial_cash": execution.get("initial_cash", 100000),
-                "max_positions": position.get("max_stocks", 4),
-                "position_size_pct": position.get("base_position_per_stock", 0.25),
+                "max_positions": (
+                    args.portfolio_max_positions
+                    if args.portfolio_max_positions is not None
+                    else position.get("max_stocks", 4)
+                ),
+                "position_size_pct": (
+                    args.position_size_pct
+                    if args.position_size_pct is not None
+                    else position.get("base_position_per_stock", 0.25)
+                ),
                 "lot_size": execution.get("lot_size", 100),
                 "signal_priority": execution.get("signal_priority", list(DEFAULT_SIGNAL_PRIORITY)),
-            },
-        )
-        report["portfolio"] = {
-            "summary": portfolio["summary"],
-            "rejection_reasons": portfolio["rejection_reasons"],
-            "equity_curve": portfolio["equity_curve"],
-        }
-        portfolio_trades_path = out_path.with_name(out_path.stem + "_portfolio_trades.jsonl")
-        portfolio_rejections_path = out_path.with_name(
-            out_path.stem + "_portfolio_rejections.jsonl"
-        )
-        _write_jsonl(portfolio_trades_path, portfolio["trades"])
-        _write_jsonl(
-            portfolio_rejections_path,
-            portfolio["rejections"],
-        )
-        report["artifacts"]["portfolio_trades"] = str(portfolio_trades_path)
-        report["artifacts"]["portfolio_rejections"] = str(portfolio_rejections_path)
+                "score_mode": score_mode,
+                "tie_break": tie_break,
+            }
+            if score_mode == "P0":
+                base_cfg["tie_break"] = "symbol_asc"
+            if tie_break == "random":
+                base_cfg["seed"] = None  # deterministic single run first
+            portfolio = run_portfolio(all_candidates, execution, base_cfg)
+            mode_report = {
+                "score_mode": score_mode,
+                "tie_break": tie_break,
+                "summary": portfolio["summary"],
+                "rejection_reasons": portfolio["rejection_reasons"],
+                "equity_curve": portfolio["equity_curve"],
+            }
+            trades_path = mode_out.with_name(mode_out.stem + f"_{mode_tag}_portfolio_trades.jsonl")
+            rej_path = mode_out.with_name(mode_out.stem + f"_{mode_tag}_portfolio_rejections.jsonl")
+            _write_jsonl(trades_path, portfolio["trades"])
+            _write_jsonl(rej_path, portfolio["rejections"])
+            mode_report["trades_file"] = str(trades_path)
+            mode_report["rejections_file"] = str(rej_path)
+            # seed sweep only for random tie-break modes
+            if args.portfolio_seed_sweep > 0 and tie_break == "random":
+                sweep_results: list[dict[str, Any]] = []
+                for seed in range(args.portfolio_seed_sweep):
+                    cfg = dict(base_cfg)
+                    cfg["seed"] = seed
+                    result = run_portfolio(all_candidates, execution, cfg)
+                    sweep_results.append(
+                        {
+                            "seed": seed,
+                            "total_return_pct": result["summary"]["total_return_pct"],
+                            "max_drawdown_pct": result["summary"]["max_drawdown_pct"],
+                            "final_equity": result["summary"]["final_equity"],
+                        }
+                    )
+                rets = sorted(float(item["total_return_pct"]) for item in sweep_results)
+                n = len(rets)
+                mode_report["seed_sweep"] = {
+                    "count": n,
+                    "median_return_pct": float(rets[n // 2]),
+                    "p10_return_pct": float(rets[max(0, int(0.10 * (n - 1)))]),
+                    "p90_return_pct": float(rets[min(n - 1, int(0.90 * (n - 1)))]),
+                    "win_probability_pct": round(
+                        sum(1 for value in rets if value > 0) / n * 100, 2
+                    ),
+                    "min_return_pct": float(rets[0]),
+                    "max_return_pct": float(rets[-1]),
+                    "mean_return_pct": round(sum(rets) / n, 4),
+                    "all": rets,
+                }
+            return mode_report
+
+        report["portfolio"] = {}
+        report["portfolio_modes"] = {}
+        for mode_tag, score_mode, tie_break in modes_to_run:
+            mode_report = run_one_mode(mode_tag, score_mode, tie_break, out_path)
+            report["portfolio_modes"][mode_tag] = mode_report
+        if "default" in report["portfolio_modes"]:
+            report["portfolio"] = report["portfolio_modes"]["default"]
 
     report["artifacts"]["report"] = str(out_path)
     out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

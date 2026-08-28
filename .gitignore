@@ -71,6 +71,7 @@ quant-python/signal_system/backtest_report*.json
 quant-python/signal_system/backtest_report*_trades.jsonl
 quant-python/signal_system/bt*.json
 quant-python/signal_system/bt*_trades.jsonl
+quant-python/signal_system/bt_exec/
 
 # Server-only Docker Compose environment
 quant-python/.env
