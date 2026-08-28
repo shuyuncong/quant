@@ -16,7 +16,25 @@ export async function GET() {
       /* ignore */
     }
     const symbols: string[] = Array.isArray(payload.symbols) ? payload.symbols : [];
-    const names = symbols.map((s) => nameMap[s] ?? s).join(", ");
+    // 任务负载里带持仓名称（比亚迪 等），比股票池更可靠；股票池有名称时也并入
+    const payloadHoldings: Array<{ symbol?: unknown; name?: unknown }> = Array.isArray(
+      payload.holdings
+    )
+      ? (payload.holdings as Array<{ symbol?: unknown; name?: unknown }>)
+      : [];
+    const localNames: Record<string, string> = {};
+    for (const holding of payloadHoldings) {
+      const symbol = String(holding.symbol ?? "").toUpperCase();
+      const name = String(holding.name ?? "").trim();
+      if (symbol && name) localNames[symbol] = name;
+    }
+    const names = symbols
+      .map((s) => {
+        const symbol = s.toUpperCase();
+        const name = localNames[symbol] ?? nameMap[symbol] ?? "";
+        return name ? `${name}/${symbol}` : s;
+      })
+      .join(", ");
     return {
       ...job,
       payload,

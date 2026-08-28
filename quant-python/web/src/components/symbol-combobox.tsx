@@ -41,7 +41,6 @@ export function SymbolCombobox({
 }: SymbolComboboxProps) {
   const [open, setOpen] = useState(false)
   const [holdings, setHoldings] = useState<HoldingOption[]>([])
-  const [focused, setFocused] = useState(false)
   const [rect, setRect] = useState<AnchorRect | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -113,18 +112,6 @@ export function SymbolCombobox({
 
   const hasValue = value.trim() !== ""
 
-  // 编辑时保持原始代码（可自由输入/修改）；失焦后把已匹配持仓显示为「名称/代码」。
-  const displayValue = focused
-    ? value
-    : tokens
-        .map((token) => {
-          const holding = holdings.find(
-            (item) => item.symbol.toLowerCase() === token.toLowerCase()
-          )
-          return holding && holding.name ? `${holding.name}/${holding.symbol}` : token
-        })
-        .join(" ")
-
   const addSymbol = (symbol: string) => {
     if (!tokens.includes(symbol)) {
       onChange([...tokens, symbol].join(" "))
@@ -142,14 +129,10 @@ export function SymbolCombobox({
         ref={inputRef}
         id={id}
         placeholder={placeholder}
-        value={displayValue}
+        value={value}
         onChange={(event) => onChange(event.target.value)}
-        onFocus={() => {
-          setFocused(true)
-          openDropdown()
-        }}
+        onFocus={openDropdown}
         onClick={openDropdown}
-        onBlur={() => setFocused(false)}
         className={cn("pr-9", hasValue && "pr-16")}
         aria-autocomplete="list"
         aria-expanded={open}
