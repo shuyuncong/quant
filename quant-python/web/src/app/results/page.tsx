@@ -249,7 +249,12 @@ function ResultBlock({ result }: { result: DataResult }) {
 
 function DataSourceView({ source }: { source: DataSource }) {
   return (
-    <div className="flex flex-col gap-4">
+    <Tabs defaultValue="data">
+      <TabsList variant="line">
+        <TabsTrigger value="data">数据</TabsTrigger>
+        <TabsTrigger value="json">JSON</TabsTrigger>
+      </TabsList>
+      <TabsContent value="data" className="flex flex-col gap-4">
       {source.market_context && (
         <div className="rounded-lg border bg-muted/30 p-3 text-xs">
           <span className="font-medium text-foreground">市场环境</span>
@@ -309,7 +314,13 @@ function DataSourceView({ source }: { source: DataSource }) {
           </ul>
         </div>
       )}
-    </div>
+      </TabsContent>
+      <TabsContent value="json">
+        <pre className="max-h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+          {JSON.stringify(source, null, 2)}
+        </pre>
+      </TabsContent>
+    </Tabs>
   );
 }
 
