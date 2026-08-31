@@ -35,8 +35,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eye, Play, Sparkles } from "lucide-react";
+import { Database, Eye, Play, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { SymbolCombobox } from "@/components/symbol-combobox";
 
 interface NoteRow {
@@ -57,6 +63,48 @@ interface JobRow {
   created_at: string;
   finished_at: string | null;
   note: NoteRow | null;
+}
+interface DataBar {
+  datetime: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  dif: number | null;
+  dea: number | null;
+  hist: number | null;
+}
+
+interface DataTimeframe {
+  timeframe: string;
+  status: string;
+  latest_time: string | null;
+  latest_price: number | null;
+  bar_count: number;
+  buy_score: number | null;
+  sell_score: number | null;
+  error: string | null;
+  bars: DataBar[];
+}
+
+interface DataResult {
+  symbol: string;
+  name: string;
+  status: string | null;
+  analyzed_at: string | null;
+  timeframes: DataTimeframe[];
+}
+
+interface DataSource {
+  mode: string;
+  analyzed_at: string | null;
+  scanned_at: string | null;
+  market_context: Record<string, unknown> | null;
+  delivery: Record<string, unknown> | null;
+  results: DataResult[];
+  candidates: Array<Record<string, unknown>>;
+  errors: Array<Record<string, unknown>>;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -99,12 +147,182 @@ async function postJson(url: string, body: unknown) {
   return data;
 }
 
+function formatNumber(value: number | null): string {
+  if (value === null || value === undefined) return "-";
+  const text = value.toFixed(4);
+  return text.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function BarTable({ bars }: { bars: DataBar[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>时间</TableHead>
+            <TableHead>开盘</TableHead>
+            <TableHead>最高</TableHead>
+            <TableHead>最低</TableHead>
+            <TableHead>收盘</TableHead>
+            <TableHead>成交量</TableHead>
+            <TableHead>DIF</TableHead>
+            <TableHead>DEA</TableHead>
+            <TableHead>HIST</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {bars.map((bar) => (
+            <TableRow key={bar.datetime}>
+              <TableCell className="font-mono text-xs">{bar.datetime}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.open)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.high)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.low)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.close)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.volume)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.dif)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.dea)}</TableCell>
+              <TableCell className="text-xs tabular-nums">{formatNumber(bar.hist)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function TimeframeBlock({ timeframe }: { timeframe: DataTimeframe }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="font-mono font-medium text-foreground">{timeframe.timeframe}</span>
+        <Badge variant={timeframe.status === "ok" ? "secondary" : "destructive"}>
+          {timeframe.status}
+        </Badge>
+        <span>最新 {timeframe.latest_time ?? "-"}</span>
+        <span>收盘 {formatNumber(timeframe.latest_price)}</span>
+        <span>K线 {timeframe.bar_count} 根</span>
+        <span>买入分 {timeframe.buy_score ?? "-"}</span>
+        <span>卖出分 {timeframe.sell_score ?? "-"}</span>
+        {timeframe.error && <span className="text-destructive">{timeframe.error}</span>}
+      </div>
+      {timeframe.bars.length > 0 ? (
+        <BarTable bars={timeframe.bars} />
+      ) : (
+        <p className="text-xs text-muted-foreground">该周期无K线数据</p>
+      )}
+    </div>
+  );
+}
+
+function ResultBlock({ result }: { result: DataResult }) {
+  if (result.timeframes.length === 0) {
+    return <p className="text-sm text-muted-foreground">无周期数据</p>;
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">
+          {result.name || result.symbol}/{result.symbol}
+        </span>
+        {result.status && <Badge variant="outline">{result.status}</Badge>}
+        {result.analyzed_at && (
+          <span className="text-xs text-muted-foreground">{result.analyzed_at}</span>
+        )}
+      </div>
+      <Tabs defaultValue={result.timeframes[0].timeframe}>
+        <TabsList className="flex-wrap">
+          {result.timeframes.map((tf) => (
+            <TabsTrigger key={tf.timeframe} value={tf.timeframe}>
+              {tf.timeframe}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {result.timeframes.map((tf) => (
+          <TabsContent key={tf.timeframe} value={tf.timeframe}>
+            <TimeframeBlock timeframe={tf} />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+function DataSourceView({ source }: { source: DataSource }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {source.market_context && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+          <span className="font-medium text-foreground">市场环境</span>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+            <span>指数 {String(source.market_context.index_code ?? "-")}</span>
+            <span>环境 {String(source.market_context.regime ?? "-")}</span>
+            <span>允许开仓 {String(source.market_context.allows_entries ?? "-")}</span>
+            <span>均线多头 {String(source.market_context.above_ma_long ?? "-")}</span>
+          </div>
+        </div>
+      )}
+      {source.results.length > 0 ? (
+        source.results.map((result) => <ResultBlock key={result.symbol} result={result} />)
+      ) : source.candidates.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">候选 {source.candidates.length} 只（最多展示 100 只）</p>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>代码</TableHead>
+                  <TableHead>名称</TableHead>
+                  <TableHead>评分</TableHead>
+                  <TableHead>价格</TableHead>
+                  <TableHead>区域</TableHead>
+                  <TableHead>确认时间</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {source.candidates.map((candidate) => (
+                  <TableRow key={String(candidate.symbol ?? "")}>
+                    <TableCell className="font-mono text-xs">{String(candidate.symbol ?? "")}</TableCell>
+                    <TableCell className="text-xs">{String(candidate.name ?? "")}</TableCell>
+                    <TableCell className="text-xs tabular-nums">{String(candidate.score ?? "")}</TableCell>
+                    <TableCell className="text-xs tabular-nums">{String(candidate.price ?? "")}</TableCell>
+                    <TableCell className="text-xs">{String(candidate.golden_cross_zone_label ?? "")}</TableCell>
+                    <TableCell className="text-xs">{String(candidate.confirmed_at ?? "")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">该报告没有可展示的数据源。</p>
+      )}
+      {source.errors.length > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+          <span className="font-medium">数据获取失败 {source.errors.length} 条：</span>
+          <ul className="mt-1 list-inside list-disc">
+            {source.errors.slice(0, 10).map((error, index) => (
+              <li key={index}>
+                {String((error as Record<string, unknown>).symbol ?? "")}{" "}
+                {String((error as Record<string, unknown>).error ?? "")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ResultsPage() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [symbolsInput, setSymbolsInput] = useState("");
   const [notify, setNotify] = useState(true);
   const [selectedJob, setSelectedJob] = useState<JobRow | null>(null);
   const [interpreting, setInterpreting] = useState(false);
+  const [dataJob, setDataJob] = useState<JobRow | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -114,6 +332,26 @@ export default function ResultsPage() {
       setJobs(data.jobs);
     } catch {
       /* ignore polling errors */
+    }
+  }, []);
+
+  const openDataSource = useCallback(async (job: JobRow) => {
+    setDataJob(job);
+    setDataSource(null);
+    setDataError(null);
+    setDataLoading(true);
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/data`);
+      const data = (await response.json().catch(() => ({}))) as DataSource & { error?: string };
+      if (!response.ok) {
+        setDataError(data.error || `请求失败: ${response.status}`);
+      } else {
+        setDataSource(data);
+      }
+    } catch {
+      setDataError("加载数据源失败");
+    } finally {
+      setDataLoading(false);
     }
   }, []);
 
@@ -301,7 +539,7 @@ export default function ResultsPage() {
                 <TableHead>模型</TableHead>
                 <TableHead>执行结果</TableHead>
                 <TableHead>创建时间</TableHead>
-                <TableHead className="w-28">操作</TableHead>
+                <TableHead className="w-44">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -322,9 +560,19 @@ export default function ResultsPage() {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedJob(job)}>
-                      <Eye className="size-4" /> 查看 AI 分析
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!job.result_path}
+                        onClick={() => void openDataSource(job)}
+                      >
+                        <Database className="size-4" /> 数据源
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedJob(job)}>
+                        <Eye className="size-4" /> 查看 AI 分析
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -375,6 +623,34 @@ export default function ResultsPage() {
                   </>
                 )}
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dataJob !== null} onOpenChange={(open) => !open && setDataJob(null)}>
+        <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1200px] flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 gap-1 border-b pb-4 pl-6 pr-16 pt-4">
+            <DialogTitle>
+              数据源 #{dataJob?.id}（{dataJob ? KIND_LABEL[dataJob.kind] ?? dataJob.kind : ""}）
+            </DialogTitle>
+            <DialogDescription>
+              {dataJob?.created_at}
+              {dataJob?.result_path ? " · " + fileName(dataJob.result_path) : ""}
+              {dataSource?.analyzed_at ? " · 分析时间 " + dataSource.analyzed_at : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            {dataLoading ? (
+              <p className="text-sm text-muted-foreground">正在读取结果文件...</p>
+            ) : dataError ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                {dataError}
+              </div>
+            ) : dataSource ? (
+              <DataSourceView source={dataSource} />
+            ) : (
+              <p className="text-sm text-muted-foreground">该任务暂无结果文件。</p>
             )}
           </div>
         </DialogContent>
