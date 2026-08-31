@@ -116,6 +116,23 @@ class MarketDataService:
             period=report_period,
         )
 
+    def get_historical_financial_data(
+        self,
+        ts_code: str,
+        as_of: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Request a causally aligned snapshot; never fall back to latest data."""
+        as_of_key = str(as_of or "unknown")
+        return self._get_object_with_cache(
+            provider_name=self.daily_provider_name,
+            method_name="get_historical_financial_data",
+            cache_key=f"{self.daily_provider_name}_historical_financial_{ts_code}_{as_of_key}",
+            cache_hours=self.fundamentals_cache_hours,
+            default=None,
+            ts_code=ts_code,
+            as_of=as_of,
+        )
+
     def get_trade_calendar(
         self,
         start_date: Optional[str] = None,

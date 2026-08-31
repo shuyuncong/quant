@@ -509,6 +509,13 @@ class StrategyEngine:
                 "market_cap": (daily_basic.get("total_mv") or 0) / 10000,
                 "turnover_rate": daily_basic.get("turnover_rate"),
                 "avg_turnover": avg_turnover,
+                # Keep provenance visible to the selector/report.  A report
+                # period is not used as a historical availability date.
+                "fundamental_context": "live",
+                "fundamental_data_source": "latest_published_snapshot",
+                "fundamental_report_period": financial.get("period") or report_period,
+                "fundamental_data_as_of": financial.get("ann_date")
+                or financial.get("published_at"),
                 "_daily_data": df,
             }
         except Exception as e:

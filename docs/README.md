@@ -14,6 +14,10 @@
   - 定义评估体系、参数优化、A 股现实约束增强和第二阶段接口预留
 - 开发 TODO 清单：`docs/TODO.md`
   - 按开发顺序拆分的可执行任务列表
+- 四层策略框架与配置化验证：`docs/ai-dev-workflow/strategy-framework/`
+  - 固化“基本面 + 成交量 + 技术分析”三条腿，以及资金管理/风控执行层、配置契约和回测验收流程
+- 知识库原始策略口径：`docs/量化交易/quantTrading.md`
+  - 记录基本面、量价、技术择时、仓位、做 T 和风控规则
 - Oracle Cloud 部署指南：`docs/DEPLOY-ORACLE.md`
   - 服务器落地部署（Docker Compose + Nginx 反代 + HTTPS + rclone 备份）；通用部署见 `quant-python/DEPLOY.md`
 
@@ -25,6 +29,8 @@
 2. `docs/plans/2026-03-07-trading-system-implementation.md`
 3. `docs/plans/2026-03-07-trading-system-implementation-part2.md`
 4. `docs/TODO.md`
+5. `docs/ai-dev-workflow/strategy-framework/requirements.md`
+6. `docs/ai-dev-workflow/strategy-framework/overview-design.md`
 
 ---
 

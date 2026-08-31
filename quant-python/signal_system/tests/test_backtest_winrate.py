@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 import tempfile
 import unittest
 from datetime import date
@@ -15,12 +16,16 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from backtest_winrate import (  # noqa: E402
+    _apply_p5b_cross_sectional_ranks,
+    _execution_values,
     build_market_gate,
     daily_price_limits,
+    find_signals,
     load_backtest_history,
     price_limit_rate,
     run_portfolio,
     simulate_signal_mode,
+    summarize_holding_periods,
 )
 
 
@@ -88,6 +93,42 @@ def execution(**overrides) -> dict:
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_missing_config_fails_with_actionable_cli_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing-config.yaml"
+            result = subprocess.run(
+                [sys.executable, str(BASE_DIR / "backtest_winrate.py"), "--config", str(missing)],
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertIn("unable to load config", result.stderr)
+
+    def test_p5b_missing_features_are_neutral_not_best(self):
+        candidates = [
+            {
+                "entry_day": "2026-01-05",
+                "_p5b_features": {"ma60_dist": None},
+            },
+            {
+                "entry_day": "2026-01-05",
+                "_p5b_features": {"ma60_dist": 0.10},
+            },
+            {
+                "entry_day": "2026-01-05",
+                "_p5b_features": {"ma60_dist": 0.20},
+            },
+        ]
+
+        _apply_p5b_cross_sectional_ranks(candidates)
+
+        self.assertEqual(0.5, candidates[0]["_p5b_pct"]["ma60_dist"])
+        self.assertEqual(0.0, candidates[1]["_p5b_pct"]["ma60_dist"])
+        self.assertEqual(1.0, candidates[2]["_p5b_pct"]["ma60_dist"])
+
     def test_sell_signal_on_entry_bar_exits_next_open(self):
         frame = bars([10.0, 10.0, 9.5, 9.4, 9.3, 9.2])
         days = [item.date().isoformat() for item in frame["datetime"]]
@@ -316,6 +357,240 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(days[2], trade["exit_day"])
         self.assertEqual(9.0, trade["exit_price"])
         self.assertEqual("intraday", trade["exit_session"])
+
+    def test_timeout_ma_break_exits_next_open_after_close_confirmation(self):
+        frame = bars(
+            [10.0, 10.0, 10.0, 10.0, 10.0, 8.5, 8.5, 8.5],
+            closes=[10.0, 10.0, 10.0, 10.0, 9.0, 8.5, 8.5, 8.5],
+        )
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        trade = simulate_signal_mode(
+            "MA_BREAK",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "ma_break",
+                    "timeout_ma_period": 2,
+                    "timeout_ma_confirm_bars": 1,
+                    "timeout_hard_cap_bars": 6,
+                },
+            ),
+        )["trades"][0]
+        self.assertEqual(days[4], trade["exit_trigger_day"])
+        self.assertEqual(days[5], trade["exit_day"])
+        self.assertEqual("timeout_ma_break", trade["exit_reason"])
+
+    def test_timeout_ma_break_requires_two_closes_when_configured(self):
+        frame = bars(
+            [10.0, 10.0, 10.0, 10.0, 9.0, 8.5, 8.5, 8.5, 8.5],
+            closes=[10.0, 10.0, 10.0, 10.0, 9.0, 8.5, 8.5, 8.5, 8.5],
+        )
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        trade = simulate_signal_mode(
+            "MA_BREAK_2",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "ma_break",
+                    "timeout_ma_period": 2,
+                    "timeout_ma_confirm_bars": 2,
+                    "timeout_hard_cap_bars": 6,
+                },
+            ),
+        )["trades"][0]
+        self.assertEqual(days[5], trade["exit_trigger_day"])
+        self.assertEqual(days[6], trade["exit_day"])
+        self.assertEqual("timeout_ma_break", trade["exit_reason"])
+
+    def test_timeout_ma_confirmation_streak_starts_at_timeout_threshold(self):
+        frame = bars(
+            [10.0, 10.0, 10.0, 9.0, 8.5, 8.0, 8.0, 8.0, 8.0],
+            closes=[10.0, 10.0, 10.0, 9.0, 8.5, 8.0, 8.0, 8.0, 8.0],
+        )
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        trade = simulate_signal_mode(
+            "MA_THRESHOLD",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "ma_break",
+                    "timeout_ma_period": 2,
+                    "timeout_ma_confirm_bars": 2,
+                    "timeout_hard_cap_bars": 6,
+                },
+            ),
+        )["trades"][0]
+        self.assertEqual(days[5], trade["exit_trigger_day"])
+        self.assertEqual(days[6], trade["exit_day"])
+
+    def test_explicit_fixed_timeout_matches_default_policy(self):
+        frame = bars([10.0] * 8)
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        baseline = simulate_signal_mode(
+            "FIXED_DEFAULT",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(stop_loss_pct=0.0, take_profit_pct=0.0),
+        )["trades"][0]
+        explicit = simulate_signal_mode(
+            "FIXED_EXPLICIT",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "fixed",
+                },
+            ),
+        )["trades"][0]
+        for key in ("exit_trigger_day", "exit_day", "exit_reason", "exit_price"):
+            self.assertEqual(baseline[key], explicit[key])
+
+    def test_timeout_ma_break_uses_hard_cap_when_trend_never_breaks(self):
+        frame = bars([10.0] * 8)
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        trade = simulate_signal_mode(
+            "MA_CAP",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "ma_break",
+                    "timeout_ma_period": 2,
+                    "timeout_ma_confirm_bars": 1,
+                    "timeout_hard_cap_bars": 6,
+                },
+            ),
+        )["trades"][0]
+        self.assertEqual(days[7], trade["exit_day"])
+        self.assertEqual("timeout_hard_cap", trade["exit_reason"])
+
+    def test_timeout_hard_cap_records_locked_limit_down_deferral(self):
+        frame = bars(
+            [10.0] * 7 + [9.0, 9.3],
+            highs=[10.0] * 7 + [9.0, 9.5],
+            lows=[10.0] * 7 + [9.0, 9.1],
+            closes=[10.0] * 7 + [9.0, 9.3],
+        )
+        days = [item.date().isoformat() for item in frame["datetime"]]
+        trade = simulate_signal_mode(
+            "600001",
+            frame,
+            {"buy": [buy(days[0])], "sell": []},
+            date.fromisoformat(days[0]),
+            date.fromisoformat(days[-1]),
+            execution(
+                stop_loss_pct=0.0,
+                take_profit_pct=0.0,
+                price_limit_model="conservative",
+                chan_zero_axis={
+                    "max_holding_bars": 3,
+                    "timeout_exit_mode": "ma_break",
+                    "timeout_ma_period": 2,
+                    "timeout_ma_confirm_bars": 1,
+                    "timeout_hard_cap_bars": 6,
+                },
+            ),
+        )["trades"][0]
+        self.assertEqual(days[7], trade["exit_trigger_day"])
+        self.assertEqual(days[8], trade["exit_day"])
+        self.assertEqual("timeout_hard_cap", trade["exit_reason"])
+        self.assertEqual(1, trade["price_limit_deferred_bars"])
+
+    def test_timeout_ma_break_defaults_to_sixty_bar_hard_cap(self):
+        resolved = _execution_values(
+            {
+                "chan_zero_axis": {
+                    "max_holding_bars": 40,
+                    "timeout_exit_mode": "ma_break",
+                }
+            }
+        )
+        self.assertEqual(60, resolved["timeout_hard_cap_bars"])
+
+    def test_zero_axis_exit_confirmation_delays_event_without_lookahead(self):
+        frame = bars([10.0] * 80)
+        fake_macd = pd.DataFrame(
+            {
+                "dif": [float("nan")] * 80,
+                "dea": [float("nan")] * 80,
+                "hist": [float("nan")] * 80,
+            }
+        )
+        fake_macd.loc[10, ["dif", "dea"]] = [0.1, 0.05]
+        fake_macd.loc[11, ["dif", "dea"]] = [-0.001, 0.0]
+        fake_macd.loc[12, ["dif", "dea"]] = [-0.002, 0.0]
+        config = {
+            "backtest": {
+                "chan_zero_axis": {"zero_axis_exit_confirmation_bars": 2}
+            },
+            "signal_strategy": {"macd": {"zero_axis_tolerance": 0.005}},
+        }
+        with patch("backtest_winrate.calculate_macd", return_value=fake_macd), \
+             patch("backtest_winrate.analyze_chan", return_value={"signals": []}), \
+             patch("backtest_winrate.find_golden_cross_entries", return_value=[]):
+            events = find_signals(frame, config)
+        self.assertEqual(1, len(events["sell"]))
+        self.assertEqual(
+            frame["datetime"].iloc[12].date().isoformat(), events["sell"][0]["day"]
+        )
+        self.assertEqual(
+            frame["datetime"].iloc[11].date().isoformat(), events["sell"][0]["trigger_day"]
+        )
+        self.assertEqual(2, events["sell"][0]["confirmation_bars"])
+
+    def test_zero_axis_exit_confirmation_cancels_after_recross(self):
+        frame = bars([10.0] * 80)
+        fake_macd = pd.DataFrame(
+            {
+                "dif": [float("nan")] * 80,
+                "dea": [float("nan")] * 80,
+                "hist": [float("nan")] * 80,
+            }
+        )
+        fake_macd.loc[10, ["dif", "dea"]] = [0.1, 0.05]
+        fake_macd.loc[11, ["dif", "dea"]] = [-0.001, 0.0]
+        fake_macd.loc[12, ["dif", "dea"]] = [0.001, 0.0]
+        config = {
+            "backtest": {
+                "chan_zero_axis": {"zero_axis_exit_confirmation_bars": 2}
+            },
+            "signal_strategy": {"macd": {"zero_axis_tolerance": 0.005}},
+        }
+        with patch("backtest_winrate.calculate_macd", return_value=fake_macd), \
+             patch("backtest_winrate.analyze_chan", return_value={"signals": []}), \
+             patch("backtest_winrate.find_golden_cross_entries", return_value=[]):
+            events = find_signals(frame, config)
+        self.assertEqual([], events["sell"])
 
 
 class MarketGateTests(unittest.TestCase):

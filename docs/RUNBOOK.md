@@ -119,7 +119,52 @@ python quant-python/tests/backtest/test_parameter_scan.py
 python quant-python/tests/integration/test_daily_scan_flow.py
 ```
 
-## 6. 常见问题
+## 6. 配置化策略实验流程
+
+知识库策略按“四层”落地：基本面、成交量、技术分析负责选股/入场；市场环境、仓位、做 T 和风险控制负责执行。实验时不要直接改生产配置，先复制一份研究配置：
+
+```powershell
+Copy-Item quant-python/signal_system/config/config.yaml `
+  quant-python/signal_system/config/config.research.yaml
+```
+
+研究配置只修改一个层或一组相关参数，并保留：
+
+- `strategy.framework.version` 与 `strategy.framework.profile`
+- 各层 enabled 开关
+- 数据窗口、复权、手续费、滑点、T+1 和涨跌停模型
+- 基本面历史快照路径及缺失数据策略
+
+命令行 `--fundamental-data` 的相对路径按当前工作目录解析；配置文件中的
+`backtest.fundamental.data_path` 相对路径按配置文件所在目录解析。
+
+使用独立配置运行回测：
+
+```powershell
+python quant-python/signal_system/backtest_winrate.py `
+  --config quant-python/signal_system/config/config.research.yaml `
+  --start 2025-01-01 --end 2025-12-31 `
+  --mode both `
+  --out bt_exec/research_p0.json
+```
+
+推荐验证顺序：
+
+1. 用生产配置复现 P0 基线。
+2. 只打开一个附加层，或只改变一组参数。
+3. 同一窗口、同一股票池、同一成本和持仓限制下比较 signal 与 portfolio。
+4. 训练窗口选择候选，验证窗口复测；再用多个滚动窗口检查稳定性。
+5. 报告总体、bull/range/bear、信号类型、持仓周期、交易数、覆盖率和 P10/P50/P90。
+6. 未达到验收门槛前不修改生产 `config.yaml`；关闭研究开关即可回滚。
+
+完整需求、设计、测试和 UAT 用例见：
+
+- `docs/ai-dev-workflow/strategy-framework/requirements.md`
+- `docs/ai-dev-workflow/strategy-framework/overview-design.md`
+- `docs/ai-dev-workflow/strategy-framework/test-plan.md`
+- `docs/ai-dev-workflow/strategy-framework/uat-cases.md`
+
+## 7. 常见问题
 
 如果日常扫描启动失败，先检查：
 - `config/config.yaml` 是否有有效的 Tushare Token
@@ -131,7 +176,7 @@ python quant-python/tests/integration/test_daily_scan_flow.py
 - 当前环境是否安装了 `pandas`
 - 基线输入文件 `sample_price_data.csv` 是否存在
 
-## 7. 数据源网络自检
+## 8. 数据源网络自检
 
 如果你切到 `AKShare + pytdx` 方案，先跑一次网络自检：
 
@@ -151,7 +196,7 @@ python quant-python/signal_system/data/network_diagnostic.py --output quant-pyth
 - `pytdx` 是否可导入
 - 常见 TDX 行情主机 `7709` 端口是否可连
 
-## 8. 真实数据日扫验收
+## 9. 真实数据日扫验收
 
 如果你要验证“当前真实数据链路 + selector + router”是否还能跑出候选池和买点，执行：
 

@@ -168,6 +168,25 @@ class NotifierAndConfigTests(unittest.TestCase):
             self.assertEqual("https://example.com/hook", config["notification"]["webhook"]["url"])
             self.assertEqual(os.path.join(directory, "cache"), config["market_data"]["cache_dir"])
 
+    def test_config_resolves_relative_fundamental_history_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_dir = os.path.join(directory, "config")
+            os.makedirs(config_dir)
+            path = os.path.join(config_dir, "config.yaml")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "backtest:\n"
+                    "  fundamental:\n"
+                    "    data_path: ./history.jsonl\n"
+                )
+
+            config = load_config(path)
+
+            self.assertEqual(
+                os.path.join(directory, "history.jsonl"),
+                config["backtest"]["fundamental"]["data_path"],
+            )
+
     def test_wechat_http_200_with_application_error_is_failure(self):
         notifier = SignalNotifier(
             {

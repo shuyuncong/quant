@@ -45,6 +45,15 @@ def _resolve_runtime_paths(config, config_path):
         value = config.get(section, {}).get(key)
         if value and not os.path.isabs(value):
             config[section][key] = os.path.normpath(os.path.join(base_dir, value))
+    fundamental_path = (
+        config.get('backtest', {}).get('fundamental', {}).get('data_path')
+        if isinstance(config.get('backtest', {}).get('fundamental'), dict)
+        else None
+    )
+    if fundamental_path and not os.path.isabs(fundamental_path):
+        config['backtest']['fundamental']['data_path'] = os.path.normpath(
+            os.path.join(base_dir, fundamental_path)
+        )
     log_file = config.get('runtime', {}).get('logging', {}).get('file')
     if log_file and not os.path.isabs(log_file):
         config['runtime']['logging']['file'] = os.path.normpath(os.path.join(base_dir, log_file))
@@ -79,6 +88,23 @@ DEFAULT_CONFIG = {
         ],
     },
     "strategy": {
+        "framework": {
+            "version": "four-layer-v1",
+            "profile": "P0",
+            "experiment_id": "p0-baseline",
+            "dataset_role": "baseline",
+            "selection_layers": {
+                "fundamental": False,
+                "volume": True,
+                "technical": True,
+            },
+            "execution_layers": {
+                "regime": True,
+                "position": True,
+                "risk": True,
+                "t_trading": True,
+            },
+        },
         "fundamental": {
             "min_roe": 10,
             "max_debt_ratio": 60,

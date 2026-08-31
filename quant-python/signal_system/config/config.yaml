@@ -38,6 +38,22 @@ data:
     - "114.80.63.12:7709"
 
 strategy:
+  # Versioned four-layer framework metadata. Existing sections below remain
+  # the actual parameter sources; this block identifies experiment intent.
+  framework:
+    version: "four-layer-v1"
+    profile: "P0"
+    experiment_id: "p0-baseline"
+    dataset_role: "baseline"
+    selection_layers:
+      fundamental: false
+      volume: true
+      technical: true
+    execution_layers:
+      regime: true
+      position: true
+      risk: true
+      t_trading: true
   fundamental:
     min_roe: 10
     max_debt_ratio: 60
@@ -141,6 +157,7 @@ stock_pool:
   missing_data_policy: "reject"    # reject=缺指标拒绝；allow=记录警告后放行
 
 entry_filters:
+  fundamental_enabled: false
   market_gate_enabled: true         # 日线候选必须通过指数状态闸门
   market_index_code: "000001.SH"
   market_gate_fail_open: false      # 指数数据不可用时不新增候选
@@ -190,6 +207,11 @@ t_trading:
 
 backtest:
   initial_cash: 100000
+  # Historical fundamentals are opt-in and require announcement-dated data.
+  fundamental:
+    enabled: false
+    data_path: ""
+    missing_data_policy: "unavailable"
   adjustment: "qfq"                # 回测独立使用前复权，不改变实时分钟线口径
   history_bars: 800                 # MA250 之前保留足够预热历史
   fetch_missing_adjusted: true      # 缺少/过短 QFQ 缓存时主动拉取，禁止回退 none

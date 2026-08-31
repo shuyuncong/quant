@@ -27,6 +27,9 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
+QUANT_ROOT = BASE_DIR.parent
+if str(QUANT_ROOT) not in sys.path:
+    sys.path.insert(0, str(QUANT_ROOT))
 
 from strategy.chan import analyze_chan
 from strategy.macd import calculate_macd, classify_zero_axis_zone, find_golden_cross_entries
@@ -41,6 +44,13 @@ from strategy.signal_policy import (
     resolve_signal_execution_policy,
 )
 from strategy.stock_pool import filter_buy_events, resolve_stock_pool_config
+from core.selector.fundamental import (
+    filter_buy_events_by_fundamental,
+    load_fundamental_history,
+    resolve_fundamental_config,
+)
+from core.selector.fundamental_history import history_coverage_report
+from core.strategy.framework import build_config_snapshot, resolve_strategy_framework
 from utils.helpers import load_config
 
 
@@ -54,6 +64,21 @@ DEFAULT_SIGNAL_PRIORITY = (
     "buy_2",
     "buy_3",
 )
+
+
+def _zero_axis_exit_confirmation_bars(config: dict[str, Any]) -> int:
+    """Return the research-only confirmation length for zero-axis exits.
+
+    The default of one bar is the historical P0 behaviour.  Values greater
+    than one delay the sell event until DIF has remained below DEA for the
+    requested number of closed bars.
+    """
+    value = (
+        config.get("backtest", {})
+        .get("chan_zero_axis", {})
+        .get("zero_axis_exit_confirmation_bars", 1)
+    )
+    return max(int(value), 1)
 _BACKTEST_CLIENTS = threading.local()
 
 
@@ -387,12 +412,44 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
         row_dif = float(macd_frame["dif"].iloc[confirmation_index]) if pd.notna(macd_frame["dif"].iloc[confirmation_index]) else 0.0
         row_dea = float(macd_frame["dea"].iloc[confirmation_index]) if pd.notna(macd_frame["dea"].iloc[confirmation_index]) else 0.0
         p5a_features = None
+        p5b_features = None
         if row_close > 0:
             p5a_features = {
                 # normalized MACD strength: separation of DIF/DEA relative to price
                 "dif_dea_gap": abs(row_dif - row_dea) / row_close,
                 # normalized distance from zero axis (higher = farther from zero)
                 "zero_dist": abs(row_dif) / row_close,
+            }
+            # P5b features: trend/risk/volatility at signal-day close (causal).
+            close_series = closed["close"]
+            high_series = closed["high"] if "high" in closed.columns else close_series
+            low_series = closed["low"] if "low" in closed.columns else close_series
+            idx = confirmation_index
+            c_now = float(close_series.iloc[idx])
+            ma60 = float(close_series.iloc[max(0, idx - 59): idx + 1].mean()) if idx >= 59 else float("nan")
+            ma250 = float(close_series.iloc[max(0, idx - 249): idx + 1].mean()) if idx >= 249 else float("nan")
+            ma60_prev = float(close_series.iloc[max(0, idx - 60 - 4): idx - 4 + 1].mean()) if idx >= 64 else float("nan")
+            ma250_prev = float(close_series.iloc[max(0, idx - 250 - 4): idx - 4 + 1].mean()) if idx >= 254 else float("nan")
+            prev_close = float(close_series.iloc[idx - 1]) if idx >= 1 else float("nan")
+            prev_close_20 = float(close_series.iloc[max(0, idx - 20)]) if idx >= 20 else float("nan")
+            tr_vals = []
+            for k in range(max(1, idx - 13), idx + 1):
+                h = float(high_series.iloc[k])
+                l = float(low_series.iloc[k])
+                pc = float(close_series.iloc[k - 1])
+                tr_vals.append(max(h - l, abs(h - pc), abs(l - pc)))
+            atr = float(sum(tr_vals) / len(tr_vals)) if tr_vals else float("nan")
+            p5b_features = {
+                # distance from MAs (fraction of close); positive = above
+                "ma60_dist": (c_now / ma60 - 1.0) if ma60 == ma60 else None,
+                "ma250_dist": (c_now / ma250 - 1.0) if ma250 == ma250 else None,
+                # 5-bar MA slopes
+                "ma60_slope": (ma60 / ma60_prev - 1.0) if ma60 == ma60 and ma60_prev == ma60_prev else None,
+                "ma250_slope": (ma250 / ma250_prev - 1.0) if ma250 == ma250 and ma250_prev == ma250_prev else None,
+                # volatility / close
+                "atr_ratio": (atr / c_now) if atr == atr else None,
+                # recent 20-bar return (high-position risk)
+                "recent_return": (c_now / prev_close_20 - 1.0) if prev_close_20 == prev_close_20 else None,
             }
         buys.append(
             {
@@ -406,6 +463,7 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
                 "confirmation_items": confirmation_items,
                 "confirmation_count": confirmation_count,
                 "_p5a_features": p5a_features,
+                "_p5b_features": p5b_features,
             }
         )
 
@@ -413,6 +471,7 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
     dea = macd_frame["dea"]
     previous_dif = dif.shift(1)
     previous_dea = dea.shift(1)
+    death_cross_confirmation_bars = _zero_axis_exit_confirmation_bars(config)
     for index in range(2, len(closed)):
         if pd.isna(dif.iloc[index]) or pd.isna(dea.iloc[index]):
             continue
@@ -429,7 +488,20 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
             zero_tol,
         )
         if zone == "near":
-            raw_date = dates.iloc[index]
+            confirmation_index = index + death_cross_confirmation_bars - 1
+            if confirmation_index >= len(closed):
+                # A confirmation that would extend past the available
+                # history is not a causal event and must not be backfilled.
+                continue
+            confirmed = all(
+                pd.notna(dif.iloc[probe])
+                and pd.notna(dea.iloc[probe])
+                and float(dif.iloc[probe]) < float(dea.iloc[probe])
+                for probe in range(index, confirmation_index + 1)
+            )
+            if not confirmed:
+                continue
+            raw_date = dates.iloc[confirmation_index]
             sells.append(
                 {
                     "day": raw_date.date().isoformat(),
@@ -437,6 +509,8 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
                     "side": "sell",
                     "price": float(closed["close"].iloc[index]),
                     "confirmed_at": str(raw_date),
+                    "trigger_day": dates.iloc[index].date().isoformat(),
+                    "confirmation_bars": death_cross_confirmation_bars,
                 }
             )
     return {"buy": buys, "sell": sells}
@@ -818,6 +892,16 @@ def _resolve_sell_fill(
 
 def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
     risk = costs.get("risk", {})
+    chan_zero_axis = costs.get("chan_zero_axis", {}) or {}
+    max_holding_bars = max(int(chan_zero_axis.get("max_holding_bars", 40)), 1)
+    timeout_exit_mode = str(
+        chan_zero_axis.get("timeout_exit_mode", "fixed")
+    ).lower()
+    if timeout_exit_mode not in {"fixed", "ma_break"}:
+        raise ValueError(
+            "timeout_exit_mode must be 'fixed' or 'ma_break', "
+            f"got {timeout_exit_mode!r}"
+        )
     stop_loss = costs.get("stop_loss_pct", risk.get("stop_loss_pct"))
     take_profit = costs.get(
         "take_profit_pct",
@@ -835,10 +919,50 @@ def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
         "stop_loss_pct": None if stop_loss is None else max(float(stop_loss), 0.0),
         "take_profit_pct": None if take_profit is None else max(float(take_profit), 0.0),
         "intrabar_conflict": str(costs.get("intrabar_conflict", "stop_first")),
-        "max_holding_bars": max(
-            int(costs.get("chan_zero_axis", {}).get("max_holding_bars", 40)), 1
+        "max_holding_bars": max_holding_bars,
+        "timeout_exit_mode": timeout_exit_mode,
+        "timeout_ma_period": max(
+            int(chan_zero_axis.get("timeout_ma_period", 20)), 2
+        ),
+        "timeout_ma_confirm_bars": max(
+            int(chan_zero_axis.get("timeout_ma_confirm_bars", 1)), 1
+        ),
+        "timeout_hard_cap_bars": max(
+            int(
+                chan_zero_axis.get(
+                    "timeout_hard_cap_bars",
+                    (
+                        max_holding_bars + 20
+                        if timeout_exit_mode == "ma_break"
+                        else max_holding_bars
+                    ),
+                )
+            ),
+            max_holding_bars,
+            1,
         ),
     }
+
+
+def _timeout_ma_break_confirmed(
+    closed: pd.DataFrame,
+    index: int,
+    period: int,
+    confirm_bars: int,
+    start_index: int = 0,
+) -> bool:
+    """Return whether the close is below its MA for consecutive closed bars."""
+    first_probe = index - confirm_bars + 1
+    if index < period - 1 or first_probe < max(start_index, 0):
+        return False
+    closes = pd.to_numeric(closed["close"], errors="coerce")
+    ma = closes.rolling(period, min_periods=period).mean()
+    for probe in range(first_probe, index + 1):
+        if pd.isna(closes.iloc[probe]) or pd.isna(ma.iloc[probe]):
+            return False
+        if float(closes.iloc[probe]) >= float(ma.iloc[probe]):
+            return False
+    return True
 
 
 def _build_trade(
@@ -880,8 +1004,12 @@ def _build_trade(
         "confirmation_count": buy.get("confirmation_count"),
         "confirmation_items": buy.get("confirmation_items"),
         "_p5a_features": buy.get("_p5a_features"),
+        "_p5b_features": buy.get("_p5b_features"),
         "stock_pool_metrics": buy.get("stock_pool_metrics"),
         "stock_pool_warnings": buy.get("stock_pool_warnings", []),
+        "fundamental_status": buy.get("fundamental_status"),
+        "fundamental_metrics": buy.get("fundamental_metrics"),
+        "fundamental_warnings": buy.get("fundamental_warnings", []),
         "entry_price": round(entry_price, 4),
         "exit_price": round(exit_price, 4),
         "entry_unit_cost": entry_unit_cost,
@@ -925,8 +1053,14 @@ def simulate_single_trade(
     entry_limits = _bar_price_limits(symbol, closed, entry_idx, execution)
     if entry_limits is not None and entry_price >= entry_limits[0] - 0.0001:
         return None, "entry_limit_up"
+    timeout_mode = execution["timeout_exit_mode"]
     timeout_idx = entry_idx + execution["max_holding_bars"]
-    if timeout_idx >= len(closed) and not allow_incomplete:
+    hard_cap_idx = entry_idx + (
+        execution["timeout_hard_cap_bars"]
+        if timeout_mode == "ma_break"
+        else execution["max_holding_bars"]
+    )
+    if hard_cap_idx >= len(closed) and not allow_incomplete:
         return None, "incomplete_horizon"
     stop_price = (
         entry_price * (1 - execution["stop_loss_pct"])
@@ -958,7 +1092,7 @@ def simulate_single_trade(
                 trigger_idx, exit_session, execution, market_context,
                 price_limit_deferred_bars
             ), None
-        if index == timeout_idx:
+        if timeout_mode == "fixed" and index == timeout_idx:
             desired_price = float(closed.iloc[index]["open"])
             if desired_price <= 0:
                 return None, "invalid_exit_price"
@@ -975,7 +1109,26 @@ def simulate_single_trade(
                 index, exit_session, execution, market_context,
                 price_limit_deferred_bars
             ), None
-        if index > timeout_idx:
+        if timeout_mode == "fixed" and index > timeout_idx:
+            continue
+        if timeout_mode == "ma_break" and index == hard_cap_idx:
+            desired_price = float(closed.iloc[index]["open"])
+            if desired_price <= 0:
+                return None, "invalid_exit_price"
+            resolved = _resolve_sell_fill(
+                symbol, closed, index, desired_price, "open", execution
+            )
+            if resolved is None:
+                pending_exit = ("timeout_hard_cap", index)
+                price_limit_deferred_bars += 1
+                continue
+            exit_price, exit_session = resolved
+            return _build_trade(
+                symbol, closed, dates, buy, entry_idx, index, exit_price,
+                "timeout_hard_cap", index, exit_session, execution, market_context,
+                price_limit_deferred_bars
+            ), None
+        if timeout_mode == "ma_break" and index > hard_cap_idx:
             continue
         risk = _risk_trigger(
             closed.iloc[index], stop_price, take_price, execution["intrabar_conflict"]
@@ -1000,6 +1153,21 @@ def simulate_single_trade(
                 ), None
         if pending_exit is None and index in sells_by_index and index >= entry_idx:
             pending_exit = (sells_by_index[index], index)
+        if (
+            timeout_mode == "ma_break"
+            and pending_exit is None
+            and index >= timeout_idx
+            and _timeout_ma_break_confirmed(
+                closed,
+                index,
+                execution["timeout_ma_period"],
+                execution["timeout_ma_confirm_bars"],
+                timeout_idx,
+            )
+        ):
+            # The condition is observed at today's close and therefore fills
+            # at the next trading day's open via pending_exit.
+            pending_exit = ("timeout_ma_break", index)
     if pending_exit is not None:
         return None, "unresolved_limit_down"
     if not allow_incomplete:
@@ -1132,6 +1300,29 @@ def summarize(trades: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def summarize_holding_periods(trades: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Summarize trades by stable holding-period buckets for audit reports."""
+
+    buckets = (
+        (0, 5, "0-5d"),
+        (6, 20, "6-20d"),
+        (21, 40, "21-40d"),
+        (41, None, "41d+"),
+    )
+    result: dict[str, dict[str, Any]] = {}
+    for lower, upper, name in buckets:
+        selected = []
+        for trade in trades:
+            try:
+                days = float(trade.get("holding_days", 0))
+            except (TypeError, ValueError):
+                continue
+            if days >= lower and (upper is None or days <= upper):
+                selected.append(trade)
+        result[name] = summarize(selected)
+    return result
+
+
 _ZONE_SCORE = {
     "macd_golden_cross_pullback_confirmed_above": 300,
     "macd_golden_cross_pullback_confirmed_near": 200,
@@ -1142,6 +1333,108 @@ _ZONE_SCORE = {
 
 
 _P5A_VARIANTS = {"C", "G", "Z", "CG", "CZ", "CGZ"}
+
+
+# P5b: trend/risk/volatility feature groups. Each mode maps to a set of
+# _p5b_features keys plus a direction sign (+1 high better, -1 low better).
+# Directions come from the three-window feature probe (cross-consistent):
+#   atr_ratio high better (strong breakouts), ma60/ma250 distance LOW better
+#   (close to MAs = not overheated), slopes weakly negative, recent_return
+#   directionless (dropped from score, kept in risk diagnostics).
+_P5B_MODES: dict[str, dict[str, float]] = {
+    "P5b-MA60": {"ma60_dist": -1.0, "ma60_slope": -1.0},
+    "P5b-MA250": {"ma250_dist": -1.0, "ma250_slope": -1.0},
+    "P5b-ATR": {"atr_ratio": 1.0},
+    "P5b-Risk": {"recent_return": 0.0},  # directionless; kept as observation
+    "P5b-MA": {"ma60_dist": -1.0, "ma60_slope": -1.0, "ma250_dist": -1.0, "ma250_slope": -1.0},
+    "P5b-All": {
+        "ma60_dist": -1.0, "ma60_slope": -1.0, "ma250_dist": -1.0, "ma250_slope": -1.0,
+        "atr_ratio": 1.0,
+    },
+}
+
+
+def _is_p5b_mode(mode: str) -> bool:
+    return mode in _P5B_MODES
+
+
+def _p5b_mode_directions(mode: str) -> dict[str, float]:
+    return _P5B_MODES.get(mode, {})
+
+
+def _apply_p5b_cross_sectional_ranks(
+    candidates: list[dict[str, Any]],
+) -> None:
+    """Compute per entry-day percentile ranks for P5b features (in-place).
+
+    Each candidate gets ``_p5b_pct`` = {feature_key: rank 0..1}, where rank is
+    the fraction of same-day candidates strictly below. Direction handling is
+    left to the score function (sign applied there).
+    """
+    by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for candidate in candidates:
+        entry_day = candidate.get("entry_day") or candidate.get("signal_day")
+        if entry_day:
+            by_day[str(entry_day)].append(candidate)
+    for day, group in by_day.items():
+        if len(group) < 2:
+            for candidate in group:
+                candidate["_p5b_pct"] = {key: 0.5 for key in (
+                    "ma60_dist", "ma60_slope", "ma250_dist", "ma250_slope",
+                    "atr_ratio", "recent_return")}
+            continue
+        for key in (
+            "ma60_dist", "ma60_slope", "ma250_dist", "ma250_slope",
+            "atr_ratio", "recent_return",
+        ):
+            valid_values = []
+            candidate_values = []
+            for candidate in group:
+                features = candidate.get("_p5b_features") or {}
+                value = features.get(key)
+                numeric_value = None
+                if value is not None:
+                    try:
+                        numeric_value = float(value)
+                    except (TypeError, ValueError):
+                        numeric_value = None
+                if numeric_value is not None and math.isfinite(numeric_value):
+                    valid_values.append((candidate, numeric_value))
+                    candidate_values.append((candidate, numeric_value))
+                else:
+                    # Missing features carry no ranking information. Keep them
+                    # neutral instead of treating them as the lowest value.
+                    candidate_values.append((candidate, None))
+            denominator = max(len(valid_values) - 1, 1)
+            for candidate, value in candidate_values:
+                if value is None or len(valid_values) < 2:
+                    rank = 0.5
+                else:
+                    rank = sum(1 for _, other in valid_values if other < value) / denominator
+                candidate.setdefault("_p5b_pct", {})[key] = rank
+
+
+def _p5b_mode_score(
+    candidate: dict[str, Any],
+    mode: str,
+    rank: dict[str, int],
+) -> float:
+    """P5b score: base + signed percentile contributions of the mode's features.
+    buy_1/2/3 have no P5b features; fall back to base score."""
+    signal_type = str(candidate.get("signal_type", ""))
+    base = float(_ZONE_SCORE.get(signal_type, rank.get(signal_type, 999) * 10.0))
+    confirm_count = float(candidate.get("confirmation_count") or 0)
+    if not signal_type.startswith("macd"):
+        return base + confirm_count * 10.0
+    directions = _p5b_mode_directions(mode)
+    pct = candidate.get("_p5b_pct") or {}
+    score = base + confirm_count * 10.0
+    for key, sign in directions.items():
+        r = float(pct.get(key, 0.5))
+        # rank 0..1; apply sign so higher score = better under that direction
+        contribution = (r - 0.5) * 2.0 * sign
+        score += contribution * 20.0
+    return score
 
 
 def _is_p5a_variant(mode: str) -> bool:
@@ -1244,6 +1537,8 @@ def _candidate_score(
     rank: dict[str, int],
 ) -> float:
     """Compute an orderable score using only information known at entry time."""
+    if _is_p5b_mode(mode):
+        return _p5b_mode_score(candidate, mode, rank)
     if _is_p5a_variant(mode):
         # P5a family: bare "P5a" uses raw clip normalization; P5a-C/G/Z/CG/CZ/CGZ
         # use cross-sectional percentile ranks (set in _merge_portfolio_candidates).
@@ -1284,7 +1579,9 @@ def _merge_portfolio_candidates(
     tie_break: str = "symbol_asc",
 ) -> list[dict[str, Any]]:
     rank = {name: index for index, name in enumerate(signal_priority)}
-    if _is_p5a_variant(score_mode) and score_mode != "P5a":
+    if _is_p5b_mode(score_mode):
+        _apply_p5b_cross_sectional_ranks(candidates)
+    elif _is_p5a_variant(score_mode) and score_mode != "P5a":
         _apply_p5a_cross_sectional_ranks(candidates)
     rng = None
     if seed is not None:
@@ -1693,6 +1990,19 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Backtest daily signal quality and portfolio returns")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=str(BASE_DIR / "config" / "config.yaml"),
+        help="strategy config YAML; use a copied research config to keep production isolated",
+    )
+    parser.add_argument("--experiment-id", type=str, default=None, help="label for this research run")
+    parser.add_argument(
+        "--dataset-role",
+        choices=("baseline", "train", "validation", "test", "full"),
+        default=None,
+        help="dataset role recorded in the strategy framework snapshot",
+    )
     parser.add_argument("--limit", type=int, default=0, help="only first N symbols")
     parser.add_argument("--start", type=str, default="2026-02-21", help="signal window start")
     parser.add_argument("--end", type=str, default=date.today().isoformat(), help="backtest data end")
@@ -1710,6 +2020,36 @@ def main() -> int:
     parser.add_argument("--index-data", type=str, default=None, help="historical index CSV/JSON/PKL")
     parser.add_argument("--index-limit", type=int, default=1200)
     parser.add_argument(
+        "--fundamental-data",
+        type=str,
+        default=None,
+        help="causal historical fundamentals JSON/JSONL",
+    )
+    parser.add_argument(
+        "--enable-fundamental",
+        action="store_true",
+        help="enable historical fundamental filtering for this run only (does not edit config)",
+    )
+    parser.add_argument(
+        "--symbols-file",
+        type=str,
+        default=None,
+        help="JSON file with list of symbols to analyze (filters the directory scan)",
+    )
+    parser.add_argument(
+        "--fundamental-missing-data-policy",
+        choices=("reject", "unavailable"),
+        default=None,
+        help="override historical fundamental missing-data policy for this run",
+    )
+    parser.add_argument(
+        "--fundamental-roe-min",
+        type=float,
+        default=None,
+        help="override the historical fundamental ROE threshold for this run "
+        "(does not edit config)",
+    )
+    parser.add_argument(
         "--allow-incomplete",
         action="store_true",
         help="include right-censored trades and exit them at the last close",
@@ -1721,6 +2061,26 @@ def main() -> int:
     parser.add_argument(
         "--take-profit-pct", type=float, default=None,
         help="override take-profit threshold (e.g. 0.20)",
+    )
+    parser.add_argument(
+        "--zero-axis-exit-confirm-bars", type=int, default=None,
+        help="research override: require this many closed bars below DEA before zero-axis exit",
+    )
+    parser.add_argument(
+        "--timeout-exit-mode", choices=("fixed", "ma_break"), default=None,
+        help="research override: fixed timeout or MA-break conditioned timeout",
+    )
+    parser.add_argument(
+        "--timeout-ma-period", type=int, default=None,
+        help="research override: moving-average period for conditioned timeout",
+    )
+    parser.add_argument(
+        "--timeout-ma-confirm-bars", type=int, default=None,
+        help="research override: consecutive closes below timeout MA",
+    )
+    parser.add_argument(
+        "--timeout-hard-cap-bars", type=int, default=None,
+        help="research override: hard holding-bar cap for ma_break timeout",
     )
     parser.add_argument(
         "--portfolio-max-positions", type=int, default=None,
@@ -1741,12 +2101,14 @@ def main() -> int:
     parser.add_argument(
         "--portfolio-score-mode",
         choices=("P0", "P1", "P2", "P3", "P4", "P5a",
-                 "P5a-C", "P5a-G", "P5a-Z", "P5a-CG", "P5a-CZ", "P5a-CGZ"),
+                 "P5a-C", "P5a-G", "P5a-Z", "P5a-CG", "P5a-CZ", "P5a-CGZ",
+                 "P5b-MA60", "P5b-MA250", "P5b-ATR", "P5b-Risk", "P5b-MA", "P5b-All"),
         default="P0",
         help="candidate ordering within same day: P0 priority, P1 score, P2 +freshness, "
         "P3 +risk penalty, P4 fair rotation, P5a +continuous MACD quality; "
         "P5a-C/G/Z/CG/CZ/CGZ use cross-sectional percentile normalization "
-        "(C=confirmation, G=DIF/DEA gap, Z=zero-axis distance)",
+        "(C=confirmation, G=DIF/DEA gap, Z=zero-axis distance); "
+        "P5b-MA60/MA250/ATR/Risk/MA/All use trend/risk/volatility percentiles",
     )
     parser.add_argument(
         "--portfolio-tie-break", choices=("symbol_asc", "symbol_desc", "hash", "rotate", "random"),
@@ -1763,7 +2125,45 @@ def main() -> int:
     end = date.fromisoformat(args.end)
     if end < start:
         parser.error("--end must be on or after --start")
-    config = load_config(BASE_DIR / "config" / "config.yaml")
+    config = load_config(args.config)
+    if config is None:
+        parser.error(f"unable to load config: {args.config}")
+    if args.enable_fundamental or getattr(args, "fundamental_missing_data_policy", None):
+        historical_fundamental = config.setdefault("backtest", {}).setdefault("fundamental", {})
+        if args.enable_fundamental:
+            historical_fundamental["enabled"] = True
+        if getattr(args, "fundamental_missing_data_policy", None):
+            historical_fundamental["missing_data_policy"] = args.fundamental_missing_data_policy
+    if args.fundamental_roe_min is not None:
+        cfg = config.setdefault("strategy", {}).setdefault("fundamental", {})
+        cfg["min_roe"] = args.fundamental_roe_min
+    framework_config = config.setdefault("strategy", {}).setdefault("framework", {})
+    if args.experiment_id is not None:
+        framework_config["experiment_id"] = args.experiment_id
+    if args.dataset_role is not None:
+        framework_config["dataset_role"] = args.dataset_role
+    strategy_framework = resolve_strategy_framework(config)
+    chan_zero_axis_config = config.setdefault("backtest", {}).setdefault(
+        "chan_zero_axis", {}
+    )
+    if args.zero_axis_exit_confirm_bars is not None:
+        chan_zero_axis_config["zero_axis_exit_confirmation_bars"] = max(
+            int(args.zero_axis_exit_confirm_bars), 1
+        )
+    if args.timeout_exit_mode is not None:
+        chan_zero_axis_config["timeout_exit_mode"] = args.timeout_exit_mode
+    if args.timeout_ma_period is not None:
+        chan_zero_axis_config["timeout_ma_period"] = max(
+            int(args.timeout_ma_period), 2
+        )
+    if args.timeout_ma_confirm_bars is not None:
+        chan_zero_axis_config["timeout_ma_confirm_bars"] = max(
+            int(args.timeout_ma_confirm_bars), 1
+        )
+    if args.timeout_hard_cap_bars is not None:
+        chan_zero_axis_config["timeout_hard_cap_bars"] = max(
+            int(args.timeout_hard_cap_bars), 1
+        )
     execution = _resolve_execution_config(config)
     if args.stop_loss_pct is not None:
         execution["stop_loss_pct"] = max(float(args.stop_loss_pct), 0.0)
@@ -1779,6 +2179,20 @@ def main() -> int:
     )
     entry_filters = config.get("entry_filters", {})
     stock_pool_settings = resolve_stock_pool_config(config)
+    fundamental_settings = resolve_fundamental_config(config, context="historical")
+    fundamental_data_path = (
+        str(Path(args.fundamental_data).expanduser().resolve())
+        if args.fundamental_data
+        else (config.get("backtest", {}).get("fundamental", {}) or {}).get("data_path")
+    )
+    fundamental_history: dict[str, list[dict[str, Any]]] = {}
+    if fundamental_settings["enabled"]:
+        if not fundamental_data_path:
+            raise RuntimeError(
+                "historical fundamental filtering is enabled but no fundamental data file was provided"
+            )
+        fundamental_history = load_fundamental_history(fundamental_data_path)
+    fundamental_coverage = history_coverage_report(fundamental_history)
     market_gate_settings = resolve_market_gate_settings(config)
     signal_execution_policy = resolve_signal_execution_policy(config)
     market_gate_enabled = bool(entry_filters.get("market_gate_enabled", False))
@@ -1809,6 +2223,14 @@ def main() -> int:
         )
 
     files = sorted(HISTORY_DIR.glob("*_none.pkl"))
+    if args.symbols_file:
+        with open(Path(args.symbols_file), encoding="utf-8") as symbols_handle:
+            symbol_list = json.load(symbols_handle)
+        wanted = {str(item).zfill(6) for item in symbol_list}
+        files = [
+            path for path in files
+            if str(path.name.split("_")[0]).zfill(6) in wanted
+        ]
     if args.limit:
         files = files[: args.limit]
     logger.info(
@@ -1828,6 +2250,7 @@ def main() -> int:
     observed_signals: list[dict[str, Any]] = []
     signal_policy_counts: Counter = Counter()
     stock_pool_rejection_details: list[dict[str, Any]] = []
+    fundamental_filter_details: list[dict[str, Any]] = []
     skipped: Counter = Counter()
     history_sources: Counter = Counter()
     errors = 0
@@ -1849,6 +2272,7 @@ def main() -> int:
                 "skipped": {"insufficient_history": 1},
                 "history_source": history_source,
                 "stock_pool_rejections": [],
+                "fundamental_rejections": [],
                 "observed_signals": [],
                 "signal_policy_counts": {},
             }
@@ -1890,6 +2314,8 @@ def main() -> int:
         events, position_skipped = apply_stock_position_gate(closed, events, config)
         stock_pool_skipped: Counter = Counter()
         stock_pool_details: list[dict[str, Any]] = []
+        fundamental_skipped: Counter = Counter()
+        fundamental_details: list[dict[str, Any]] = []
         stock_pool_fetch_failed = False
         if stock_pool_settings["enabled"] and events.get("buy"):
             try:
@@ -1912,6 +2338,13 @@ def main() -> int:
                 detail["symbol"] = symbol
                 if stock_pool_fetch_failed:
                     detail["data_error"] = "stock_pool_history_fetch_failed"
+        if fundamental_settings["enabled"] and events.get("buy"):
+            events, fundamental_skipped, fundamental_details = filter_buy_events_by_fundamental(
+                symbol,
+                events,
+                fundamental_history,
+                config,
+            )
         result = simulate_signal_mode(
             symbol, closed, events, start, end, execution,
             market_gate=market_gate,
@@ -1921,6 +2354,7 @@ def main() -> int:
         combined = Counter(result["skipped"])
         combined.update(position_skipped)
         combined.update(stock_pool_skipped)
+        combined.update(fundamental_skipped)
         if observed_buys:
             combined["signal_policy_observe_only"] += len(observed_buys)
         if disabled_buys:
@@ -1932,6 +2366,7 @@ def main() -> int:
             "skipped": dict(combined),
             "history_source": history_source,
             "stock_pool_rejections": stock_pool_details,
+            "fundamental_rejections": fundamental_details,
             "observed_signals": observed_records,
             "signal_policy_counts": dict(policy_counts),
         }
@@ -1945,6 +2380,7 @@ def main() -> int:
                 observed_signals.extend(result["observed_signals"])
                 signal_policy_counts.update(result["signal_policy_counts"])
                 stock_pool_rejection_details.extend(result["stock_pool_rejections"])
+                fundamental_filter_details.extend(result["fundamental_rejections"])
                 skipped.update(result["skipped"])
                 history_sources[result["history_source"]] += 1
             except Exception:
@@ -1953,12 +2389,44 @@ def main() -> int:
             if index % 200 == 0:
                 logger.info("processed %d/%d, candidates %d", index, len(files), len(all_candidates))
 
+    effective_config = copy.deepcopy(config)
+    effective_backtest = effective_config.setdefault("backtest", {})
+    effective_backtest["adjustment"] = adjustment
+    effective_backtest["history_bars"] = history_bars
+    effective_backtest["fetch_missing_adjusted"] = fetch_missing_adjusted
+    effective_backtest["execution_effective"] = copy.deepcopy(execution)
+    effective_backtest["portfolio_overrides"] = {
+        "max_positions": args.portfolio_max_positions,
+        "position_size_pct": args.position_size_pct,
+        "score_mode": args.portfolio_score_mode,
+        "tie_break": args.portfolio_tie_break,
+        "seed": args.portfolio_seed,
+        "seed_sweep": args.portfolio_seed_sweep,
+        "multi_modes": args.portfolio_multi_modes or None,
+    }
+    if args.fundamental_data:
+        effective_backtest.setdefault("fundamental", {})["data_path"] = str(
+            Path(args.fundamental_data).expanduser().resolve()
+        )
+
     report: dict[str, Any] = {
         "report_version": 2,
+        "strategy_framework": strategy_framework,
+        "config_source": config.get("_config_path"),
+        "config_snapshot": build_config_snapshot(effective_config),
+        "experiment": {
+            "id": strategy_framework["experiment_id"],
+            "dataset_role": strategy_framework["dataset_role"],
+            "window": {"start": start.isoformat(), "end": end.isoformat()},
+        },
         "window": {"start": start.isoformat(), "end": end.isoformat()},
         "mode": args.mode,
-        "symbols_analyzed": len(files),
+        "symbols_requested": len(files),
+        "symbols_succeeded": max(len(files) - errors, 0),
         "symbols_failed": errors,
+        # Deprecated alias retained for consumers of report_version 2. It now
+        # means symbols with a completed analysis, not requested symbols.
+        "symbols_analyzed": max(len(files) - errors, 0),
         "data_adjustment": adjustment,
         "history_bars_requested": history_bars,
         "history_sources": dict(history_sources),
@@ -1992,6 +2460,34 @@ def main() -> int:
                 )
             ),
             "stock_pool_rejected_candidates": len(stock_pool_rejection_details),
+            "fundamental": {
+                "enabled": fundamental_settings["enabled"],
+                "context": "historical",
+                "missing_data_policy": fundamental_settings["missing_data_policy"],
+                "data_path": str(fundamental_data_path) if fundamental_data_path else None,
+                "symbols_with_snapshots": len(fundamental_history),
+                "coverage": fundamental_coverage,
+                "thresholds": {
+                    key: fundamental_settings[key]
+                    for key in (
+                        "roe_min",
+                        "debt_ratio_max",
+                        "pe_max",
+                        "market_cap_min",
+                        "market_cap_max",
+                    )
+                },
+                "rejected_candidates": sum(
+                    1
+                    for detail in fundamental_filter_details
+                    if detail.get("status") == "rejected"
+                ),
+                "unavailable_candidates": sum(
+                    1
+                    for detail in fundamental_filter_details
+                    if detail.get("status") == "unavailable"
+                ),
+            },
             "min_confirmations": resolve_min_confirmations(config),
             "manual_st_symbols": len(execution["st_symbols"]),
         },
@@ -2025,6 +2521,13 @@ def main() -> int:
         _write_jsonl(stock_pool_rejections_path, stock_pool_rejection_details)
         report["artifacts"]["stock_pool_rejections"] = str(stock_pool_rejections_path)
 
+    if fundamental_filter_details:
+        fundamental_details_path = out_path.with_name(
+            out_path.stem + "_fundamental_filter.jsonl"
+        )
+        _write_jsonl(fundamental_details_path, fundamental_filter_details)
+        report["artifacts"]["fundamental_filter"] = str(fundamental_details_path)
+
     if observed_signals:
         observed_signals_path = out_path.with_name(
             out_path.stem + "_observed_signals.jsonl"
@@ -2053,6 +2556,7 @@ def main() -> int:
         signal_report["by_regime_signal_type"] = {
             key: summarize(trades) for key, trades in sorted(by_regime_sig.items())
         }
+        signal_report["by_holding_period"] = summarize_holding_periods(public_candidates)
         report["signal"] = signal_report
         report["summary"] = signal_report["summary"]
         report["by_signal_type"] = signal_report["by_signal_type"]
@@ -2084,6 +2588,16 @@ def main() -> int:
                     parsed_modes.append((tag, base_mode, "hash"))
                 elif tag in ("P5a", "P5a-C", "P5a-G", "P5a-Z", "P5a-CG", "P5a-CZ", "P5a-CGZ"):
                     parsed_modes.append((tag, tag, "hash"))
+                elif tag in ("P5b-MA60", "P5b-MA250", "P5b-ATR", "P5b-Risk", "P5b-MA", "P5b-All"):
+                    parsed_modes.append((tag, tag, "hash"))
+                elif tag.endswith("hash") and tag[:-4] in (
+                    "P5b-MA60", "P5b-MA250", "P5b-ATR", "P5b-Risk", "P5b-MA", "P5b-All",
+                ):
+                    parsed_modes.append((tag, tag[:-4], "hash"))
+                elif tag.endswith("random") and tag[:-6] in (
+                    "P5b-MA60", "P5b-MA250", "P5b-ATR", "P5b-Risk", "P5b-MA", "P5b-All",
+                ):
+                    parsed_modes.append((tag, tag[:-6], "random"))
                 else:
                     parsed_modes.append((tag, args.portfolio_score_mode, args.portfolio_tie_break))
             modes_to_run = parsed_modes
@@ -2119,6 +2633,7 @@ def main() -> int:
                 "score_mode": score_mode,
                 "tie_break": tie_break,
                 "summary": portfolio["summary"],
+                "by_holding_period": summarize_holding_periods(portfolio["trades"]),
                 "rejection_reasons": portfolio["rejection_reasons"],
                 "equity_curve": portfolio["equity_curve"],
             }

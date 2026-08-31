@@ -60,6 +60,13 @@ class DataFetcher:
         """Get financial data used by stock selection."""
         return self.market_data.get_financial_data(ts_code=ts_code, period=period)
 
+    def get_historical_financial_data(self, ts_code, as_of: Optional[str] = None):
+        """Get only a snapshot proven available on or before ``as_of``."""
+        return self.market_data.get_historical_financial_data(
+            ts_code=ts_code,
+            as_of=as_of,
+        )
+
     def get_daily_basic(self, ts_code, trade_date: Optional[str] = None):
         """Get daily basic data such as turnover rate, volume ratio and valuation."""
         return self.market_data.get_daily_basic(ts_code=ts_code, trade_date=trade_date)

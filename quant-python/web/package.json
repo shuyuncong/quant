@@ -12,6 +12,7 @@
     "db:setup": "node --env-file-if-exists=.env.local scripts/setup-postgres.mjs",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate-database.mjs sqlite-to-postgres",
     "db:rollback-snapshot": "node --env-file-if-exists=.env.local scripts/migrate-database.mjs postgres-to-sqlite",
+    "db:sync-from-prod": "node --env-file-if-exists=.env.local scripts/sync-prod-to-local.mjs",
     "db:verify": "node --env-file-if-exists=.env.local scripts/verify-postgres.mjs"
   },
   "dependencies": {

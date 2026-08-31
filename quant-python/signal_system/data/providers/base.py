@@ -48,6 +48,20 @@ class BaseMarketDataProvider(ABC):
     def get_financial_data(self, ts_code: str, period: Optional[str] = None) -> Optional[Dict]:
         raise NotImplementedError
 
+    def get_historical_financial_data(
+        self,
+        ts_code: str,
+        as_of: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Return a snapshot known to be available on or before ``as_of``.
+
+        Providers that only expose the latest financial snapshot intentionally
+        leave this unimplemented; callers must treat the result as unavailable
+        rather than substituting the latest value into historical data.
+        """
+        del ts_code, as_of
+        return None
+
     def get_trade_calendar(
         self,
         start_date: Optional[str] = None,

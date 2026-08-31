@@ -7,6 +7,8 @@ from typing import Dict, List
 
 import pandas as pd
 
+from .fundamental import FundamentalEvaluation, evaluate_fundamental
+
 
 @dataclass(frozen=True)
 class StockSelectionRecord:
@@ -22,6 +24,7 @@ class StockSelectionRecord:
     passed_checks: List[str]
     failed_reasons: List[str]
     data: Dict
+    fundamental: Dict | None = None
 
     def to_dict(self) -> Dict:
         """转换成便于序列化和测试断言的字典。"""
@@ -33,6 +36,7 @@ class StockSelectionRecord:
             "passed_checks": self.passed_checks,
             "failed_reasons": self.failed_reasons,
             "data": self.data,
+            "fundamental": self.fundamental or {},
         }
 
 
@@ -85,13 +89,19 @@ class StockSelector:
         passed_checks: List[str] = []
         failed_reasons: List[str] = []
         score = 0
+        fundamental_evaluation: FundamentalEvaluation | None = None
 
         for check_name in active_checks:
             if check_name not in check_handlers:
                 raise ValueError(f"Unknown selector check: {check_name}")
 
             check_handler, points = check_handlers[check_name]
-            check_ok, detail = check_handler(stock)
+            if check_name == "fundamental":
+                fundamental_evaluation = self._evaluate_fundamental(stock)
+                check_ok = fundamental_evaluation.passed
+                detail = self._fundamental_detail(fundamental_evaluation)
+            else:
+                check_ok, detail = check_handler(stock)
             if check_ok:
                 passed_checks.append(check_name)
                 score += points
@@ -106,7 +116,39 @@ class StockSelector:
             passed_checks=passed_checks,
             failed_reasons=failed_reasons,
             data=stock,
+            fundamental=(
+                fundamental_evaluation.to_dict()
+                if fundamental_evaluation is not None
+                else None
+            ),
         )
+
+    def _evaluate_fundamental(self, stock: Dict) -> FundamentalEvaluation:
+        context = str(stock.get("fundamental_context", "live"))
+        return evaluate_fundamental(
+            stock,
+            self.config,
+            as_of=stock.get("fundamental_as_of"),
+            context=context,
+        )
+
+    @staticmethod
+    def _fundamental_detail(evaluation: FundamentalEvaluation) -> str:
+        if evaluation.status == "disabled":
+            return "基本面筛选未启用"
+        if evaluation.status == "unavailable":
+            warning = evaluation.warnings[0] if evaluation.warnings else "数据不可用"
+            return f"基本面数据不可用: {warning}"
+        if evaluation.passed:
+            return "基本面通过"
+        labels = {
+            "fundamental_roe_below_min": "ROE 低于阈值",
+            "fundamental_debt_ratio_above_max": "负债率高于阈值",
+            "fundamental_pe_out_of_range": "PE 不在可接受范围内",
+            "fundamental_market_cap_out_of_range": "市值不在配置区间",
+            "fundamental_data_unavailable": "基本面数据不可用",
+        }
+        return "；".join(labels.get(reason, reason) for reason in evaluation.reasons)
 
     def _check_fundamental(self, stock: Dict) -> tuple[bool, str]:
         """基本面检查。
@@ -117,21 +159,8 @@ class StockSelector:
         - `pe_acceptable_max`: 估值上限
         - `market_cap_min/max`: 市值区间
         """
-        cfg = self.selector_config
-        roe = stock.get("roe")
-        debt_ratio = stock.get("debt_ratio")
-        pe = stock.get("pe")
-        market_cap = stock.get("market_cap")
-
-        if roe is None or roe < cfg["roe_min"]:
-            return False, f"ROE 低于阈值({cfg['roe_min']})"
-        if debt_ratio is None or debt_ratio > cfg["debt_ratio_max"]:
-            return False, f"负债率高于阈值({cfg['debt_ratio_max']})"
-        if pe is None or pe <= 0 or pe > cfg["pe_acceptable_max"]:
-            return False, f"PE 不在可接受范围内(0,{cfg['pe_acceptable_max']}]"
-        if market_cap is None or market_cap < cfg["market_cap_min"] or market_cap > cfg["market_cap_max"]:
-            return False, f"市值不在区间[{cfg['market_cap_min']}, {cfg['market_cap_max']}]"
-        return True, "基本面通过"
+        evaluation = self._evaluate_fundamental(stock)
+        return evaluation.passed, self._fundamental_detail(evaluation)
 
     def _check_turnover(self, stock: Dict) -> tuple[bool, str]:
         """换手率检查。

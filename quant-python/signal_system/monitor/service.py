@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 
+from data.data_fetcher import DataFetcher
 from data.market_data import MarketDataClient, normalize_symbol
 from models import SignalEvent
 from notification.signal_notifier import SignalNotifier
@@ -29,6 +30,7 @@ from strategy.signal_policy import (
     signal_execution_mode_with_regime,
 )
 from strategy.stock_pool import evaluate_stock_pool, resolve_stock_pool_config
+from core.selector.fundamental import FundamentalEvaluation, evaluate_fundamental
 from utils.time_utils import now_shanghai
 
 
@@ -95,6 +97,7 @@ class SignalMonitor:
     def __init__(self, config: dict[str, Any]):
         self.config = config
         self.market = MarketDataClient(config)
+        self._fundamental_fetcher: DataFetcher | None = None
         self.analyzer = MultiTimeframeAnalyzer(config)
         runtime = config.get("runtime", {})
         database_path = runtime.get("database_path", "./state/signal_monitor.db")
@@ -126,6 +129,42 @@ class SignalMonitor:
         self.push_candidate_pool = bool(notification.get("push_candidate_pool", True))
         self.push_ai_analysis = bool(notification.get("push_ai_analysis", True))
         self._name_map: dict[str, str] | None = None
+
+    def _evaluate_live_fundamental(
+        self,
+        symbol: str,
+        as_of,
+    ):
+        """Evaluate optional live fundamentals without affecting default scans."""
+        if not bool(self.config.get("entry_filters", {}).get("fundamental_enabled", False)):
+            return FundamentalEvaluation(
+                True,
+                "disabled",
+                (),
+                (),
+                {"context": "live", "data_status": "disabled"},
+            )
+        if self._fundamental_fetcher is None:
+            self._fundamental_fetcher = DataFetcher(config=self.config)
+        financial = self._fundamental_fetcher.get_financial_data(symbol)
+        daily_basic = self._fundamental_fetcher.get_daily_basic(
+            symbol,
+            trade_date=as_of.strftime("%Y%m%d") if hasattr(as_of, "strftime") else str(as_of),
+        )
+        record = {
+            "roe": (financial or {}).get("roe") if financial else None,
+            "debt_ratio": (financial or {}).get("debt_to_assets") if financial else None,
+            "pe": (daily_basic or {}).get("pe") if daily_basic else None,
+            "market_cap": (
+                (daily_basic or {}).get("total_mv") / 10000
+                if (daily_basic or {}).get("total_mv") is not None
+                else None
+            ),
+            "fundamental_context": "live",
+            "fundamental_data_source": "latest_published_snapshot",
+            "fundamental_report_period": (financial or {}).get("period") if financial else None,
+        }
+        return evaluate_fundamental(record, self.config, context="live")
 
     def _market_entry_context(self) -> dict[str, Any]:
         """Evaluate the index once per daily scan and fail closed when enabled."""
@@ -583,6 +622,8 @@ class SignalMonitor:
         stock_pool_rejections: Counter = Counter()
         stock_pool_rejection_details: list[dict[str, Any]] = []
         stock_pool_data_errors: list[dict[str, str]] = []
+        fundamental_rejections: Counter = Counter()
+        fundamental_details: list[dict[str, Any]] = []
         observed_candidates: list[dict[str, Any]] = []
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
@@ -710,6 +751,36 @@ class SignalMonitor:
                             }
                         )
                         continue
+                    fundamental_evaluation = self._evaluate_live_fundamental(
+                        symbol,
+                        latest_date,
+                    )
+                    if not fundamental_evaluation.passed:
+                        fundamental_rejections.update(
+                            fundamental_evaluation.reasons or ["fundamental_rejected"]
+                        )
+                        fundamental_details.append(
+                            {
+                                "symbol": symbol,
+                                "name": name,
+                                "status": fundamental_evaluation.status,
+                                "reasons": list(fundamental_evaluation.reasons),
+                                "warnings": list(fundamental_evaluation.warnings),
+                                "metrics": fundamental_evaluation.metrics,
+                            }
+                        )
+                        continue
+                    if fundamental_evaluation.status == "unavailable":
+                        fundamental_details.append(
+                            {
+                                "symbol": symbol,
+                                "name": name,
+                                "status": fundamental_evaluation.status,
+                                "reasons": list(fundamental_evaluation.reasons),
+                                "warnings": list(fundamental_evaluation.warnings),
+                                "metrics": fundamental_evaluation.metrics,
+                            }
+                        )
                     zone_priority = {"above": 3, "near": 2, "below": 1}.get(zone, 0)
                     strategy_score = int(daily_report.get("buy_score", 0))
                     candidates.append(
@@ -740,6 +811,9 @@ class SignalMonitor:
                             "market_context": market_context,
                             "stock_pool_metrics": stock_pool_evaluation["metrics"],
                             "stock_pool_warnings": stock_pool_evaluation["warnings"],
+                            "fundamental_status": fundamental_evaluation.status,
+                            "fundamental_metrics": fundamental_evaluation.metrics,
+                            "fundamental_warnings": list(fundamental_evaluation.warnings),
                             "confirmation_items": indicators.get("confirmation_items", []),
                             "confirmation_count": indicators.get("confirmation_count", 0),
                             "chan_signals": daily_report.get("chan", {}).get("fresh_signals", []),
@@ -831,6 +905,18 @@ class SignalMonitor:
                 "rejected_candidates": len(stock_pool_rejection_details),
                 "rejection_details": stock_pool_rejection_details,
                 "data_errors": stock_pool_data_errors,
+            },
+            "fundamental": {
+                "enabled": bool(entry_filters.get("fundamental_enabled", False)),
+                "context": "live",
+                "rejections": dict(fundamental_rejections),
+                "rejected_candidates": sum(
+                    1 for item in fundamental_details if item.get("status") == "rejected"
+                ),
+                "unavailable_candidates": sum(
+                    1 for item in fundamental_details if item.get("status") == "unavailable"
+                ),
+                "details": fundamental_details,
             },
             "snapshot_histories_updated": snapshot_updates,
             "candidate_count": len(candidates),

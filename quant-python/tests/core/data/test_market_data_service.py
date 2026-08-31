@@ -116,6 +116,15 @@ class MarketDataServiceTest(unittest.TestCase):
         self.assertEqual(stock_list.iloc[0]["name"], "平安银行")
         self.assertEqual(len(minute_df), 1)
 
+    def test_historical_financial_data_does_not_fallback_to_latest_snapshot(self):
+        historical = self.service.get_historical_financial_data(
+            "000001.SZ", as_of="2025-03-01"
+        )
+        self.assertIsNone(historical)
+        self.assertFalse(
+            any(call[0] == "get_financial_data" for call in self.daily_provider.calls)
+        )
+
     def test_data_fetcher_explicit_runtime_options_override_config(self):
         fetcher = DataFetcher(
             use_cache=False,

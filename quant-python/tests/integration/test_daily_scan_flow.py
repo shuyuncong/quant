@@ -157,6 +157,10 @@ class DailyScanFlowTest(unittest.TestCase):
         self.assertEqual(payload["candidate_pool"][0]["ts_code"], "000001.SZ")
         self.assertEqual(payload["high_priority_trade_signals"][0]["signal_type"], "BUY")
         self.assertEqual(payload["stats"]["risk_alerts_count"], 0)
+        self.assertEqual(
+            result["candidate_pool"][0]["fundamental"]["metrics"]["context"],
+            "live",
+        )
 
     def test_daily_scan_stops_before_technical_analysis_when_selector_turnover_rejects(self):
         engine = StrategyEngine(

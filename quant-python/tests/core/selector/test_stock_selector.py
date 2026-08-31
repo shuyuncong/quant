@@ -53,6 +53,7 @@ class StockSelectorTest(unittest.TestCase):
         self.assertEqual(result["candidate_pool"], ["000001.SZ"])
         self.assertEqual(len(result["selected"]), 1)
         self.assertEqual(result["selected"][0]["score"], 100)
+        self.assertEqual(result["selected"][0]["fundamental"]["status"], "passed")
 
     def test_rejects_stock_and_outputs_failed_reason(self):
         result = self.selector.select(
