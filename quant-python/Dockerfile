@@ -34,6 +34,9 @@ ENV DATABASE_POOL_MAX=5
 WORKDIR /app/web
 COPY --from=build /app/web /app/web
 COPY signal_system /app/signal_system
+COPY core /app/core
+
+ENV PYTHONPATH=/app
 
 RUN /opt/venv/bin/pip install --no-cache-dir -r /app/signal_system/requirements.txt \
     && mkdir -p /app/data \
