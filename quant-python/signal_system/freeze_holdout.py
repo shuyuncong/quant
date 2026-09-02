@@ -18,8 +18,8 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -40,36 +40,60 @@ from macd_near_regime_audit import (
     NEAR_SIGNAL,
     WEAK_REGIMES,
 )
+from holdout_integrity import (
+    canonical_json,
+    compute_freeze_seal,
+    file_sha256,
+    runtime_versions,
+    sha256_text,
+    universe_sha256,
+)
 
-FREEZE_VERSION = "holdout_freeze.v1"
+FREEZE_VERSION = "holdout_freeze.v2"
 DEFAULT_HOLDOUT_START = "2026-09-01"
 
 # Files whose content defines the experiment rules.  Any change after freezing
 # breaks the rule hash and the audit script will refuse to run.
-_RULE_FILES = (
+_ROOT_RULE_FILES = (
     "macd_near_regime_audit.py",
     "freeze_holdout.py",
+    "generate_holdout_candidates.py",
+    "holdout_integrity.py",
     "backtest_winrate.py",
     "attribution_audit.py",
 )
 
 
 def _sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return sha256_text(text)
 
 
 def _file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return file_sha256(path)
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        default=str,
+    return canonical_json(value)
+
+
+def _runtime_rule_files() -> tuple[str, ...]:
+    """Return the exact runtime dependency bundle frozen for this experiment."""
+    paths = [BASE_DIR / name for name in _ROOT_RULE_FILES]
+    dependency_roots = (
+        BASE_DIR / "strategy",
+        BASE_DIR / "utils",
+        BASE_DIR.parent / "core" / "selector",
+        BASE_DIR.parent / "core" / "strategy",
     )
+    for root in dependency_roots:
+        if root.exists():
+            paths.extend(root.rglob("*.py"))
+    names = {
+        Path(os.path.relpath(path.resolve(), BASE_DIR)).as_posix()
+        for path in paths
+        if path.exists() and "__pycache__" not in path.parts
+    }
+    return tuple(sorted(names))
 
 
 def _universe_from_cache() -> list[str]:
@@ -115,6 +139,12 @@ def build_rule_definition() -> dict[str, Any]:
             "min_weak_near_unique_symbols": MIN_WEAK_NEAR_UNIQUE_SYMBOLS,
             "min_weak_near_unique_signal_days": MIN_WEAK_NEAR_UNIQUE_DAYS,
         },
+        "collection_end_rule": (
+            "first signal_day where all sample_gates are satisfied; "
+            "the rule uses entry-time candidate metadata only"
+        ),
+        "candidate_payload": "entry_time_fields_only_no_outcomes",
+        "candidate_generation_once": True,
     }
 
 
@@ -144,7 +174,7 @@ def freeze(args: argparse.Namespace) -> dict[str, Any]:
     rule_hash = _sha256(_canonical_json(rules))
     code_hashes = {
         name: _file_sha256(BASE_DIR / name)
-        for name in _RULE_FILES
+        for name in _runtime_rule_files()
         if (BASE_DIR / name).exists()
     }
     config_snapshot = _config_snapshot(config)
@@ -161,7 +191,7 @@ def freeze(args: argparse.Namespace) -> dict[str, Any]:
         "universe": {
             "source": universe_source,
             "count": len(universe),
-            "manifest_sha256": _sha256("\n".join(universe)),
+            "manifest_sha256": universe_sha256(universe),
             "symbols": universe,
         },
         "rules": rules,
@@ -173,6 +203,7 @@ def freeze(args: argparse.Namespace) -> dict[str, Any]:
             "snapshot": config_snapshot,
             "snapshot_sha256": _sha256(_canonical_json(config_snapshot)),
         },
+        "runtime": runtime_versions(),
         "candidates": {
             "generated": False,
             "candidates_file": None,
@@ -182,16 +213,7 @@ def freeze(args: argparse.Namespace) -> dict[str, Any]:
         },
         "seal": None,  # computed below
     }
-    seal_input = {
-        "version": manifest["version"],
-        "label": manifest["label"],
-        "holdout_window": manifest["holdout_window"],
-        "universe_manifest_sha256": manifest["universe"]["manifest_sha256"],
-        "rules_sha256": manifest["rules_sha256"],
-        "config_snapshot_sha256": manifest["config"]["snapshot_sha256"],
-        "code_hashes": manifest["code_hashes"],
-    }
-    manifest["seal"] = _sha256(_canonical_json(seal_input))
+    manifest["seal"] = compute_freeze_seal(manifest)
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -82,3 +82,19 @@ def test_portfolio_config_keeps_production_risk_and_p0_ordering():
     assert portfolio["score_mode"] == "P0"
     assert portfolio["tie_break"] == "symbol_asc"
     assert portfolio["seed"] == 20260830
+
+
+def test_confirmatory_sample_gate_uses_holdout_not_viewed_history():
+    reports = {
+        "val": {"candidate_report": {"sample_gate": {"sufficient": False}}},
+        "holdout": {"candidate_report": {"sample_gate": {"sufficient": True}}},
+    }
+    assert audit._confirmatory_sample_ok(reports, ("val", "holdout")) is True
+
+
+def test_without_holdout_all_requested_history_splits_remain_diagnostic_gate():
+    reports = {
+        "train": {"candidate_report": {"sample_gate": {"sufficient": True}}},
+        "val": {"candidate_report": {"sample_gate": {"sufficient": False}}},
+    }
+    assert audit._confirmatory_sample_ok(reports, ("train", "val")) is False

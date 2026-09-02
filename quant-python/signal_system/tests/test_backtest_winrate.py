@@ -22,6 +22,7 @@ from backtest_winrate import (  # noqa: E402
     daily_price_limits,
     find_signals,
     load_backtest_history,
+    load_stock_pool_history,
     price_limit_rate,
     run_portfolio,
     simulate_signal_mode,
@@ -93,6 +94,42 @@ def execution(**overrides) -> dict:
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_local_only_adjusted_history_accepts_naturally_short_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history_dir = Path(directory)
+            frame = bars([10.0, 10.2, 10.4])
+            frame.to_pickle(history_dir / "000001_qfq.pkl")
+            loaded, source = load_backtest_history(
+                "000001",
+                adjustment="qfq",
+                config={},
+                history_bars=800,
+                end=date(2026, 12, 31),
+                fetch_missing=False,
+                history_dir=history_dir,
+                local_only=True,
+            )
+            self.assertEqual(len(loaded), 3)
+            self.assertEqual(source, "cached_qfq_local_only")
+
+    def test_local_only_stock_pool_history_reads_pickle_without_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            history_dir = Path(directory)
+            frame = bars([10.0, 10.2, 10.4])
+            frame["amount"] = [1_000_000.0] * len(frame)
+            frame["turnover_rate"] = [1.0] * len(frame)
+            frame.to_pickle(history_dir / "000001_none.pkl")
+            with patch("backtest_winrate.HISTORY_DIR", history_dir):
+                loaded = load_stock_pool_history(
+                    "000001",
+                    config={},
+                    history_bars=10,
+                    end=date(2026, 12, 31),
+                    local_only=True,
+                )
+            self.assertEqual(len(loaded), 3)
+            self.assertIn("turnover_rate", loaded.columns)
+
     def test_missing_config_fails_with_actionable_cli_error(self):
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-config.yaml"

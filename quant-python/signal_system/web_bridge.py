@@ -33,6 +33,9 @@ from typing import Any
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+QUANT_ROOT = os.path.dirname(BASE_DIR)
+if QUANT_ROOT not in sys.path:
+    sys.path.insert(0, QUANT_ROOT)
 
 from models import RISK_NOTICE, SignalEvent  # noqa: E402
 from monitor.service import SignalMonitor  # noqa: E402

@@ -35,7 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Database, Eye, Play, Sparkles } from "lucide-react";
+import { Check, Copy, Database, Download, Eye, Play, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
   Tabs,
@@ -248,6 +248,26 @@ function ResultBlock({ result }: { result: DataResult }) {
 }
 
 function DataSourceView({ source }: { source: DataSource }) {
+  const jsonText = JSON.stringify(source, null, 2);
+  const [copied, setCopied] = useState(false);
+  const copyJson = () => {
+    void navigator.clipboard.writeText(jsonText).then(() => {
+      setCopied(true);
+      toast.success("JSON 已复制");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  const downloadJson = () => {
+    const blob = new Blob([jsonText], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `data-source-${(source.analyzed_at ?? "").replace(/[^\w.-]+/g, "-") || Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
   return (
     <Tabs defaultValue="data">
       <TabsList variant="line">
@@ -315,9 +335,19 @@ function DataSourceView({ source }: { source: DataSource }) {
         </div>
       )}
       </TabsContent>
-      <TabsContent value="json">
+      <TabsContent value="json" className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={copyJson}>
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            {copied ? "已复制" : "复制"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={downloadJson}>
+            <Download className="size-4" />
+            下载 JSON
+          </Button>
+        </div>
         <pre className="max-h-[70vh] overflow-auto rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-          {JSON.stringify(source, null, 2)}
+          {jsonText}
         </pre>
       </TabsContent>
     </Tabs>

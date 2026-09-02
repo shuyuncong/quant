@@ -42,9 +42,20 @@ from strategy.signal_policy import (
     signal_execution_mode_with_regime,
 )
 from utils.helpers import load_config
+from holdout_integrity import (
+    candidate_ids_sha256,
+    canonical_json,
+    compute_candidate_seal,
+    compute_freeze_seal,
+    file_sha256,
+    read_seal,
+    runtime_versions,
+    sha256_text,
+    universe_sha256,
+)
 
 
-VERSION = "macd_near_regime_audit.v1"
+VERSION = "macd_near_regime_audit.v2"
 SPLITS = ("train", "val", "test")
 NEAR_SIGNAL = "macd_golden_cross_pullback_confirmed_near"
 WEAK_REGIMES = frozenset({"range", "bear"})
@@ -90,13 +101,7 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        default=str,
-    )
+    return canonical_json(value)
 
 
 def _rows_manifest_sha256(rows: list[dict[str, Any]]) -> str:
@@ -114,7 +119,7 @@ def _config_sha256(config: dict[str, Any]) -> str:
 
 
 def _file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return file_sha256(path)
 
 
 def _load_freeze_manifest(path: Path) -> dict[str, Any]:
@@ -128,20 +133,52 @@ def _load_freeze_manifest(path: Path) -> dict[str, Any]:
 def _validate_freeze_manifest(
     freeze: dict[str, Any],
     candidates: list[dict[str, Any]],
+    config: dict[str, Any] | None = None,
+    config_path: Path | None = None,
+    candidate_path: Path | None = None,
+    freeze_seal_path: Path | None = None,
+    candidate_seal_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Check a frozen-candidate split against the pre-frozen holdout manifest.
+    """Strictly validate a candidate split against the pre-frozen manifest.
 
-    Only checks that are fully determined at freeze time are enforced:
-    time boundary, candidate-pool membership, rules hash, config hash.
-    The candidate manifest hash is filled by the generation step and is
-    cross-checked separately once available.
+    Rejects (each check returns False) when:
+    - the recorded seal does not match a recomputed seal (tampering)
+    - the frozen rule definition no longer matches the audit constants
+    - any signal day is before the frozen holdout window start
+    - any candidate symbol is outside the frozen universe
+    - any frozen code file hash differs from the current file (code drift)
+    - the config file hash or snapshot hash differs from the freeze record
+    - the frozen universe own manifest hash is inconsistent with its list
+    - once candidates are generated, the candidate rows hash differs
     """
     checks: dict[str, Any] = {}
+
+    # 1. Seal integrity: recompute over the frozen fields and compare.
+    expected_seal = compute_freeze_seal(freeze)
+    recorded_seal = freeze.get("seal")
+    checks["seal_match"] = bool(recorded_seal) and recorded_seal == expected_seal
+    checks["seal_recorded"] = recorded_seal
+    checks["seal_recomputed"] = expected_seal
+    external_freeze_seal = read_seal(freeze_seal_path)
+    checks["external_freeze_seal_match"] = (
+        bool(external_freeze_seal)
+        and external_freeze_seal == recorded_seal
+        if freeze_seal_path is not None
+        else None
+    )
+
+    # 2. Rule definition must still match the audit constants.
     rules = freeze.get("rules", {})
+    recorded_rules_hash = freeze.get("rules_sha256")
+    checks["rules_hash_match"] = bool(recorded_rules_hash) and (
+        recorded_rules_hash == sha256_text(_canonical_json(rules))
+    )
     checks["rules_match"] = (
         str(rules.get("signal", "")) == NEAR_SIGNAL
         and set(rules.get("weak_regimes", [])) == set(WEAK_REGIMES)
     )
+
+    # 3. Time boundary.
     window = freeze.get("holdout_window", {})
     start = window.get("start")
     if start:
@@ -158,19 +195,112 @@ def _validate_freeze_manifest(
     else:
         checks["window_start"] = None
         checks["all_signal_days_after_start"] = None
-    frozen_universe = set(freeze.get("universe", {}).get("symbols", []))
-    if frozen_universe:
+
+    # 4. Universe membership + the universe own manifest hash.
+    universe = freeze.get("universe", {}) or {}
+    frozen_symbols = sorted({str(item).zfill(6) for item in universe.get("symbols", [])})
+    checks["universe_count"] = len(frozen_symbols)
+    checks["universe_count_match"] = universe.get("count") == len(frozen_symbols)
+    checks["universe_manifest_hash_match"] = (
+        (universe.get("manifest_sha256") or "") == universe_sha256(frozen_symbols)
+    )
+    if frozen_symbols:
         candidate_symbols = {
             str(row.get("symbol", "")).zfill(6) for row in candidates
         }
-        outside = sorted(candidate_symbols - frozen_universe)
-        checks["universe_count"] = len(frozen_universe)
+        outside = sorted(candidate_symbols - set(frozen_symbols))
         checks["candidates_outside_universe"] = outside
         checks["all_candidates_in_universe"] = not outside
     else:
-        checks["universe_count"] = None
         checks["candidates_outside_universe"] = None
         checks["all_candidates_in_universe"] = None
+
+    # 5. Code drift: every frozen code file must hash identically today.
+    code_hashes = freeze.get("code_hashes", {}) or {}
+    code_mismatch: dict[str, dict[str, Any]] = {}
+    for name, frozen_hash in sorted(code_hashes.items()):
+        path = BASE_DIR / name
+        current = _file_sha256(path) if path.exists() else None
+        if current != frozen_hash:
+            code_mismatch[name] = {"frozen": frozen_hash, "current": current}
+    checks["code_hashes_match"] = bool(code_hashes) and not code_mismatch
+    checks["code_hashes_mismatch"] = code_mismatch
+    checks["runtime_versions_match"] = freeze.get("runtime") == runtime_versions()
+
+    # 6. Config file + snapshot must match the freeze record.
+    config_record = freeze.get("config", {}) or {}
+    if config is not None and config_path is not None:
+        checks["config_file_hash_match"] = (
+            (config_record.get("file_sha256") or "") == _file_sha256(config_path)
+        )
+        checks["config_snapshot_hash_match"] = (
+            (config_record.get("snapshot_sha256") or "")
+            == _config_sha256(_config_snapshot(config))
+        )
+    else:
+        checks["config_file_hash_match"] = None
+        checks["config_snapshot_hash_match"] = None
+
+    # 7. Candidate file hash (only once candidates are generated and recorded).
+    cand_record = freeze.get("candidates", {}) or {}
+    candidate_generated = bool(cand_record.get("generated"))
+    checks["candidate_generated"] = candidate_generated
+    if candidate_generated and candidate_path is not None:
+        expected_cand = cand_record.get("candidates_manifest_sha256")
+        actual_cand = (
+            _file_sha256(candidate_path) if candidate_path.exists() else None
+        )
+        checks["candidate_manifest_hash_match"] = (
+            bool(expected_cand) and actual_cand == expected_cand
+        )
+        checks["candidate_file_sha256"] = actual_cand
+        try:
+            source_candidates = _load_jsonl(candidate_path) if candidate_path.exists() else []
+        except (OSError, ValueError, json.JSONDecodeError):
+            source_candidates = []
+        actual_ids_hash = candidate_ids_sha256(
+            str(row.get("candidate_id") or _candidate_id(row))
+            for row in source_candidates
+        )
+        checks["candidate_ids_hash_match"] = bool(
+            cand_record.get("candidate_ids_sha256")
+        ) and actual_ids_hash == cand_record.get("candidate_ids_sha256")
+        checks["candidate_ids_sha256"] = actual_ids_hash
+        expected_candidate_seal = compute_candidate_seal(
+            str(recorded_seal or ""), cand_record
+        )
+        recorded_candidate_seal = cand_record.get("candidate_seal")
+        checks["candidate_seal_match"] = bool(recorded_candidate_seal) and (
+            recorded_candidate_seal == expected_candidate_seal
+        )
+        coverage = cand_record.get("universe_coverage")
+        checks["universe_coverage_hash_match"] = bool(
+            isinstance(coverage, dict)
+            and cand_record.get("universe_coverage_sha256")
+            == sha256_text(_canonical_json(coverage))
+        )
+        generation_summary = cand_record.get("generation_summary")
+        checks["generation_summary_hash_match"] = bool(
+            isinstance(generation_summary, dict)
+            and cand_record.get("generation_summary_sha256")
+            == sha256_text(_canonical_json(generation_summary))
+        )
+        external_candidate_seal = read_seal(candidate_seal_path)
+        checks["external_candidate_seal_match"] = (
+            bool(external_candidate_seal)
+            and external_candidate_seal == recorded_candidate_seal
+            if candidate_seal_path is not None
+            else None
+        )
+    else:
+        checks["candidate_manifest_hash_match"] = False
+        checks["candidate_file_sha256"] = None
+        checks["candidate_ids_hash_match"] = False
+        checks["candidate_ids_sha256"] = None
+        checks["candidate_seal_match"] = False
+        checks["external_candidate_seal_match"] = False
+        checks["universe_coverage_hash_match"] = False
+        checks["generation_summary_hash_match"] = False
     return checks
 
 
@@ -463,6 +593,29 @@ def _candidate_report(
     }
 
 
+def _confirmatory_sample_ok(
+    split_reports: dict[str, dict[str, Any]],
+    splits: list[str] | tuple[str, ...],
+) -> bool:
+    """Use the blind holdout sample when present; history stays diagnostic."""
+    if "holdout" in splits:
+        return bool(
+            split_reports.get("holdout", {})
+            .get("candidate_report", {})
+            .get("sample_gate", {})
+            .get("sufficient", False)
+        )
+    return all(
+        bool(
+            split_reports.get(split, {})
+            .get("candidate_report", {})
+            .get("sample_gate", {})
+            .get("sufficient", False)
+        )
+        for split in splits
+    )
+
+
 def _portfolio_config(config: dict[str, Any], seed: int) -> tuple[dict[str, Any], dict[str, Any]]:
     costs = _resolve_execution_config(config)
     position = config.get("position", {}) or {}
@@ -504,10 +657,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     splits = tuple(args.splits)
     freeze_manifest = None
+    freeze_manifest_path = None
     if args.freeze_manifest:
-        freeze_manifest = _load_freeze_manifest(
-            Path(args.freeze_manifest).expanduser().resolve()
-        )
+        freeze_manifest_path = Path(args.freeze_manifest).expanduser().resolve()
+        freeze_manifest = _load_freeze_manifest(freeze_manifest_path)
+    freeze_seal_path = (
+        freeze_manifest_path.with_name("holdout_freeze.seal")
+        if freeze_manifest_path is not None
+        else None
+    )
+    candidate_seal_path = (
+        freeze_manifest_path.with_name("holdout_candidates.seal")
+        if freeze_manifest_path is not None
+        else None
+    )
     config_snapshot = _config_snapshot(config)
     effective_config_hash = _config_sha256(config)
     config_snapshot_hash = _config_sha256(config_snapshot)
@@ -553,7 +716,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         replay_path = output_dir / f"replay_{split}.jsonl"
         _write_jsonl(replay_path, rows)
         freeze_check = (
-            _validate_freeze_manifest(freeze_manifest, rows)
+            _validate_freeze_manifest(
+                freeze_manifest, rows, config=config, config_path=config_path,
+                candidate_path=source_path,
+                freeze_seal_path=freeze_seal_path,
+                candidate_seal_path=candidate_seal_path,
+            )
             if freeze_manifest is not None
             else None
         )
@@ -609,19 +777,50 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         bool(result["splits"][split]["candidate_report"]["source_match"]["baseline_replay_complete"])
         for split in splits
     )
-    sample_ok = all(
+    sample_ok = _confirmatory_sample_ok(result["splits"], splits)
+    all_requested_sample_ok = all(
         result["splits"][split]["candidate_report"]["sample_gate"]["sufficient"]
         for split in splits
     )
     freeze_checks = {
         split: result["splits"][split]["freeze_check"] for split in splits
     }
-    freeze_ok = bool(freeze_manifest) and all(
+    # Manifest-level integrity is identical for every split because the
+    # checks are computed against the same frozen manifest record:
+    # seal, universe self-hash, code hashes, config hashes.
+    manifest_integrity_ok = bool(freeze_manifest) and all(
         bool(freeze_checks[split])
+        and freeze_checks[split]["seal_match"] is True
+        and freeze_checks[split]["external_freeze_seal_match"] is True
+        and freeze_checks[split]["rules_hash_match"] is True
         and freeze_checks[split]["rules_match"] is True
-        and freeze_checks[split]["all_signal_days_after_start"] is True
-        and freeze_checks[split]["all_candidates_in_universe"] is True
+        and freeze_checks[split]["universe_count_match"] is True
+        and freeze_checks[split]["universe_manifest_hash_match"] is True
+        and freeze_checks[split]["code_hashes_match"] is True
+        and freeze_checks[split]["runtime_versions_match"] is True
+        and freeze_checks[split]["config_file_hash_match"] is True
+        and freeze_checks[split]["config_snapshot_hash_match"] is True
         for split in splits
+    )
+    # Split-level holdout checks: the holdout candidates must be inside the
+    # frozen window, inside the frozen universe, and (once generated and
+    # recorded) byte-identical to the frozen candidate file.
+    holdout_check = freeze_checks.get("holdout")
+    holdout_split_ok = bool(
+        holdout_check
+        and holdout_check["candidate_generated"] is True
+        and holdout_check["all_signal_days_after_start"] is True
+        and holdout_check["all_candidates_in_universe"] is True
+        and holdout_check["candidate_manifest_hash_match"] is True
+        and holdout_check["candidate_ids_hash_match"] is True
+        and holdout_check["candidate_seal_match"] is True
+        and holdout_check["external_candidate_seal_match"] is True
+        and holdout_check["universe_coverage_hash_match"] is True
+        and holdout_check["generation_summary_hash_match"] is True
+    )
+    freeze_ok = bool(
+        manifest_integrity_ok
+        and ("holdout" not in splits or holdout_split_ok)
     )
     holdout_ok = "holdout" in splits and freeze_ok
     # Direction consistency: the disabled weak-near trades should be
@@ -655,7 +854,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             bool(result["splits"][split]["candidate_report"]["source_match"]["source_artifact_match_ok"])
             for split in splits
         ),
-        "weak_near_min_sample_all_splits": sample_ok,
+        "weak_near_confirmatory_sample": sample_ok,
+        "weak_near_min_sample_all_splits_diagnostic": all_requested_sample_ok,
         "holdout_freeze_manifest_validated": freeze_ok,
         "holdout_direction_consistent_with_val": direction_consistent,
         "portfolio_drawdown_not_materially_worsened": drawdown_ok,

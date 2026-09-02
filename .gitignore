@@ -80,3 +80,6 @@ quant-python/.env
 ### web dev logs & ai workflow docs ###
 docs/ai-dev-workflow/
 quant-python/web/*.log*
+
+# Local tooling artifacts
+.codex-training-html-check/

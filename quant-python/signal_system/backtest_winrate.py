@@ -198,6 +198,7 @@ def load_backtest_history(
     fetch_missing: bool,
     history_dir: Path = HISTORY_DIR,
     fetcher: Callable[[str, int, str], pd.DataFrame] | None = None,
+    local_only: bool = False,
 ) -> tuple[pd.DataFrame, str]:
     """Load one adjustment-consistent history and never fall back to `none`."""
     adjustment = str(adjustment).lower().strip() or "qfq"
@@ -208,6 +209,9 @@ def load_backtest_history(
         cached_adjustment = str(cached.attrs.get("adjust", adjustment)).lower()
         last_day = _day(cached["datetime"].iloc[-1]) if not cached.empty else None
         fresh_enough = last_day is not None and last_day >= end - timedelta(days=7)
+        if local_only and cached_adjustment == adjustment and not cached.empty:
+            cached.attrs["adjust"] = adjustment
+            return cached.tail(history_bars).reset_index(drop=True), f"cached_{adjustment}_local_only"
         if (
             cached_adjustment == adjustment
             and len(cached) >= history_bars
@@ -246,8 +250,16 @@ def load_stock_pool_history(
     config: dict[str, Any],
     history_bars: int,
     end: date,
+    local_only: bool = False,
 ) -> pd.DataFrame:
     """Load unadjusted, signal-day liquidity metrics for stock-pool filtering."""
+    if local_only:
+        path = HISTORY_DIR / f"{_symbol_code(symbol)}_none.pkl"
+        if not path.exists():
+            raise FileNotFoundError(f"local stock-pool history not found: {path}")
+        frame = prepare_closed_bars(pd.read_pickle(path))
+        frame = frame[pd.to_datetime(frame["datetime"]).dt.date <= end]
+        return frame.tail(max(int(history_bars), 1)).reset_index(drop=True)
     clients = getattr(_BACKTEST_CLIENTS, "clients", None)
     if clients is None:
         clients = {}
@@ -2017,6 +2029,11 @@ def main() -> int:
         default=None,
         help="fetch missing/short adjusted histories; never falls back to none",
     )
+    parser.add_argument(
+        "--local-data-only",
+        action="store_true",
+        help="research safety mode: use local history/cache only and never fetch stock-pool history",
+    )
     parser.add_argument("--index-data", type=str, default=None, help="historical index CSV/JSON/PKL")
     parser.add_argument("--index-limit", type=int, default=1200)
     parser.add_argument(
@@ -2264,6 +2281,7 @@ def main() -> int:
             history_bars=history_bars,
             end=end,
             fetch_missing=fetch_missing_adjusted,
+            local_only=bool(args.local_data_only),
         )
         closed = closed[pd.to_datetime(closed["datetime"]).dt.date <= end].reset_index(drop=True)
         if closed.empty or len(closed) < 60:
@@ -2324,6 +2342,7 @@ def main() -> int:
                     config=config,
                     history_bars=history_bars,
                     end=end,
+                    local_only=bool(args.local_data_only),
                 )
             except Exception as exc:
                 stock_pool_fetch_failed = True
@@ -2445,6 +2464,7 @@ def main() -> int:
         },
         "filters": {
             "fetch_missing_adjusted": fetch_missing_adjusted,
+            "local_data_only": bool(args.local_data_only),
             "market_gate_enabled": market_gate_enabled,
             "market_index_code": entry_filters.get("market_index_code"),
             "market_gate_history": market_gate_meta,
