@@ -9,11 +9,32 @@
 
 Web 进程通过子进程调用 `signal_system/web_bridge.py`，因此部署机需要同时具备 Node.js 和 Python。定时任务由 Web 进程内部调度，**一个常驻进程即可跑完整系统**。
 
-> 由于依赖 Python 子进程 + 本地信号 SQLite + 常驻调度器，**无法直接部署到 Vercel / Cloudflare Pages / Netlify 等 Serverless 平台**，建议自托管（Docker 或裸机）。Web 业务数据已经迁移到 Supabase PostgreSQL。
+> 由于依赖 Python 子进程 + 本地信号 SQLite + 常驻调度器，**无法直接部署到 Vercel / Cloudflare Pages / Netlify 等 Serverless 平台**，建议自托管（Docker 或裸机）。Web 业务数据存于 PostgreSQL（推荐同机自建 `quant-db`，也可用 Supabase / 外部 PG）。
 
-## Supabase 环境变量
+## PostgreSQL 连接
 
-Web 控制台现在必须通过 `DATABASE_URL` 连接 Supabase，`DATABASE_URL` 没有默认值。Docker/Oracle 部署时把它放在 Compose 同目录的 `.env`，不要提交到 Git：
+Web 控制台通过 `DATABASE_URL` 连接 PostgreSQL，`DATABASE_URL` 没有默认值。Docker/Oracle 部署时把它放在 Compose 同目录的 `.env`，不要提交到 Git。
+
+**方式一（推荐）：同机自建 `quant-db`（Docker 内部网络，不暴露端口，无传输配额限制）**
+
+需叠加 DB override（`docker-compose.db.yml` / `docker-compose.oracle.db.yml`）并设置部署模式：
+
+```dotenv
+# 应用以受限角色 quant_app 连接（非超级用户）
+DATABASE_URL=postgresql://quant_app:<密码>@quant-db:5432/quant
+DATABASE_SSL_MODE=disable
+DB_MODE=selfhost
+# 三角色密码（quant_owner 建库/DDL；quant_app 应用；quant_backup 备份只读）
+PG_OWNER_PASSWORD=<owner 密码>
+PG_APP_PASSWORD=<应用密码>
+PG_BACKUP_PASSWORD=<备份密码>
+```
+
+> 密码限字母/数字/`_`（受控角色初始化与 URL 拼串要求，见 `docs/自建数据库切换方案.md`）。
+
+切换 / 迁移步骤见 `docs/自建数据库切换方案.md`。
+
+**方式二：Supabase / 外部 PostgreSQL**
 
 ```dotenv
 DATABASE_URL=postgresql://postgres.qutqrxicwrnorvujdrvp:<URL编码后的密码>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
@@ -21,28 +42,83 @@ DATABASE_SSL_REJECT_UNAUTHORIZED=true
 DATABASE_POOL_MAX=5
 ```
 
-`DATABASE_SSL_REJECT_UNAUTHORIZED` 默认是 `true`，`DATABASE_POOL_MAX` 默认是 `5`。Supabase Publishable/Secret key 不需要配置；本地 relay 的特殊 SSL 配置只适用于开发机，不适用于 Oracle。
+`DATABASE_SSL_REJECT_UNAUTHORIZED` 默认是 `true`，`DATABASE_POOL_MAX` 默认是 `5`。Supabase Publishable/Secret key 不需要配置；开发环境已禁用生产库 relay，只使用本地 Docker PostgreSQL。
+
+> 从 Supabase 切换到自建库的完整步骤（停写窗口、迁移、验证、回滚、备份）见 `docs/自建数据库切换方案.md`。
 
 ## 方式一：Docker 部署（推荐）
 
 服务器需安装 Docker 与 Docker Compose（v2 以上）。
 
+以下完整命令以首次部署自建库为例；外部 PostgreSQL / Supabase 使用主 compose，不执行角色初始化。
+
 ```bash
 # 1. 拉取代码
 git clone https://github.com/shuyuncong/quant.git quant && cd quant/quant-python
 
-# 2. 配置 Supabase 连接和可选通知变量（DATABASE_URL 必填）
+# 2. 配置 PostgreSQL 连接和可选通知变量（DATABASE_URL 必填；自建库还需三角色密码）
+#    推荐同机自建 quant-db（叠加 db override，DB_MODE=selfhost）：
+#    DATABASE_URL=postgresql://quant_app:<密码>@quant-db:5432/quant，DATABASE_SSL_MODE=disable
 cp web/.env.example .env
-# 编辑 .env 填入 DATABASE_URL，以及需要的 TUSHARE_TOKEN、SIGNAL_BARK_DEVICE_KEY 等
+# 编辑 .env 填入 DATABASE_URL/PG_OWNER_PASSWORD/PG_APP_PASSWORD/PG_BACKUP_PASSWORD，
+# 以及需要的 TUSHARE_TOKEN、SIGNAL_BARK_DEVICE_KEY 等
 chmod 600 .env
 
-# 3. 构建并启动（首次构建需要几分钟）
-docker compose up -d --build
+# Compose 会读取 .env 做插值，但不会把值导出到宿主 shell；仅提取需要的三项。
+get_env() {
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" ./.env | tail -n1
+}
+PG_OWNER_PASSWORD="$(get_env PG_OWNER_PASSWORD)"
+PG_APP_PASSWORD="$(get_env PG_APP_PASSWORD)"
+PG_BACKUP_PASSWORD="$(get_env PG_BACKUP_PASSWORD)"
+: "${PG_OWNER_PASSWORD:?PG_OWNER_PASSWORD 未在 .env 中定义}"
+: "${PG_APP_PASSWORD:?PG_APP_PASSWORD 未在 .env 中定义}"
+: "${PG_BACKUP_PASSWORD:?PG_BACKUP_PASSWORD 未在 .env 中定义}"
+enc() { python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+OWNER_URL="postgresql://quant_owner:$(enc "$PG_OWNER_PASSWORD")@quant-db:5432/quant"
+APP_URL="postgresql://quant_app:$(enc "$PG_APP_PASSWORD")@quant-db:5432/quant"
 
-# 4. 查看日志 / 停止
-docker compose logs -f
-docker compose down
+# 3. 构建镜像；首次自建库只启动 DB，不能在 schema/授权就绪前启动 Web
+docker compose -f docker-compose.yml -f docker-compose.db.yml build quant-web
+docker compose -f docker-compose.yml -f docker-compose.db.yml \
+  up -d --wait --wait-timeout 120 quant-db
+
+# 4. 首次自建库部署：初始化 schema（幂等 db:setup，用 owner 连接；DDL 唯一通道）
+#    ⚠ 必须等 quant-db healthcheck 通过后执行，否则空库无表、quant_app 无授权，Web 启动即报错
+docker compose -f docker-compose.yml -f docker-compose.db.yml exec -T quant-db \
+  env PGPASSWORD="$PG_OWNER_PASSWORD" pg_isready -U quant_owner -d quant
+docker compose -f docker-compose.yml -f docker-compose.db.yml run --rm \
+  -e DATABASE_URL="$OWNER_URL" \
+  -e DATABASE_SSL_MODE=disable \
+  -e QUANT_SETUP_ROLES=1 \
+  -e PG_APP_PASSWORD="$PG_APP_PASSWORD" \
+  -e PG_BACKUP_PASSWORD="$PG_BACKUP_PASSWORD" \
+  quant-web npm run db:setup
+docker compose -f docker-compose.yml -f docker-compose.db.yml run --rm \
+  -e DATABASE_URL="$APP_URL" \
+  -e DATABASE_SSL_MODE=disable quant-web npm run db:verify
+
+# 5. setup + verify 成功后才启动 Web
+docker compose -f docker-compose.yml -f docker-compose.db.yml up -d --no-build quant-web
+
+# 6. 查看日志 / 停止
+docker compose -f docker-compose.yml -f docker-compose.db.yml logs -f
+docker compose -f docker-compose.yml -f docker-compose.db.yml down
 ```
+
+外部 PostgreSQL / Supabase 首次部署只使用主 compose，并以其运行账号执行只读验证：
+
+```bash
+docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml exec quant-web npm run db:verify
+```
+
+> **schema 版本注意**：当前主分支为 schema v1（无 quant_app 授权块）。若首次部署到自建库，
+> 请使用**切换 commit**（schema v2 含授权块），否则 `db:setup` 不会给 quant_app 授权，应用无法读写。
+> 版本升级与切换必须同一维护窗口完成（见 `docs/自建数据库切换方案.md` §6.2）。
+
+> `DB_MODE` 是 **Oracle 部署脚本**（deploy-quant.sh）的解释开关；**通用部署**没有自动脚本，
+> 直接用上面的 `-f docker-compose.db.yml` 显式叠加即可，不依赖 DB_MODE。
 
 启动后访问 `http://服务器IP:3111`。容器会自动重启（`restart: unless-stopped`）。
 
@@ -52,7 +128,8 @@ docker compose down
 
 | 卷 | 内容 | 说明 |
 | --- | --- | --- |
-| `quant-data` | Web 运行时文件和回滚快照（业务数据库在 Supabase） | 建议保留 |
+| `quant-db-data` | PostgreSQL 业务数据库（`quant` schema，自建 `quant-db`） | **必须保留** |
+| `quant-data` | Web 运行时文件和回滚快照 | 建议保留 |
 | `quant-signal-data` | Python 信号引擎状态库（`signal_system/state/signal_monitor.db`：候选池/事件/outbox/全市场初始化进度） | 必须保留 |
 | `quant-output` | 分析/扫描结果 JSON | 必须保留 |
 | `quant-cache` | 行情缓存 | 可清空，会自动重建 |
@@ -63,7 +140,7 @@ docker compose down
 备份时把卷拷走即可，或直接进容器复制：
 
 ```bash
-# Web 业务数据在 Supabase；/app/data 只保留运行时文件或回滚快照
+# Web 业务数据在 quant-db 卷 / 自建库；/app/data 只保留运行时文件或回滚快照
 docker cp quant-web:/app/signal_system/state/signal_monitor.db ./signal-backup.db
 docker cp quant-web:/app/signal_system/output ./output-backup
 ```
@@ -124,8 +201,11 @@ sudo systemctl status quant-web
 
 | 变量 | 作用 |
 | --- | --- |
-| `DATABASE_URL` | Supabase PostgreSQL Session pooler 连接串（必填） |
+| `DATABASE_URL` | PostgreSQL 连接串（必填；自建 `quant-db` 或 Supabase pooler 均可） |
+| `DATABASE_SSL_MODE` | 显式禁用 TLS：`disable`（自建库无 TLS 时用）；不设置则按原有主机名判断 |
+| `DB_MODE` | 部署模式：`legacy`（仅主 compose，默认）/ `selfhost`（叠加 db override，切换自建库后必须） |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | PostgreSQL TLS 校验，默认 `true` |
+| `PG_OWNER_PASSWORD` / `PG_APP_PASSWORD` / `PG_BACKUP_PASSWORD` | 自建 `quant-db` 三角色密码（owner/应用/备份），切换时用（见 `docs/自建数据库切换方案.md`） |
 | `DATABASE_POOL_MAX` | PostgreSQL 连接池上限，默认 `5` |
 | `PYTHON_BIN` | Python 可执行文件（Linux 填 `python3`，Windows 可省略） |
 | `WEB_DATA_DIR` | Web 运行时文件目录，默认 `web/data`；不再存放 Web 业务数据库 |
@@ -137,36 +217,14 @@ sudo systemctl status quant-web
 
 ## 迁移现有数据
 
-首次从旧 SQLite Web 数据库迁移到 Supabase 时，在旧 Web 写入者停止或暂停后执行：
+旧的“本地 SQLite → Supabase”首次迁移已经完成，该上行流程现已退役。禁止在开发机配置生产
+`DATABASE_URL` 后运行 `db:migrate`，也禁止把本地测试/回测产生的 Web、信号状态或输出复制到生产。
 
-```bash
-cd quant-python/web
-export DATABASE_URL='postgresql://postgres.qutqrxicwrnorvujdrvp:<URL编码后的密码>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres'
-export DATABASE_SSL_REJECT_UNAUTHORIZED=true
-npm run db:migrate
-npm run db:verify
-```
+`db:migrate` 与 `db:rollback-snapshot` 现只允许 `loopback:5432/quant` 本地库。当前唯一允许的业务数据
+方向是生产 → 本地，通过带安全门禁的 `npm run db:sync-from-prod` 覆盖本地数据；生产 schema 变更只走
+幂等 `npm run db:setup`，随后执行 `npm run db:verify`。
 
-迁移完成后，Oracle 升级只需配置同一个 `DATABASE_URL` 并重建容器，**不要再次执行 `npm run db:migrate`**。迁移脚本会拒绝覆盖非等价的 Supabase 数据。
-
-Web 的 `app.db` 只作为迁移源或回滚快照，不要再复制到生产容器作为运行时业务库。Python 信号状态和分析输出仍需单独迁移。
-
-以本机开发环境迁移到 Docker 部署的服务器为例：
-
-```bash
-# 在本机执行：只传 Python 信号状态和分析输出
-scp quant-python/signal_system/state/signal_monitor.db* 用户@服务器IP:/tmp/
-scp -r quant-python/signal_system/output 用户@服务器IP:/tmp/
-
-# 在服务器执行：停容器 → 拷入 Python 状态/输出 → 重新启动
-cd quant/quant-python
-docker compose stop
-docker cp /tmp/signal_monitor.db quant-web:/app/signal_system/state/signal_monitor.db
-docker cp /tmp/output quant-web:/app/signal_system/output
-docker compose up -d
-```
-
-> 提示：Python 信号库使用 SQLite WAL 模式，直接拷贝时请把 `signal_monitor.db`、`signal_monitor.db-shm`、`signal_monitor.db-wal` 一并拷贝，避免丢失最近写入的数据；拷贝前最好先正常停止旧实例。
+Web 的 `app.db` 仅是历史迁移源或本地快照，不得再复制到生产容器作为运行时业务库。
 
 ### 升级：已有 Docker 部署（旧卷曾挂到 `signal_system/data`）
 

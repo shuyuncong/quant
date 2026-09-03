@@ -209,122 +209,249 @@ sudo certbot --nginx -d quant.illsky.com
 - **容器状态**：`docker compose -f docker-compose.oracle.yml ps`
 - **查看日志**：`docker compose -f docker-compose.oracle.yml logs -f quant-web`（在项目子目录内执行）
 
-## 8. 备份脚本（与现有备份保持一致）
+## 8. 备份脚本
 
-在现有备份脚本的 `TARGETS` 中追加以下三项（`quant-web` 备份前会自动停止，打包后自动恢复；停服后打包可避免 SQLite WAL 数据丢失）：
+> 本节适用于已经按 `自建数据库切换方案.md` 切到 `DB_MODE=selfhost` 的环境；仍使用 Supabase
+> 的 legacy 环境不要安装此脚本。
+
+> 备份分两路：**数据库走每日逻辑备份（pg_dump，推荐）**，**应用数据目录走物理 tar**。下方给出
+> 完整可运行脚本 `backup-quant.sh`，已修复常见缺陷：rclone 失败不清本地、无锁、无 fail-fast、
+> 14 天清理被注释、pg_dump 写到容器内 /tmp 导致宿主机复制不到。
+
+### 8.1 自建数据库逻辑备份（quant-db，推荐）
+
+每日在线 `pg_dump`，不停数据库容器、单次一致性快照，用只读角色 `quant_backup`：
 
 ```bash
-TARGETS=(
-    "quant-web|/opt/docker/quant/data"
-    "quant-web|/opt/docker/quant/state"
-    "quant-web|/opt/docker/quant/output"
-    # 其他服务按同样格式追加，例如：
-    # "memos|/opt/memos"
-)
+# 输出到宿主机（不要写容器内 /tmp——exec 容器内文件宿主机看不到）
+docker compose \
+  -f /opt/docker/quant/quant-python/quant-python/docker-compose.oracle.yml \
+  -f /opt/docker/quant/quant-python/quant-python/docker-compose.oracle.db.yml \
+  exec -T quant-db \
+  env PGPASSWORD="${PG_BACKUP_PASSWORD}" \
+  pg_dump -U quant_backup -h 127.0.0.1 -d quant \
+    --format=custom --no-owner --no-acl \
+  > "$HOME/quant-backups/quant-db_$(date +%Y%m%d_%H%M%S).dump"
 ```
 
-`cache/` 与 `logs/` 无需备份，丢失后会自动重建。完整脚本示例（与 CLIProxyAPI 同一套，rclone 上传到 Cloudflare R2）：
+**恢复**（宿主机未装 pg_restore 且 quant-db 不发布端口，必须用容器内 pg_restore）：
+
+**DDL 合规**：所有 schema/表/序列/索引**只由幂等 db:setup 创建**（符合「生产 DDL 只能走
+db:setup」硬规则）；`pg_restore` 仅用 `--data-only` 灌业务数据，**绝不执行 DDL**。
+
+```bash
+# ===== 前置：冻结写入 =====
+# 恢复期间必须停 Web（调度器/写入随停），否则新库建表后运行中的 Web 会立即重连写入，
+# 随后 data-only restore 冲突或混入新数据。停自动部署防误发。
+set -euo pipefail
+umask 077
+COMPOSE="-f /opt/docker/quant/quant-python/quant-python/docker-compose.oracle.yml -f /opt/docker/quant/quant-python/quant-python/docker-compose.oracle.db.yml"
+cd /opt/docker/quant/quant-python/quant-python
+# 1) 先在 .env 设置 DEPLOY_PAUSED=1，再运行本段。等待获取维护锁；拿到锁即证明
+#    已在途的自动部署/备份已结束，之后新任务会因锁被占用而跳过。
+get_env() {
+  [ -f ./.env ] || return 0
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" ./.env | tail -n1
+}
+[ "$(get_env DEPLOY_PAUSED)" = "1" ] || { echo "请先在 .env 设置 DEPLOY_PAUSED=1"; exit 1; }
+exec 8>"$HOME/quant-maintenance.lock"
+flock -w 1800 8 || { echo "等待在途部署/备份超时，恢复中止"; exit 1; }
+[ "$(get_env DEPLOY_PAUSED)" = "1" ] || { echo "DEPLOY_PAUSED 已变化，恢复中止"; exit 1; }
+docker compose $COMPOSE stop quant-web
+
+# ===== 从 .env 安全读取密码（Compose 加载 .env 不会导出给宿主 shell）=====
+PG_OWNER_PASSWORD="$(get_env PG_OWNER_PASSWORD)"
+PG_APP_PASSWORD="$(get_env PG_APP_PASSWORD)"
+PG_BACKUP_PASSWORD="$(get_env PG_BACKUP_PASSWORD)"
+: "${PG_OWNER_PASSWORD:?PG_OWNER_PASSWORD 未在 .env 中定义}"
+: "${PG_APP_PASSWORD:?PG_APP_PASSWORD 未在 .env 中定义}"
+: "${PG_BACKUP_PASSWORD:?PG_BACKUP_PASSWORD 未在 .env 中定义}"
+
+# ===== 数据目录重建（Oracle 为宿主机 bind mount；改名保留，不删除）=====
+# 2) 停 quant-db 并释放 container_name
+docker compose $COMPOSE stop quant-db
+docker compose $COMPOSE rm -f quant-db
+# 3) 旧数据目录改名保留（此操作不是删除；确认恢复无误后手动清理）
+TS=$(date +%Y%m%d_%H%M%S)
+mv /opt/docker/quant/db-data "/opt/docker/quant/db-data.bak-$TS"
+mkdir -p /opt/docker/quant/db-data
+# 4) 起空容器并阻塞等待 healthcheck；`docker compose ps` 只显示状态，不会等待
+docker compose $COMPOSE up -d --wait --wait-timeout 120 quant-db
+
+# ===== 建 schema（DDL 唯一通道）+ 灌数据 + 验证 =====
+# 5) db:setup 建 schema（表/序列/索引/授权块/schema_meta 版本行）——唯一 DDL 通道
+docker compose $COMPOSE run --rm \
+  -e DATABASE_URL="postgresql://quant_owner:$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "$PG_OWNER_PASSWORD")@quant-db:5432/quant" \
+  -e DATABASE_SSL_MODE=disable \
+  -e QUANT_SETUP_ROLES=1 \
+  -e PG_APP_PASSWORD="$PG_APP_PASSWORD" \
+  -e PG_BACKUP_PASSWORD="$PG_BACKUP_PASSWORD" \
+  quant-web npm run db:setup
+
+# 6) pg_restore 只灌数据（--data-only 不含 DDL；-T 排除 schema_meta 避免版本行冲突；
+#    --single-transaction 遇错整体回滚，不留半恢复状态）
+docker compose $COMPOSE exec -T quant-db \
+  env PGPASSWORD="$PG_OWNER_PASSWORD" \
+  pg_restore -U quant_owner -h 127.0.0.1 -d quant --data-only --single-transaction \
+  -T quant.schema_meta \
+  < "$HOME/quant-backups/quant-db_YYYYMMDD_HHMMSS.dump"
+
+# 7) 以 quant_app 验证（含序列检查；若序列落后会报错提示）
+docker compose $COMPOSE run --rm \
+  -e DATABASE_URL="postgresql://quant_app:$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "$PG_APP_PASSWORD")@quant-db:5432/quant" \
+  -e DATABASE_SSL_MODE=disable quant-web npm run db:verify
+
+# ===== 收尾：验证通过后恢复服务 =====
+# 8) 启动 quant-web（唯一调度器）；验证完成后释放锁，再手动把 DEPLOY_PAUSED 改回 0
+docker compose $COMPOSE up -d quant-web
+flock -u 8
+```
+
+> 顺序说明：**先 db:setup 建 schema（DDL 唯一通道）→ 再 pg_restore --data-only 灌数据**
+> （此时表已存在，data-only 直接 INSERT；排除 schema_meta 避免版本行主键冲突；
+> `--single-transaction` 保证数据原子性）。dump 备份时是完整归档，恢复时只取数据段。
+> 旧数据目录改名保留（`db-data.bak-<ts>`），确认恢复无误后再手动清理；不执行 `rm -rf`。
+
+**保留 14 天**：备份脚本内启用 rclone 清理行（仅作用于 `quant/` 前缀，见 8.3）。
+
+**恢复演练**：上线前必须完成「R2 下载 dump → 全新 DB 目录 → db:setup + data-only 恢复 → 应用验证」全流程，确认 RTO 达标。
+
+### 8.2 应用数据目录物理备份（quant-web）
+
+`quant-web` 三个目录（SQLite 状态、分析输出、运行时文件）由完整备份脚本一次性打包；
+`quant-db` 数据目录**不加入 TARGETS**（走 8.1 逻辑备份）。
+
+### 8.3 完整可运行备份脚本（backup-quant.sh）
 
 ```bash
 #!/bin/bash
+# 每日备份：quant-db 逻辑备份 + quant-web 应用目录 + rclone 上传 R2
+# 用法：先 chmod +x；cron 每日 03:00。
+# 依赖：.env 中的 PG_BACKUP_PASSWORD / DEPLOY_PAUSED（本脚本自行加载，不依赖调用者环境）
+set -euo pipefail
+umask 077
 
-# ================= 配置区域 =================
-
-# Rclone 配置名称和存储桶
+COMPOSE_DIR="/opt/docker/quant/quant-python/quant-python"
 RCLONE_REMOTE="r2-oracle-backup:oracle-backup"
+# 独立备份目录：⚠ 勿与旧通用备份脚本共用 /home/ubuntu/backups（旧脚本会清空该目录、
+# 锁不共用，可能互删）。本脚本专用 /home/ubuntu/quant-backups。
+BACKUP_ROOT="$HOME/quant-backups"
+LOG_DIR="$HOME/logs"
+LOG="$LOG_DIR/quant-backup.log"
+LOCK_FILE="$HOME/quant-backup.lock"
+MAINTENANCE_LOCK="$HOME/quant-maintenance.lock"
+RETENTION=14d
+COMPOSE="-f $COMPOSE_DIR/docker-compose.oracle.yml -f $COMPOSE_DIR/docker-compose.oracle.db.yml"
 
-# 本地临时备份目录
-BACKUP_ROOT="/home/ubuntu/backups"
+# cron 环境 PATH 极简，先补齐
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# 日期后缀
+# 日志目录必须可写（cron 下 /var/log 通常 root 独占；用 $HOME/logs）
+mkdir -p "$LOG_DIR" "$BACKUP_ROOT"
+log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
+
+# 从 .env 安全提取所需键：⚠ 勿 source 整文件（dotenv 非 shell 语法，特殊字符可能被
+# 解析甚至执行）；仅用 sed 提取目标键的值
+get_env() {
+  [ -f "$COMPOSE_DIR/.env" ] || return 0
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" "$COMPOSE_DIR/.env" | tail -n1
+}
+PG_BACKUP_PASSWORD="$(get_env PG_BACKUP_PASSWORD)"
+
+# 校验必填变量（set -u 下未定义即退，这里给出明确报错）
+: "${PG_BACKUP_PASSWORD:?PG_BACKUP_PASSWORD 未在 .env 中定义}"
+
+# 与迁移/恢复共用维护锁，消除“检查暂停后维护才开始”的竞态。
+exec 8>"$MAINTENANCE_LOCK"
+flock -n 8 || { log "迁移、恢复或其他备份正在运行，本轮备份跳过"; exit 0; }
+
+# 拿到锁后再次读取暂停值；维护窗口内 cron 不得触碰容器状态。
+if [ "$(get_env DEPLOY_PAUSED)" = "1" ]; then
+  log "DEPLOY_PAUSED=1，处于维护窗口，本轮备份跳过"
+  exit 0
+fi
+
+# 互斥锁：防止前一次备份未结束又起新任务
+exec 9>"$LOCK_FILE"
+flock -n 9 || { log "已有备份在运行，退出"; exit 1; }
+
 DATE=$(date +%Y%m%d_%H%M%S)
-
-# -------------------------------------------
-# [关键] 备份清单配置
-# 格式: "容器名称|数据目录路径"
-# 如果不需要停止容器(如静态网页)，容器名称填 "none"
-# -------------------------------------------
-TARGETS=(
-    "quant-web|/opt/docker/quant/data"
-    "quant-web|/opt/docker/quant/state"
-    "quant-web|/opt/docker/quant/output"
-    # 其他服务按同样格式追加，例如：
-    # "memos|/opt/memos"
-)
-
-# ================= 逻辑区域 =================
-
-# 创建临时备份根目录
 mkdir -p "$BACKUP_ROOT"
+log "=== 备份开始 [$DATE] ==="
 
-echo "========== 开始备份任务 [$DATE] =========="
+# 1) 先停 quant-web：冻结业务写入（调度器、Web 写库随停），
+#    使随后的 DB dump 与目录打包处于同一业务时间点
+WEB_WAS_RUNNING=0
+if [ "$(docker inspect --format '{{.State.Running}}' quant-web 2>/dev/null || true)" = "true" ]; then
+  WEB_WAS_RUNNING=1
+  log "停止 quant-web ..."
+  docker stop quant-web
+else
+  log "quant-web 原本未运行，保持停止状态"
+fi
+restore_web_state() {
+  if [ "$WEB_WAS_RUNNING" = "1" ]; then
+    docker start quant-web
+  fi
+}
+trap 'restore_web_state || log "ERROR: quant-web 自动恢复失败，需立即人工处理"' EXIT
 
-# 遍历备份清单
-for target in "${TARGETS[@]}"; do
-    # 解析配置，以 | 分割
-    CONTAINER_NAME="${target%%|*}"
-    SOURCE_DIR="${target##*|}"
+# 2) 数据库逻辑备份（写宿主机 stdout，不停 quant-db）
+log "pg_dump quant-db ..."
+docker compose $COMPOSE exec -T quant-db \
+  env PGPASSWORD="${PG_BACKUP_PASSWORD}" \
+  pg_dump -U quant_backup -h 127.0.0.1 -d quant --format=custom --no-owner --no-acl \
+  > "$BACKUP_ROOT/quant-db_$DATE.dump"
+# 校验 dump 真实可恢复（pg_restore --list 能列出归档内容才算有效，ls -lh 不能证明）
+docker compose $COMPOSE exec -T quant-db pg_restore --list \
+  < "$BACKUP_ROOT/quant-db_$DATE.dump" >/dev/null
 
-    # 提取目录名作为文件名的一部分 (例如 /opt/docker/quant/data -> data)
-    DIR_NAME=$(basename "$SOURCE_DIR")
-    ARCHIVE_NAME="${DIR_NAME}_${DATE}.tar.gz"
+# 3) 应用目录物理备份（quant-web 已停，三个目录一次打包）
+log "打包 quant-web 数据目录 ..."
+tar -czf "$BACKUP_ROOT/quant-web_$DATE.tar.gz" \
+  -C /opt/docker/quant data state output
 
-    echo ">>> 处理目标: $DIR_NAME (容器: $CONTAINER_NAME)"
+if ! restore_web_state; then
+  log "ERROR: quant-web 恢复失败，不上传或清理本地备份"
+  exit 1
+fi
+trap - EXIT
+if [ "$WEB_WAS_RUNNING" = "1" ]; then
+  log "quant-web 已恢复运行，目录打包完成"
+else
+  log "quant-web 保持备份前的停止状态，目录打包完成"
+fi
 
-    # 1. 检查目录是否存在
-    if [ ! -d "$SOURCE_DIR" ]; then
-        echo "   [警告] 目录 $SOURCE_DIR 不存在，跳过！"
-        continue
-    fi
+# 3) 上传 R2；失败不清本地
+log "上传 R2 ..."
+if ! rclone copy "$BACKUP_ROOT" "$RCLONE_REMOTE/quant/$DATE" \
+     --config /home/ubuntu/.config/rclone/rclone.conf; then
+  log "ERROR: rclone 上传失败，保留本地备份，待人工处理"
+  exit 1
+fi
 
-    # 2. 停止容器 (如果指定了容器名且不是 none)
-    if [ "$CONTAINER_NAME" != "none" ]; then
-        echo "   停止容器 $CONTAINER_NAME ..."
-        docker stop "$CONTAINER_NAME"
-    fi
-
-    # 3. 打包数据
-    echo "   打包数据中..."
-    # 使用 tar -czf 打包，排除可能产生的 socket 文件等
-    tar -czf "$BACKUP_ROOT/$ARCHIVE_NAME" -C "$(dirname "$SOURCE_DIR")" "$DIR_NAME"
-
-    # 4. 恢复容器
-    if [ "$CONTAINER_NAME" != "none" ]; then
-        echo "   启动容器 $CONTAINER_NAME ..."
-        docker start "$CONTAINER_NAME"
-    fi
-
-    echo "   $DIR_NAME 打包完成."
-done
-
-echo "----------------------------------------"
-
-# 5. 统一上传到 Cloudflare R2
-echo ">>> 开始上传到 Cloudflare R2 ..."
-# copy 命令只会上传新文件
-rclone copy "$BACKUP_ROOT" "$RCLONE_REMOTE/$DATE" --config /home/ubuntu/.config/rclone/rclone.conf
-
-# 6. 清理工作
-# 删除本地备份文件（节省服务器空间）
-echo ">>> 清理本地临时文件..."
+# 4) 清理：上传成功才清本地 + 清 R2 旧数据
 rm -rf "$BACKUP_ROOT"/*
+rclone delete "$RCLONE_REMOTE/quant" --min-age "$RETENTION" --rmdirs \
+  --config /home/ubuntu/.config/rclone/rclone.conf || log "warn: R2 清理失败（不影响本次备份）"
 
-# (可选) 清理 R2 上的旧数据，保留最近 30 天
-# echo ">>> 清理 R2 旧备份..."
-# rclone delete "$RCLONE_REMOTE" --min-age 14d --rmdirs
-
-echo "========== 备份任务完成 =========="
+log "=== 备份完成 [$DATE] ==="
 ```
 
-> 提示：同一容器有多个备份目录时，脚本会对每个目录分别停止/启动一次容器，属正常现象。
-
-建议加定时任务（每天凌晨 3 点）：
+cron（每日凌晨 3 点）：
 
 ```bash
 crontab -e
-0 3 * * * /home/ubuntu/backup.sh >> /home/ubuntu/backup.log 2>&1
+0 3 * * * /home/ubuntu/ops/backup-quant.sh >> /home/ubuntu/logs/quant-backup.log 2>&1
 ```
+> 重定向必须用 $HOME/logs（cron 下 /var/log 普通用户无写权限，重定向失败脚本不会启动）。
+> 目录 /home/ubuntu/logs 已在脚本内 mkdir -p；cron 行与脚本内部日志用同一文件。
 
+> 已修复原脚本问题：rclone 失败不删本地、flock 防并发、`set -euo pipefail` fail-fast、
+> 脚本与迁移/恢复共用 `$HOME/quant-maintenance.lock`，并在 `DEPLOY_PAUSED=1` 时跳过；
+> 否则只在 Web 原本运行时短暂停止，并恢复到备份前状态。
+> `umask 077` 保护本地 dump、14 天清理启用、pg_dump 输出重定向宿主机、quant-web 最多停一次；
+> Web 恢复失败会中止上传/清理并明确告警，不再吞错后误报成功。
 ## 更新代码与迁移数据
 
 ### 从 SQLite 版升级到 Supabase 版

@@ -51,19 +51,23 @@ function createPool(): Pool {
   } catch {
     throw new Error("DATABASE_URL is not a valid PostgreSQL URL.");
   }
+  const sslDisabled = process.env.DATABASE_SSL_MODE === "disable";
   const servername = process.env.DATABASE_SSL_SERVERNAME?.trim();
   const local = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  const ssl = sslDisabled
+    ? false
+    : local && !servername
+      ? false
+      : {
+          rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+          ...(servername ? { servername } : {}),
+        };
   const pool = new Pool({
     connectionString,
     max: Math.max(2, Number(process.env.DATABASE_POOL_MAX ?? 5) || 5),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
-    ssl: local && !servername
-      ? false
-      : {
-          rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-          ...(servername ? { servername } : {}),
-        },
+    ssl,
   });
   pool.on("error", (error) => {
     console.error("[database] idle PostgreSQL client error:", safeError(error).message);

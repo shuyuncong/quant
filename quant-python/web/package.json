@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3111",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:db-safety",
+    "test:db-safety": "node scripts/safety-self-test.mjs",
     "db:setup": "node --env-file-if-exists=.env.local scripts/setup-postgres.mjs",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate-database.mjs sqlite-to-postgres",
     "db:rollback-snapshot": "node --env-file-if-exists=.env.local scripts/migrate-database.mjs postgres-to-sqlite",
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@next/env": "16.3.1",
     "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

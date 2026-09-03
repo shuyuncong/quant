@@ -1,28 +1,34 @@
 /**
- * One-way data sync: production Supabase (via db-tunnel) -> local Docker Postgres.
+ * One-way data sync: production PostgreSQL source -> approved PostgreSQL target.
  *
  * Direction is DOWNSTREAM ONLY (prod -> local). Local test data must never
  * flow back up. Schema (DDL) is applied via db:setup, not by this script.
  *
  * Requires:
- *   - PROD_DATABASE_URL  (or DATABASE_URL) pointing at the production server
- *   - LOCAL_DATABASE_URL pointing at the local dev Postgres
+ *   - PROD_DATABASE_URL pointing at the production server
+ *   - LOCAL_DATABASE_URL pointing exactly at loopback:5432/quant, or the gated quant-db target
  *   - PROD_SSL_SERVERNAME / PROD_SSL_REJECT_UNAUTHORIZED for TLS (optional)
+ *   - QUANT_ALLOW_REMOTE_SYNC=1 for every approved run, including a loopback relay
+ *   - QUANT_ALLOW_PRODUCTION_CUTOVER=1 when the target host is exactly quant-db
  *
- * The local DB is truncated (schema kept) and refilled from prod, then all
- * sequences are reset to MAX(id). Safe to re-run; it is destructive to LOCAL
- * data only.
+ * The target DB is truncated (schema kept) and refilled from prod, then all
+ * sequences are reset to MAX(id). A normal refresh is destructive to local data.
+ * A non-local destination is rejected unless it is the production-only Docker
+ * service name quant-db and the explicit cutover gate is enabled. For quant-db,
+ * this script verifies the schema version and never executes schema DDL.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { assertSyncPolicy } from "./db-safety.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaSql = fs.readFileSync(path.join(root, "db", "schema.sql"), "utf8");
 
 function sslFor(urlString, prefix) {
   const parsed = new URL(urlString);
+  if (process.env[`${prefix}_SSL_MODE`] === "disable") return false;
   const local = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
   const servername = process.env[`${prefix}_SSL_SERVERNAME`]?.trim();
   if (local && !servername) return false;
@@ -36,6 +42,14 @@ const prodUrl = process.env.PROD_DATABASE_URL?.trim();
 const localUrl = (process.env.LOCAL_DATABASE_URL ?? process.env.DATABASE_URL)?.trim();
 if (!prodUrl) throw new Error("PROD_DATABASE_URL is required (prod is never DATABASE_URL)");
 if (!localUrl) throw new Error("LOCAL_DATABASE_URL (or DATABASE_URL) is required");
+
+let syncPolicy;
+try {
+  syncPolicy = assertSyncPolicy({ prodUrl, targetUrl: localUrl });
+} catch (error) {
+  console.error(`[sync-prod-to-local] 拒绝执行：${error.message}`);
+  process.exit(1);
+}
 
 const prodClient = new Client({ connectionString: prodUrl, ssl: sslFor(prodUrl, "PROD"), connectionTimeoutMillis: 20_000 });
 const localClient = new Client({ connectionString: localUrl, ssl: sslFor(localUrl, "LOCAL"), connectionTimeoutMillis: 20_000 });
@@ -57,7 +71,23 @@ const boolColumns = new Set(["enabled", "vision_supported", "trading_days_only"]
 try {
   await prodClient.connect();
   await localClient.connect();
-  await localClient.query(schemaSql);
+  if (syncPolicy.targetHost === "quant-db") {
+    const expectedVersion = Number(
+      schemaSql.match(/INSERT\s+INTO\s+quant\.schema_meta\s*\(version\)\s*VALUES\s*\((\d+)\)/i)?.[1] ?? 0,
+    );
+    const actualVersion = await localClient.query(
+      "SELECT version FROM quant.schema_meta ORDER BY version DESC LIMIT 1",
+    );
+    if (!expectedVersion || Number(actualVersion.rows[0]?.version ?? 0) !== expectedVersion) {
+      throw new Error(
+        `Production target schema version mismatch: expected ${expectedVersion}, ` +
+          `received ${String(actualVersion.rows[0]?.version ?? "missing")}. Run npm run db:setup first.`,
+      );
+    }
+  } else {
+    // Local refreshes may initialize their disposable schema. Production DDL is only allowed via db:setup.
+    await localClient.query(schemaSql);
+  }
   await localClient.query("BEGIN");
   await localClient.query(`TRUNCATE quant.${tables.map((t) => t.name).join(", quant.")} RESTART IDENTITY CASCADE`);
   const counts = {};

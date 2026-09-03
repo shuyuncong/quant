@@ -83,3 +83,6 @@ quant-python/web/*.log*
 
 # Local tooling artifacts
 .codex-training-html-check/
+
+# Contains live R2 credentials - rotate first, never commit as-is
+/docs/oracle-backup.md

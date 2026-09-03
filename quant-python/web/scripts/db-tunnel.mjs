@@ -1,20 +1,21 @@
 /**
  * Local TCP relay for the Supabase PostgreSQL session pooler.
  *
- * The web app's DATABASE_URL points at 127.0.0.1:15432 (see web/.env.local).
+ * A controlled server-side maintenance command may point PROD_DATABASE_URL at
+ * 127.0.0.1:15432. `npm run dev` never starts this relay.
  * Direct connections to the AWS pooler are firewalled at the TLS layer from
  * the dev workstation, so traffic must egress through the local Clash proxy:
  *
  *   pg client -> 127.0.0.1:15432 -> HTTP CONNECT via 127.0.0.1:7890
  *              -> aws-0-ap-southeast-1.pooler.supabase.com:5432
  *
- * Run standalone:   npm run db:tunnel
- * (npm run dev also starts one automatically, see scripts/dev.mjs.)
+ * Run standalone only: npm run db:tunnel
+ * `npm run dev` deliberately never imports or starts this relay.
  *
  * Env overrides:
  *   RELAY_LISTEN_PORT  (default 15432)
  *   RELAY_PROXY        host:port of the HTTP proxy (default 127.0.0.1:7890)
- *   RELAY_TARGET       host:port of the PostgreSQL server (default the Supabase session pooler)
+ *   RELAY_TARGET       host:port of the PostgreSQL server (required; no production default)
  */
 import net from "node:net";
 
@@ -30,13 +31,17 @@ function envHostPort(name, fallback) {
 }
 
 export function relayConfig() {
+  // 开发机不得直连生产库：不提供 Supabase 默认 target。
+  // 必须显式设置 RELAY_TARGET 才会建立转发（且只用于受控的服务器侧迁移/回滚场景）。
+  if (!process.env.RELAY_TARGET) {
+    throw new Error(
+      "RELAY_TARGET is required (开发机禁止直连生产库；db-tunnel 仅用于受控服务器侧迁移场景)",
+    );
+  }
   return {
     listenPort: Number(process.env.RELAY_LISTEN_PORT ?? 15432),
     proxy: envHostPort("RELAY_PROXY", "127.0.0.1:7890"),
-    target: envHostPort(
-      "RELAY_TARGET",
-      "aws-0-ap-southeast-1.pooler.supabase.com:5432",
-    ),
+    target: envHostPort("RELAY_TARGET", ""),
   };
 }
 

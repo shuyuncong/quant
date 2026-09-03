@@ -1,0 +1,42 @@
+# 通用部署 DB override（与 docker-compose.yml 配套使用）
+#
+# 用法（切换阶段，显式引入本文件）：
+#   docker compose -f docker-compose.yml -f docker-compose.db.yml up -d
+#
+# 与 Oracle 版差异：数据用命名卷 quant-db-data 而非宿主机目录。
+# 设计说明同 docker-compose.oracle.db.yml（角色分离、internal 网络、无强依赖）。
+services:
+  quant-db:
+    image: postgres:16-bookworm
+    container_name: quant-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quant
+      POSTGRES_USER: quant_owner
+      POSTGRES_PASSWORD: "${PG_OWNER_PASSWORD:?PG_OWNER_PASSWORD must be set}"
+      TZ: Asia/Shanghai
+    volumes:
+      - quant-db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "quant_owner", "-d", "quant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  quant-web:
+    environment:
+      DATABASE_URL: "postgresql://quant_app:${PG_APP_PASSWORD:?PG_APP_PASSWORD must be set}@quant-db:5432/quant"
+      DATABASE_SSL_MODE: "disable"
+    networks:
+      - default
+      - internal
+
+networks:
+  internal:
+    internal: true
+
+volumes:
+  quant-db-data:

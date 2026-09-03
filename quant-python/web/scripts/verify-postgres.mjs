@@ -3,14 +3,17 @@ import { Client } from "pg";
 const connectionString = process.env.DATABASE_URL?.trim();
 if (!connectionString) throw new Error("DATABASE_URL is required");
 const parsedUrl = new URL(connectionString);
+const sslDisabled = process.env.DATABASE_SSL_MODE === "disable";
 const servername = process.env.DATABASE_SSL_SERVERNAME?.trim();
 const local = parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "::1";
-const ssl = local && !servername
+const ssl = sslDisabled
   ? false
-  : {
-      rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-      ...(servername ? { servername } : {}),
-    };
+  : local && !servername
+    ? false
+    : {
+        rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+        ...(servername ? { servername } : {}),
+      };
 const client = new Client({
   connectionString,
   ssl,

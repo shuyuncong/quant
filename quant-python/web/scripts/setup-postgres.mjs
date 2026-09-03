@@ -2,28 +2,34 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { roleBootstrapSql, selfHostedRoleBootstrap } from "./db-safety.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = path.join(root, "db", "schema.sql");
 const connectionString = process.env.DATABASE_URL?.trim();
 if (!connectionString) throw new Error("DATABASE_URL is required");
 const parsedUrl = new URL(connectionString);
+const sslDisabled = process.env.DATABASE_SSL_MODE === "disable";
 const servername = process.env.DATABASE_SSL_SERVERNAME?.trim();
 const local = parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "::1";
-const ssl = local && !servername
+const ssl = sslDisabled
   ? false
-  : {
-      rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-      ...(servername ? { servername } : {}),
-    };
+  : local && !servername
+    ? false
+    : {
+        rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
+        ...(servername ? { servername } : {}),
+      };
 
 const client = new Client({
   connectionString,
   ssl,
   connectionTimeoutMillis: 15_000,
 });
+const roleBootstrap = selfHostedRoleBootstrap({ databaseUrl: connectionString });
 try {
   await client.connect();
+  if (roleBootstrap) await client.query(roleBootstrapSql(roleBootstrap));
   await client.query(await fs.readFile(schemaPath, "utf8"));
   const version = await client.query("SELECT version FROM quant.schema_meta ORDER BY version DESC LIMIT 1");
   const exposed = await client.query(

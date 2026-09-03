@@ -21,12 +21,13 @@ The Supabase publishable and secret API keys are not used by this application;
 the Web server connects directly with PostgreSQL through `DATABASE_URL`. Do not
 put either key in browser-side environment variables.
 
-For local development through the temporary `pg_relay.py` on
-`127.0.0.1:15432`, use these additional local-only settings:
+The old local relay-to-Supabase workflow is retired. Local development must use
+the Docker PostgreSQL instance on `127.0.0.1:5432` with scheduler disabled:
 
 ```dotenv
-DATABASE_SSL_REJECT_UNAUTHORIZED=false
-DATABASE_SSL_SERVERNAME=aws-0-ap-southeast-1.pooler.supabase.com
+DATABASE_URL=postgresql://quant:<local-password>@127.0.0.1:5432/quant
+DATABASE_SSL_MODE=disable
+SCHEDULER_DISABLED=1
 ```
 
 When `DATABASE_URL` points directly to the Supabase pooler, omit
@@ -41,10 +42,11 @@ the repository Docker ignore rules keep it outside image layers.
 
 ## Oracle Upgrade Checklist
 
-The Supabase database is shared by local development and the Oracle Web
-container. If the Supabase migration has already been completed, do **not** run
-`npm run db:migrate` again on Oracle. Configure the same `DATABASE_URL` and
-rebuild the container:
+Supabase is used only by the legacy Oracle production deployment; local
+development uses its own Docker PostgreSQL and must never share the production
+database. If the Supabase migration has already been completed, do **not** run
+`npm run db:migrate` again on Oracle. Configure the production `DATABASE_URL`
+and rebuild the container:
 
 ```bash
 cd /opt/docker/quant/quant-python/quant-python
@@ -67,8 +69,8 @@ DATABASE_SSL_REJECT_UNAUTHORIZED=true
 DATABASE_POOL_MAX=5
 ```
 
-Do not set `DATABASE_SSL_SERVERNAME` on Oracle. It is only for the temporary
-local `pg_relay.py` setup. The Publishable key and Secret key are not required
+Do not set `DATABASE_SSL_SERVERNAME` on Oracle. It belonged to the retired
+local relay workflow. The Publishable key and Secret key are not required
 by this server-side PostgreSQL connection.
 
 If the Oracle host has SQLite data that is newer than the rows already in
@@ -77,26 +79,17 @@ Supabase, stop before rebuilding and reconcile that data first. Do not copy
 Python signal state (`signal_monitor.db*`) and analysis output remain local to
 the Oracle host.
 
-Run the initial migration from `quant-python/web` while the old Web writer is
-stopped or quiesced:
+The historical local SQLite-to-Supabase migration is complete and retired.
+Never point `db:migrate` or `db:rollback-snapshot` at production; both commands
+are now restricted to `loopback:5432/quant`. Local test, backtest, signal-state,
+and output data must not be uploaded to production.
 
-```bash
-npm run db:migrate
-npm run db:verify
-```
+The only supported business-data direction is production to local through the
+guarded `npm run db:sync-from-prod` command, which overwrites the local database.
+Production schema changes use only the idempotent `npm run db:setup` workflow,
+followed by `npm run db:verify`. Never put `DATABASE_URL` in Git or in a Docker
+build context. The repository `.dockerignore` excludes `web/.env*`; provide the
+value only via Compose runtime environment or a secret manager.
 
-The migration reads `SQLITE_PATH`, then `WEB_DATA_DIR/app.db`, then the local
-`web/data/app.db`. It refuses to overwrite a non-equivalent PostgreSQL target.
-After cutover, create a rollback snapshot before reverting application code:
-
-```bash
-npm run db:rollback-snapshot
-```
-
-The resulting SQLite file is a new snapshot; it does not overwrite the old
-source. Never put `DATABASE_URL` in Git or in a Docker build context. The
-repository `.dockerignore` excludes `web/.env*`; provide the value only via
-Compose runtime environment or a secret manager.
-
-For PostgreSQL contract tests, set `SUPABASE_TEST_DATABASE_URL` to a disposable
-test database explicitly. Normal `npm test` does not write any Supabase data.
+PostgreSQL contract tests must use an explicitly configured local disposable
+database. Normal `npm test` does not connect to Supabase or the production database.

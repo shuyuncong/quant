@@ -3,12 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { Client } from "pg";
+import { assertLocalDevelopmentDatabase } from "./db-safety.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaSql = fs.readFileSync(path.join(root, "db", "schema.sql"), "utf8");
 const mode = process.argv[2] ?? "";
 const connectionString = process.env.DATABASE_URL?.trim();
 if (!connectionString) throw new Error("DATABASE_URL is required");
+// 旧 SQLite 迁移/快照工具只允许本地开发库。生产迁移必须使用受控的
+// db:setup 与单向 db:sync-from-prod 流程，禁止本地业务数据上行。
+assertLocalDevelopmentDatabase(connectionString);
 const parsedUrl = new URL(connectionString);
 const servername = process.env.DATABASE_SSL_SERVERNAME?.trim();
 const local = parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1" || parsedUrl.hostname === "::1";

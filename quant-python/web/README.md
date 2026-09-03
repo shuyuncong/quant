@@ -27,25 +27,20 @@ npm run dev
 
 打开 http://localhost:3111 （也可 `npm run start` 生产模式；默认仅绑定 127.0.0.1）。
 
-### 数据库连接（Supabase）
+### 数据库连接（本地开发）
 
-Web 数据库使用 Supabase PostgreSQL（`web/.env.local` 的 `DATABASE_URL`）。
-开发机直连 AWS pooler 会被网络策略在 TLS 层掐断，因此 `npm run dev` 会自动
-启动一个本地中继 `scripts/db-tunnel.mjs`：
+本地开发只允许连接本机 Docker PostgreSQL，例如：
 
-- 监听 `127.0.0.1:15432`（即 `.env.local` 里 `DATABASE_URL` 的地址）；
-- 通过本机 Clash HTTP 代理（`127.0.0.1:7890`）以 `CONNECT` 隧道转发到
-  `aws-0-ap-southeast-1.pooler.supabase.com:5432`。
-
-如中继端口/代理地址不同，可用环境变量覆盖后手动启动：
-
-```bash
-npm run db:tunnel                      # 默认 7890 / supabase pooler
-RELAY_PROXY=127.0.0.1:7891 npm run db:tunnel   # 自定义代理
+```dotenv
+DATABASE_URL=postgresql://quant:<本地密码>@127.0.0.1:5432/quant
+DATABASE_SSL_MODE=disable
+SCHEDULER_DISABLED=1
 ```
 
-若 `npm run dev` 报 `connect ECONNREFUSED 127.0.0.1:15432`，说明中继未启动
-（或 Clash 代理未运行）——请先确认 7890 端口有代理在监听。
+`npm run dev` 只允许 `loopback:5432/quant`，并按 Next.js 的完整 dotenv 优先级先执行门禁。
+旧的 Supabase 默认中继已经移除；
+`npm run db:tunnel` 只有显式设置 `RELAY_TARGET` 才能启动，仅保留给服务器侧受控操作，
+不作为开发机连接生产库的方式。
 
 Web 通过 `quant-python/signal_system/web_bridge.py` 以子进程方式调用现有引擎（分析/扫描/监控/推送/日历/outbox）。请勿删除该文件。
 

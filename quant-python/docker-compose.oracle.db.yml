@@ -1,0 +1,51 @@
+# Oracle Cloud 服务器专用 DB override（与 docker-compose.oracle.yml 配套使用）
+#
+# 用法（切换阶段，显式引入本文件）：
+#   docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d
+#
+# 设计说明：
+#   - 独立 override 文件：主 compose 不含 quant-db；切换前/legacy 自动部署只跑主 compose，
+#     selfhost 自动部署才叠加本文件。回滚到 Supabase 时不会被 quant-db 阻塞
+#   - quant-db 不暴露端口、仅加入 internal 网络，只允许同一 compose 项目内服务连接
+#   - 角色分离：quant_owner（schema 所有者/DDL，由 db:setup 使用）、
+#     quant_app（应用运行时，DATABASE_URL 使用）、quant_backup（只读，pg_dump 用）
+#     —— Web 应用不直接使用数据库超级用户
+#   - quant-web 不声明 depends_on quant-db（无健康门禁），保证回滚到 Supabase 时
+#     即使 quant-db 故障也能启动；应用层 pg 连接池自带重试
+services:
+  quant-db:
+    image: postgres:16-bookworm
+    container_name: quant-db
+    restart: unless-stopped
+    environment:
+      # 容器内超级用户 = quant_owner（建库/DDL/授权用，不暴露给应用）
+      POSTGRES_DB: quant
+      POSTGRES_USER: quant_owner
+      POSTGRES_PASSWORD: "${PG_OWNER_PASSWORD:?PG_OWNER_PASSWORD must be set}"
+      TZ: Asia/Shanghai
+    volumes:
+      # 宿主机目录：备份脚本可打包；与现有 TARGETS 约定一致
+      - /opt/docker/quant/db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "quant_owner", "-d", "quant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 覆盖主 compose 的 quant-web：连接自建库
+  quant-web:
+    environment:
+      # 应用以受限角色 quant_app 连接，非超级用户
+      DATABASE_URL: "postgresql://quant_app:${PG_APP_PASSWORD:?PG_APP_PASSWORD must be set}@quant-db:5432/quant"
+      DATABASE_SSL_MODE: "disable"
+    networks:
+      - default
+      - internal
+
+networks:
+  # 独立内部网络：quant-db 只加入 internal，不加入 default 对外网络
+  internal:
+    internal: true
