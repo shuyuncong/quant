@@ -110,6 +110,62 @@ def test_invalid_sixty_day_base_price_is_rejected():
     assert result["factor_error"] == "invalid_pre_entry_60d_return"
 
 
+def test_signal_day_before_cached_history_fails_closed(monkeypatch, tmp_path):
+    frame = _frame()
+    frame["datetime"] = pd.bdate_range("2026-03-11", periods=len(frame))
+    frame["is_closed"] = True
+    frame.to_pickle(tmp_path / "000001_qfq.pkl")
+    monkeypatch.setattr(audit, "HISTORY_DIR", tmp_path)
+    source = {
+        "symbol": "000001",
+        "signal_day": "2025-03-07",
+        "signal_type": "macd_above",
+    }
+
+    features, meta = audit._factor_features_for_sources([source])
+    identifier = audit.candidate_id(source)
+
+    assert features[identifier]["factor_error"] == "signal_day_before_history"
+    assert meta["replay_history_coverage_safe"] is False
+    assert meta["replay_history_coverage_failures"] == [
+        {
+            "candidate_id": identifier,
+            "symbol": "000001",
+            "signal_day": "2025-03-07",
+            "history_first_day": "2026-03-11",
+            "history_last_day": "2026-06-30",
+            "error": "signal_day_before_history",
+        }
+    ]
+    with pytest.raises(RuntimeError, match="replay history coverage unsafe"):
+        audit._assert_replay_history_coverage_safe(meta)
+
+
+def test_missing_signal_bar_inside_cached_history_fails_closed(monkeypatch, tmp_path):
+    frame = _frame()
+    missing_day = pd.Timestamp(frame.loc[40, "datetime"]).date().isoformat()
+    frame = frame.drop(index=40).reset_index(drop=True)
+    frame["is_closed"] = True
+    frame.to_pickle(tmp_path / "000001_qfq.pkl")
+    monkeypatch.setattr(audit, "HISTORY_DIR", tmp_path)
+    source = {
+        "symbol": "000001",
+        "signal_day": missing_day,
+        "signal_type": "macd_above",
+    }
+
+    features, meta = audit._factor_features_for_sources([source])
+    identifier = audit.candidate_id(source)
+
+    assert features[identifier]["factor_error"] == "missing_signal_bar"
+    assert meta["replay_history_coverage_safe"] is False
+    assert meta["replay_history_coverage_failures"][0]["error"] == (
+        "missing_signal_bar"
+    )
+    with pytest.raises(RuntimeError, match="replay history coverage unsafe"):
+        audit._assert_replay_history_coverage_safe(meta)
+
+
 def test_same_day_halves_include_high_momentum_candidates_only():
     rows = [
         _row("000001", "2026-01-02", 0.10),
@@ -151,4 +207,3 @@ def test_cross_split_gate_requires_all_eligible_splits_to_be_positive():
 def test_holdout_split_is_rejected_before_input_access():
     with pytest.raises(RuntimeError, match="cannot consume holdout"):
         audit.run(argparse.Namespace(splits=["holdout"]))
-

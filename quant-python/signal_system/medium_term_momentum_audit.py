@@ -168,6 +168,7 @@ def _factor_features_for_sources(
     history_hashes: dict[str, str] = {}
     features: dict[str, dict[str, Any]] = {}
     errors: Counter = Counter()
+    replay_history_coverage_failures: list[dict[str, Any]] = []
     for source in sources:
         identifier = candidate_id(source)
         if identifier in features:
@@ -192,16 +193,33 @@ def _factor_features_for_sources(
         day_values = pd.to_datetime(frame["datetime"]).dt.date
         matches = frame.index[day_values == signal_day].tolist()
         if not matches:
+            first_history_day = day_values.iloc[0]
+            last_history_day = day_values.iloc[-1]
+            coverage_error = "missing_signal_bar"
+            if signal_day < first_history_day:
+                coverage_error = "signal_day_before_history"
+            elif signal_day > last_history_day:
+                coverage_error = "signal_day_after_history"
             base.update(
                 {
                     **{factor: None for factor in FACTOR_SPECS},
                     "factor_assignment_available": False,
-                    "factor_error": "missing_signal_bar",
+                    "factor_error": coverage_error,
                     "momentum_lookback_bars": None,
                     "entry_timing": "T+1",
                 }
             )
-            errors["missing_signal_bar"] += 1
+            errors[coverage_error] += 1
+            replay_history_coverage_failures.append(
+                {
+                    "candidate_id": identifier,
+                    "symbol": symbol,
+                    "signal_day": signal_day.isoformat(),
+                    "history_first_day": first_history_day.isoformat(),
+                    "history_last_day": last_history_day.isoformat(),
+                    "error": coverage_error,
+                }
+            )
             features[identifier] = base
             continue
         factor = _momentum_features(frame, int(matches[-1]))
@@ -224,6 +242,8 @@ def _factor_features_for_sources(
         "history_manifest_sha256": history_manifest,
         "history_symbol_count": len(history_hashes),
         "factor_errors": dict(errors),
+        "replay_history_coverage_safe": not replay_history_coverage_failures,
+        "replay_history_coverage_failures": replay_history_coverage_failures,
         "diagnostic_unavailable_counts": diagnostic_unavailable,
         "primary_definition": (
             "close(signal_day)/close(signal_day-60_sessions)-1"
@@ -241,6 +261,20 @@ def _factor_features_for_sources(
         "signal_day_closed_bars_only": True,
         "entry_timing": "T+1",
     }
+
+
+def _assert_replay_history_coverage_safe(factor_meta: dict[str, Any]) -> None:
+    failures = list(factor_meta.get("replay_history_coverage_failures") or [])
+    if not failures:
+        return
+    examples = ", ".join(
+        str(item.get("candidate_id", "unknown")) for item in failures[:5]
+    )
+    raise RuntimeError(
+        "replay history coverage unsafe: "
+        f"{len(failures)} candidate signal day(s) are absent from local QFQ history; "
+        f"examples: {examples}. Refresh the local QFQ cache before replay."
+    )
 
 
 def _assign_primary_halves(rows: list[dict[str, Any]]) -> None:
@@ -529,6 +563,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             sources,
         )
         feature_map, factor_meta = _factor_features_for_sources(sources)
+        _assert_replay_history_coverage_safe(factor_meta)
         replay_rows, replay_skips, source_match = _replay_split(source_path, config)
         enriched: list[dict[str, Any]] = []
         for replay in replay_rows:

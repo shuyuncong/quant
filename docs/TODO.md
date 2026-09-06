@@ -291,17 +291,19 @@
 - [x] 短期过热正式候选层回测：样本与覆盖充足，train/val 点估计支持“越冷越好”，但 test future_40d 反转且所有关键 CI 跨 0；`candidate_gate.pass=false`
 - [x] 短期过热主因子已拒绝：不反向测试“越热越好”，不扫描其他回看周期，不从 5 日涨幅、距高点或跳空中事后择优，生产维持 P0
 - [x] 中期动量候选层审计器已实现：唯一主因子固定为 `pre_entry_60d_return` 越高越好；20 日收益、20/60 对数日均加速度和 60 日上涨比例仅作诊断
-- [ ] 中期动量正式候选层回测：由独立模型在 canonical train/val/test 上执行 2000 次股票聚类 bootstrap；禁止使用 Holdout、阈值扫描、反向重测或组合层
-- [ ] 中期动量因子尚未通过：正式报告返回前生产维持 P0；若再次失败，暂停继续扩展入场技术因子
+- [x] 中期动量正式候选层回测：train 方向与假设相反，val/test 混合，全部关键 CI 跨 0，`candidate_gate.pass=false`
+- [x] 中期动量因子已拒绝：不反向重测、不扫描其他周期、不进入组合层，生产维持 P0；暂停继续扩展入场技术因子
 
 优先保留具备跨窗口稳定性的因子，最多进入两个正交因子后再做组合验证。
 
 ### 28. 第二优先级：风险与可执行性因子
 
-- [ ] ATR 百分比和下行波动率
+- [x] ATR20 百分比正式候选层审计：train 两个主结果均为负，跨 split 不一致，关键 CI 多数跨 0，`candidate_gate.pass=false`；下行半偏差仅诊断，生产维持 P0
 - [ ] 成交额、换手率及流动性稳定度
-- [ ] 个股 Beta × 市场状态
-- [ ] 跳空风险、跌停频率、涨停后追高风险
+- [x] 低 Beta60 风险候选层审计器已实现：全 canonical 同日 low-high 为主；原 range/bear-only 方案因 train/test 先天样本不足在实现前调整；regime、correlation、downside beta、残差波动仅诊断
+- [x] 低 Beta60 正式候选层回测：train/val/test 主结果方向不一致，全部 bootstrap CI 跨 0，`candidate_gate.pass=false`；不进入组合层，生产维持 P0
+- [x] 跳空风险正式候选层审计：唯一主因子固定为 60 日下行开盘 gap 半偏差，同日低风险组减高风险组；跌停开盘代理、大跌 gap 频率、最差 gap、none 口径和涨停后追高 gap 仅作诊断。train 两个主结果均为负，test trade PnL 为负，所有主 CI 跨 0，`candidate_gate.pass=false`；不反向测试、不扫描阈值/周期、不进入组合层，生产维持 P0
+- [x] Overnight Variance Share60 风险候选层正式回测：隔夜平方收益占“隔夜+盘中平方收益”代理的比例；train/val/test 方向混杂，全部关键 bootstrap CI 跨 0，`candidate_gate.pass=false`；不进入组合层，生产维持 P0
 - [ ] 行业集中度和组合相关性
 - [ ] 同日候选拥挤度、行业信号密度
 
