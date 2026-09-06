@@ -18,7 +18,7 @@ import type {
 
 export type { ScheduleRow };
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const SCHEDULER_LOCK_KEY = 1_907_082_026;
 const WATCHLIST_LOCK_KEY = 1_907_082_027;
 

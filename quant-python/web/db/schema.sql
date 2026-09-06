@@ -120,3 +120,29 @@ BEGIN
   END IF;
 END
 $permissions$;
+
+-- v2: self-hosted PostgreSQL 角色授权块（切换 commit）
+-- 角色本体由 db:setup 的 QUANT_SETUP_ROLES=1 通道创建（带密码、幂等）；
+-- 本块只做授权，且仅在角色已存在时生效，避免未初始化环境 DDL 失败。
+INSERT INTO quant.schema_meta (version) VALUES (2)
+ON CONFLICT (version) DO NOTHING;
+
+DO $grants$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'quant_app') THEN
+    GRANT USAGE ON SCHEMA quant TO quant_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA quant TO quant_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA quant TO quant_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA quant
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO quant_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA quant
+      GRANT USAGE, SELECT ON SEQUENCES TO quant_app;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'quant_backup') THEN
+    GRANT USAGE ON SCHEMA quant TO quant_backup;
+    GRANT SELECT ON ALL TABLES IN SCHEMA quant TO quant_backup;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA quant
+      GRANT SELECT ON TABLES TO quant_backup;
+  END IF;
+END
+$grants$;
