@@ -141,8 +141,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'quant_backup') THEN
     GRANT USAGE ON SCHEMA quant TO quant_backup;
     GRANT SELECT ON ALL TABLES IN SCHEMA quant TO quant_backup;
+    -- pg_dump 需读取序列 last_value；缺此权限时备份报
+    -- "permission denied for sequence xxx_id_seq"。
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA quant TO quant_backup;
     ALTER DEFAULT PRIVILEGES IN SCHEMA quant
       GRANT SELECT ON TABLES TO quant_backup;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA quant
+      GRANT USAGE, SELECT ON SEQUENCES TO quant_backup;
   END IF;
 END
 $grants$;
