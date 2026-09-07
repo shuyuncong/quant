@@ -72,8 +72,11 @@ try {
   await prodClient.connect();
   await localClient.connect();
   if (syncPolicy.targetHost === "quant-db") {
-    const expectedVersion = Number(
-      schemaSql.match(/INSERT\s+INTO\s+quant\.schema_meta\s*\(version\)\s*VALUES\s*\((\d+)\)/i)?.[1] ?? 0,
+    const expectedVersion = Math.max(
+      0,
+      ...[...schemaSql.matchAll(
+        /INSERT\s+INTO\s+quant\.schema_meta\s*\(version\)\s*VALUES\s*\((\d+)\)/gi,
+      )].map((m) => Number(m[1])),
     );
     const actualVersion = await localClient.query(
       "SELECT version FROM quant.schema_meta ORDER BY version DESC LIMIT 1",
