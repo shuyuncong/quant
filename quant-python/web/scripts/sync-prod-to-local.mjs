@@ -120,7 +120,11 @@ try {
   await localClient.query("COMMIT");
   console.log(JSON.stringify({ mode: "prod-to-local", counts }));
 } catch (error) {
-  await localClient.query("ROLLBACK").catch(() => undefined);
+  // 仅在 localClient 已连接时才 ROLLBACK；连接失败场景下 localClient 可能从未
+  // connect，对其 query 会让 pg 排队等待连接而永久挂起、吞掉真实错误。
+  if (!localClient.ended && localClient._connected) {
+    await localClient.query("ROLLBACK").catch(() => undefined);
+  }
   throw error;
 } finally {
   await prodClient.end().catch(() => undefined);
