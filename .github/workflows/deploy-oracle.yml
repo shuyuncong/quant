@@ -11,6 +11,11 @@ on:
       - "quant-python/signal_system/**"
       - "quant-python/core/**"
       - "quant-python/backtest/**"
+      # deploy 脚本/工作流自身变更也触发：否则服务器 /home/ubuntu/ops/deploy-quant.sh
+      # 永远停在旧版（GHA 用旧脚本部署，旧脚本不会同步自己）——本仓库曾因此
+      # 在切换自建库后用旧脚本重建 web、丢失 internal 网络。
+      - "docs/ops/deploy-quant.sh"
+      - ".github/workflows/deploy-oracle.yml"
 
 concurrency:
   # 同一时间只允许一个部署任务，避免并发 pull/build 冲突
