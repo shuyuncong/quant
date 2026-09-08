@@ -1,0 +1,61 @@
+.stock-report-page {
+  --report-blue: #0369a1;
+  max-width: 1560px;
+  margin-inline: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f5f7fa;
+}
+.dark .stock-report-page { --report-blue: #7dd3fc; background: #11161e; }
+.stock-report-page .report-panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.stock-report-page .report-stock-header { border-top: 3px solid var(--report-blue); padding-top: 24px; }
+.stock-report-page .report-section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 20px; }
+.stock-report-page .report-section-heading h3 { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; }
+.stock-report-page .report-section-heading h3 > span { color: var(--report-blue); font: 500 12px var(--font-geist-mono), monospace; border-left: 3px solid var(--report-blue); padding-left: 10px; }
+.stock-report-page .report-summary-line { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; padding: 12px 14px; border-radius: 6px; color: var(--report-blue); background: color-mix(in srgb, var(--report-blue) 7%, transparent); font-size: 13px; line-height: 1.7; }
+.stock-report-page .report-summary-line > svg { margin-top: 3px; }
+.stock-report-page .report-state { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 18px; background: var(--card); }
+.stock-report-page .report-state-positive > p:first-of-type { color: var(--report-blue); }
+.stock-report-page .report-state-warning > p:first-of-type { color: #92400e; }
+.stock-report-page .report-state-danger > p:first-of-type { color: #be123c; }
+.dark .stock-report-page .report-state-warning > p:first-of-type { color: #fcd34d; }
+.dark .stock-report-page .report-state-danger > p:first-of-type { color: #fda4af; }
+.stock-report-page .report-up { color: #be123c; }
+.stock-report-page .report-down { color: #047857; }
+.dark .stock-report-page .report-up { color: #fb7185; }
+.dark .stock-report-page .report-down { color: #34d399; }
+.stock-report-page .report-tag { display: inline-flex; align-items: center; width: fit-content; padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--muted); color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
+.stock-report-page .report-select { padding: 8px 30px 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); font-size: 13px; }
+.stock-report-page .report-period { cursor: pointer; padding: 6px 14px; border: 1px solid transparent; border-radius: 5px; font-size: 13px; color: var(--muted-foreground); }
+.stock-report-page .report-period:hover { background: var(--muted); color: var(--foreground); }
+.stock-report-page .report-period[aria-pressed="true"] { background: color-mix(in srgb, var(--report-blue) 9%, transparent); color: var(--report-blue); border-color: color-mix(in srgb, var(--report-blue) 25%, transparent); font-weight: 600; }
+.stock-report-page .report-chart-readout { display: flex; flex-wrap: wrap; gap: 6px 16px; min-height: 36px; padding: 9px 12px; border-radius: 6px; background: var(--muted); color: var(--muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; }
+.stock-report-page .report-chart-empty { display: grid; min-height: 260px; align-content: center; padding: 24px; text-align: center; font-size: 14px; color: var(--muted-foreground); background: var(--muted); border-radius: 8px; }
+.stock-report-page .report-table { width: 100%; text-align: left; font-size: 13px; border-collapse: collapse; }
+.stock-report-page .report-table thead { color: var(--muted-foreground); background: var(--muted); }
+.stock-report-page .report-table th, .stock-report-page .report-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.stock-report-page .report-table th { font-weight: 500; }
+.stock-report-page .report-table td.whitespace-normal { white-space: normal; }
+.stock-report-page .report-table tbody tr:last-child > * { border-bottom: 0; }
+.stock-report-page .report-table tbody tr[data-active="true"] { background: color-mix(in srgb, var(--report-blue) 5%, transparent); }
+.stock-report-page .report-period-link { cursor: pointer; color: var(--report-blue); padding-block: 4px; font-weight: 600; }
+.stock-report-page .report-period-link:hover { text-decoration: underline; }
+.stock-report-page .report-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 12px; }
+.stock-report-page .report-metrics dt { font-size: 12px; color: var(--muted-foreground); }
+.stock-report-page .report-metrics dd { margin-top: 6px; font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stock-report-page .report-notice { padding: 12px 16px; border: 1px solid #fcd34d; border-radius: 8px; background: #fffbeb; color: #92400e; font-size: 13px; line-height: 1.6; }
+.dark .stock-report-page .report-notice { border-color: #713f12; background: #292214; color: #fde68a; }
+.stock-report-page .report-history > [data-slot="card"] { margin-top: 8px; box-shadow: none; }
+.stock-report-page button:focus-visible, .stock-report-page select:focus-visible, .stock-report-page input:focus-visible, .stock-report-page summary:focus-visible { outline: 2px solid var(--report-blue); outline-offset: 3px; }
+@media (max-width: 640px) {
+  .stock-report-page { padding: 0; background: transparent; }
+  .stock-report-page .report-panel { padding: 16px; }
+  .stock-report-page .report-section-heading { margin-bottom: 16px; }
+  .stock-report-page .report-table th, .stock-report-page .report-table td { padding: 10px; }
+}

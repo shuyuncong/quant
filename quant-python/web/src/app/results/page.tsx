@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,9 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { SymbolCombobox } from "@/components/symbol-combobox";
+import { StockReportLoader } from "@/components/stock-analysis-report";
+import { type DataBar, type DataTimeframe, type DataResult, type DataSource } from "@/lib/stock-report";
+import "./report.css";
 
 interface NoteRow {
   id: number;
@@ -64,49 +67,6 @@ interface JobRow {
   finished_at: string | null;
   note: NoteRow | null;
 }
-interface DataBar {
-  datetime: string;
-  open: number | null;
-  high: number | null;
-  low: number | null;
-  close: number | null;
-  volume: number | null;
-  dif: number | null;
-  dea: number | null;
-  hist: number | null;
-}
-
-interface DataTimeframe {
-  timeframe: string;
-  status: string;
-  latest_time: string | null;
-  latest_price: number | null;
-  bar_count: number;
-  buy_score: number | null;
-  sell_score: number | null;
-  error: string | null;
-  bars: DataBar[];
-}
-
-interface DataResult {
-  symbol: string;
-  name: string;
-  status: string | null;
-  analyzed_at: string | null;
-  timeframes: DataTimeframe[];
-}
-
-interface DataSource {
-  mode: string;
-  analyzed_at: string | null;
-  scanned_at: string | null;
-  market_context: Record<string, unknown> | null;
-  delivery: Record<string, unknown> | null;
-  results: DataResult[];
-  candidates: Array<Record<string, unknown>>;
-  errors: Array<Record<string, unknown>>;
-}
-
 const KIND_LABEL: Record<string, string> = {
   analyze: "个股分析",
   scan: "日线扫描",
@@ -364,6 +324,8 @@ export default function ResultsPage() {
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [reportRetry, setReportRetry] = useState(0);
+  const dataRequest = useRef(0);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -377,6 +339,7 @@ export default function ResultsPage() {
   }, []);
 
   const openDataSource = useCallback(async (job: JobRow) => {
+    const requestId = ++dataRequest.current;
     setDataJob(job);
     setDataSource(null);
     setDataError(null);
@@ -384,15 +347,16 @@ export default function ResultsPage() {
     try {
       const response = await fetch(`/api/jobs/${job.id}/data`);
       const data = (await response.json().catch(() => ({}))) as DataSource & { error?: string };
+      if (requestId !== dataRequest.current) return;
       if (!response.ok) {
         setDataError(data.error || `请求失败: ${response.status}`);
       } else {
         setDataSource(data);
       }
     } catch {
-      setDataError("加载数据源失败");
+      if (requestId === dataRequest.current) setDataError("加载数据源失败");
     } finally {
-      setDataLoading(false);
+      if (requestId === dataRequest.current) setDataLoading(false);
     }
   }, []);
 
@@ -418,11 +382,15 @@ export default function ResultsPage() {
     [notify, loadJobs]
   );
 
+  const selectedJobView = selectedJob
+    ? jobs.find((job) => job.id === selectedJob.id) ?? selectedJob
+    : null;
+
   const interpret = useCallback(async () => {
-    if (!selectedJob) return;
+    if (!selectedJobView) return;
     setInterpreting(true);
     try {
-      const data = (await postJson(`/api/jobs/${selectedJob.id}/interpret`, {})) as {
+      const data = (await postJson(`/api/jobs/${selectedJobView.id}/interpret`, {})) as {
         content?: string;
         model?: string;
       };
@@ -433,16 +401,20 @@ export default function ResultsPage() {
         model: data.model ?? "",
         created_at: new Date().toISOString(),
       };
-      setSelectedJob((prev) => (prev ? { ...prev, note } : prev));
-      setJobs((prev) => prev.map((job) => (job.id === selectedJob.id ? { ...job, note } : job)));
+      setSelectedJob((prev) => (prev?.id === selectedJobView.id ? { ...prev, note } : prev));
+      setJobs((prev) => prev.map((job) => (job.id === selectedJobView.id ? { ...job, note } : job)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "AI 解读失败");
     } finally {
       setInterpreting(false);
     }
-  }, [selectedJob]);
+  }, [selectedJobView]);
 
   const running = jobs.some((job) => job.status === "running" || job.status === "pending");
+  const openAnalysis = (job: JobRow) => {
+    setReportRetry(0);
+    setSelectedJob(job);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -610,7 +582,7 @@ export default function ResultsPage() {
                       >
                         <Database className="size-4" /> 数据源
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => setSelectedJob(job)}>
+                      <Button variant="outline" size="sm" onClick={() => openAnalysis(job)}>
                         <Eye className="size-4" /> 查看 AI 分析
                       </Button>
                     </div>
@@ -629,47 +601,76 @@ export default function ResultsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={selectedJob !== null} onOpenChange={(open) => !open && setSelectedJob(null)}>
-        <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
+      <Dialog open={selectedJobView !== null} onOpenChange={(open) => !open && setSelectedJob(null)}>
+        <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 gap-1 border-b pb-4 pl-6 pr-16 pt-4">
             <DialogTitle>
-              AI 分析 #{selectedJob?.id}（{selectedJob ? KIND_LABEL[selectedJob.kind] ?? selectedJob.kind : ""}）
+              分析详情 #{selectedJobView?.id}（{selectedJobView ? KIND_LABEL[selectedJobView.kind] ?? selectedJobView.kind : ""}）
             </DialogTitle>
             <DialogDescription>
-              {selectedJob?.created_at}
-              {selectedJob?.note?.model ? " · 模型：" + selectedJob.note.model : ""}
-              {selectedJob?.result_path ? " · " + fileName(selectedJob.result_path) : ""}
+              {selectedJobView?.created_at}
+              {selectedJobView?.note?.model ? " · 模型：" + selectedJobView.note.model : ""}
+              {selectedJobView?.result_path ? " · " + fileName(selectedJobView.result_path) : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
-            {selectedJob?.status === "running" || selectedJob?.status === "pending" ? (
-              <p className="text-sm text-muted-foreground">任务正在运行，结果生成后会自动解读并在本页出现。</p>
-            ) : selectedJob?.status === "failed" ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-                {selectedJob.error || "任务失败，无解读"}
-              </div>
-            ) : selectedJob?.note ? (
-              <MarkdownContent content={selectedJob.note.content} />
-            ) : (
-              <div className="flex flex-col items-start gap-3">
-                <p className="text-sm text-muted-foreground">该任务暂无 AI 解读，点击下方按钮手动生成。</p>
-                <Button onClick={() => void interpret()} disabled={interpreting}>
-                  <Sparkles className="size-4" />
-                  {interpreting ? "生成中..." : "生成 AI 解读"}
-                </Button>
-                {selectedJob?.result_path && (
-                  <>
-                    <Separator />
-                    <pre className="text-xs text-muted-foreground">{selectedJob.result_path}</pre>
-                  </>
-                )}
-              </div>
+          <Tabs
+            key={`${selectedJobView?.id}:${selectedJobView?.status}:${selectedJobView?.result_path ?? ""}`}
+            defaultValue="ai"
+            className="flex min-h-0 flex-1 flex-col gap-0"
+          >
+            <TabsList variant="line" className="w-full shrink-0 justify-start rounded-none border-b px-6">
+              <TabsTrigger value="ai" className="flex-none px-3">AI 解读</TabsTrigger>
+              {selectedJobView?.kind === "analyze" && <TabsTrigger value="report" className="flex-none px-3">研究报告</TabsTrigger>}
+            </TabsList>
+            {selectedJobView?.kind === "analyze" && (
+              <TabsContent value="report" className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
+                <div className="stock-report-page">
+                  {selectedJobView.status === "running" || selectedJobView.status === "pending" ? (
+                    <div className="report-panel text-sm text-muted-foreground">任务正在运行，完成后可查看研究报告。</div>
+                  ) : selectedJobView.status === "failed" ? (
+                    <div className="report-panel text-sm text-destructive">{selectedJobView.error || "任务失败，无研究报告"}</div>
+                  ) : selectedJobView.result_path ? (
+                    <StockReportLoader
+                      key={`${selectedJobView.id}:${reportRetry}`}
+                      jobId={selectedJobView.id}
+                      onRetry={() => setReportRetry((value) => value + 1)}
+                    />
+                  ) : (
+                    <div className="report-panel text-sm text-muted-foreground">该任务没有可读取的结果文件。</div>
+                  )}
+                </div>
+              </TabsContent>
             )}
-          </div>
+            <TabsContent value="ai" className="min-h-0 flex-1 overflow-y-auto p-6">
+              {selectedJobView?.status === "running" || selectedJobView?.status === "pending" ? (
+                <p className="text-sm text-muted-foreground">任务正在运行，结果生成后会自动解读并在本页出现。</p>
+              ) : selectedJobView?.status === "failed" ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                  {selectedJobView.error || "任务失败，无解读"}
+                </div>
+              ) : selectedJobView?.note ? (
+                <MarkdownContent content={selectedJobView.note.content} />
+              ) : (
+                <div className="flex flex-col items-start gap-3">
+                  <p className="text-sm text-muted-foreground">该任务暂无 AI 解读，点击下方按钮手动生成。</p>
+                  <Button onClick={() => void interpret()} disabled={interpreting}>
+                    <Sparkles className="size-4" />
+                    {interpreting ? "生成中..." : "生成 AI 解读"}
+                  </Button>
+                  {selectedJobView?.result_path && (
+                    <>
+                      <Separator />
+                      <pre className="text-xs text-muted-foreground">{selectedJobView.result_path}</pre>
+                    </>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dataJob !== null} onOpenChange={(open) => !open && setDataJob(null)}>
+      <Dialog open={dataJob !== null} onOpenChange={(open) => { if (!open) { dataRequest.current++; setDataJob(null); } }}>
         <DialogContent className="flex max-h-[85vh] w-[95vw] max-w-[1200px] flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 gap-1 border-b pb-4 pl-6 pr-16 pt-4">
             <DialogTitle>
