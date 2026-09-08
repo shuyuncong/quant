@@ -126,6 +126,39 @@ class OutboxSummaryTests(unittest.TestCase):
         self.assertEqual(summary["total_events"], 0)
 
 
+class ResolveNamesTests(unittest.TestCase):
+    def test_empty_symbols_returns_empty_names(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            result = web_bridge._cmd_resolve_names(web_bridge._default_config_path(), {})
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(buffer.getvalue()), {"ok": True, "data": {"names": {}}})
+
+    def test_resolves_names_via_monitor(self):
+        monitor = mock.MagicMock()
+        monitor._resolve_names.return_value = {"600036.SH": "招商银行"}
+        buffer = io.StringIO()
+        with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+            with contextlib.redirect_stdout(buffer):
+                result = web_bridge._cmd_resolve_names(
+                    web_bridge._default_config_path(),
+                    {"symbols": ["600036"]},
+                )
+        self.assertEqual(result, 0)
+        monitor._resolve_names.assert_called_once_with(["600036"])
+        self.assertEqual(
+            json.loads(buffer.getvalue()),
+            {"ok": True, "data": {"names": {"600036.SH": "招商银行"}}},
+        )
+
+    def test_defensive_about_missing_or_non_list_symbols(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            result = web_bridge._cmd_resolve_names(web_bridge._default_config_path(), {"symbols": "600036"})
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(buffer.getvalue()), {"ok": True, "data": {"names": {}}})
+
+
 class SummaryNotificationTests(unittest.TestCase):
     def test_notify_summary_requires_content(self):
         result = web_bridge._cmd_notify_summary(web_bridge._default_config_path(), {})

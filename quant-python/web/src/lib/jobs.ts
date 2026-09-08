@@ -244,6 +244,25 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
     payload.holdings = await listHoldings();
     payload.total_capital = await getTotalCapital();
   }
+  if (kind === "analyze" && Array.isArray(payload.symbols) && payload.symbols.length > 0) {
+    // 手动输入的代码往往不在股票池/持仓，最近任务列表会缺失名称；创建时用全市场列表解析一次。
+    // 解析失败不阻塞任务创建，列表展示回退到代码本身。
+    try {
+      const outcome = await runBridge(
+        "resolve-names",
+        { symbols: payload.symbols },
+        { timeoutMs: 20_000 }
+      );
+      if (outcome.ok && outcome.data && typeof outcome.data === "object") {
+        const result = outcome.data;
+        if ("names" in result && typeof result.names === "object" && result.names !== null) {
+          payload.symbol_names = result.names;
+        }
+      }
+    } catch {
+      /* 名称解析失败时继续创建任务 */
+    }
+  }
   const jobId = await createJob(kind, payload);
   await updateJob(jobId, { status: "running", started_at: nowIso() });
   await addOperationLog({

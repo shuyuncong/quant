@@ -225,6 +225,20 @@ def _cmd_normalize(text: str) -> int:
     return _emit(_parse_normalize(text))
 
 
+def _cmd_resolve_names(config_path: str, payload: dict[str, Any]) -> int:
+    """把股票代码解析为名称映射（手动输入代码时供最近任务列表展示真实名称）。
+
+    使用与报告生成一致的 24h 全市场列表缓存；未知代码保持原样，不报错。
+    """
+    raw = payload.get("symbols")
+    symbols = [str(s).strip() for s in raw] if isinstance(raw, list) else []
+    if not symbols:
+        return _emit({"names": {}})
+    monitor = _make_monitor(config_path, payload.get("overrides"))
+    names = monitor._resolve_names(symbols)
+    return _emit({"names": names})
+
+
 def _cmd_analyze(config_path: str, payload: dict[str, Any]) -> int:
     symbols = payload.get("symbols") or []
     if not symbols:
@@ -360,6 +374,7 @@ def _cmd_calendar(config_path: str, payload: dict[str, Any]) -> int:
 COMMANDS = {
     "config": lambda p, o: _cmd_config(p, o),
     "normalize": lambda p, o: _cmd_normalize((o or {}).get("text", "")),
+    "resolve-names": lambda p, o: _cmd_resolve_names(p, o),
     "analyze": lambda p, o: _cmd_analyze(p, o),
     "scan": lambda p, o: _cmd_scan(p, o),
     "monitor-once": lambda p, o: _cmd_monitor_once(p, o),
