@@ -151,4 +151,62 @@ describe("holdings context", () => {
     expect(context).not.toContain("账户总资金");
     expect(context).not.toContain("占总资金");
   });
+
+  it("includes latest price and floating gain from the report", () => {
+    const holdings = [
+      {
+        symbol: "600036.SH",
+        name: "招商银行",
+        shares: 1000,
+        cost_price: 30,
+        total_amount: 30000,
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    const report = JSON.stringify({
+      results: [{ symbol: "600036", timeframes: { "1d": { latest_price: 33 } } }],
+    });
+    const context = buildHoldingsContext(report, holdings);
+    expect(context).toContain("现价 33.00 元");
+    expect(context).toContain("浮盈 +10.0%");
+  });
+
+  it("shows floating loss and falls back to any priced timeframe", () => {
+    const holdings = [
+      {
+        symbol: "600036.SH",
+        name: "招商银行",
+        shares: 1000,
+        cost_price: 30,
+        total_amount: 30000,
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    const report = JSON.stringify({
+      results: [{ symbol: "600036", timeframes: { "60m": { latest_price: 27 } } }],
+    });
+    const context = buildHoldingsContext(report, holdings);
+    expect(context).toContain("现价 27.00 元");
+    expect(context).toContain("浮盈 -10.0%");
+  });
+
+  it("omits price bits when the report has no price", () => {
+    const holdings = [
+      {
+        symbol: "600036.SH",
+        name: "招商银行",
+        shares: 1000,
+        cost_price: 30,
+        total_amount: 30000,
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    const report = JSON.stringify({ results: [{ symbol: "600036", timeframes: {} }] });
+    const context = buildHoldingsContext(report, holdings);
+    expect(context).toContain("持仓 1000 股，持仓价 30.00 元");
+    expect(context).not.toContain("现价");
+  });
 });

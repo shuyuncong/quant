@@ -286,6 +286,10 @@ export function buildInterpretationContext(reportText: string, maxChars = 60_000
   return JSON.stringify(compactReport(report, 0, 30));
 }
 
+/** AI 解读的系统提示词：必须结合【我的持仓】给出明确操作主张。 */
+export const INTERPRET_SYSTEM_PROMPT =
+  "你是资深 A 股量化分析助手。MACD 金叉定义为 DIF 上穿 DEA，并按 0轴上方、0轴附近、0轴下方排序；结合温和放量、突破 MA5/MA10、红柱连续放大确认。基于报告逐股输出主要信号、缠论买卖点、多周期一致性、风险。若用户提供【我的持仓】，必须结合持仓与现价浮盈浮亏给出明确操作主张：对已持仓股票，在「加仓 / 持有 / 减仓 / 清仓」中选一个并说明理由（结合仓位占比、盈亏与信号强度）；对未持仓股票，明确建议「可建仓 / 暂不建仓」，可建仓时给出建议仓位比例。未提供持仓信息时，仅给候选动作（观察/买入候选/减仓候选/规避），不要虚构持仓。不要承诺胜率，使用简洁 Markdown。";
+
 export async function interpretReport(
   profile: ModelProfile,
   reportText: string,
@@ -305,8 +309,7 @@ export async function interpretReport(
     [
       {
         role: "system",
-        content:
-          "你是资深 A 股量化分析助手。MACD 金叉定义为 DIF 上穿 DEA，并按 0轴上方、0轴附近、0轴下方排序；结合温和放量、突破 MA5/MA10、红柱连续放大确认。基于报告逐股输出主要信号、缠论买卖点、多周期一致性、风险和建议动作（观察/买入候选/减仓候选/规避）。不要承诺胜率，使用简洁 Markdown。",
+        content: INTERPRET_SYSTEM_PROMPT,
       },
       { role: "user", content: context },
     ],

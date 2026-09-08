@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInterpretationContext, readStreamContent, resolveProxy } from "../llm";
+import { buildInterpretationContext, readStreamContent, resolveProxy, INTERPRET_SYSTEM_PROMPT } from "../llm";
 
 function bars(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -107,5 +107,17 @@ describe("buildInterpretationContext", () => {
       expect(Object.keys(result.timeframes)).toEqual(["1m", "1d"]);
       expect(result.timeframes["1m"].recent_bars.length).toBeLessThan(100);
     }
+  });
+});
+
+describe("INTERPRET_SYSTEM_PROMPT", () => {
+  it("requires explicit action stances tied to holdings", () => {
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("加仓");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("减仓");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("持有");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("清仓");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("可建仓");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("暂不建仓");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("浮盈");
   });
 });
