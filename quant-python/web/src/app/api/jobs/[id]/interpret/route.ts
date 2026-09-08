@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { addNote, addOperationLog, getJob, listNotesByJob } from "@/lib/db";
-import { interpretReport, pickChatModel } from "@/lib/llm";
+import { interpretReport, pickChatModel, extractStandpoints } from "@/lib/llm";
 import {
   buildHoldingsContext,
   holdingsFromJobPayload,
@@ -55,6 +55,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const totalCapital = totalCapitalFromJobPayload(job.payload);
     const context = buildHoldingsContext(report, holdings, totalCapital);
     const content = await interpretReport(profile, report, context);
+    const standpoints = extractStandpoints(content);
     const noteId = await addNote({
       job_id: jobId,
       symbol: "",
@@ -67,7 +68,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       level: "info",
       module: "interpret",
       message: "手动 AI 解读完成",
-      detail: `模型 ${profile.name}，笔记 #${noteId}`,
+      detail:
+        `模型 ${profile.name}，笔记 #${noteId}` +
+        (standpoints.length > 0 ? `\n操作主张：${standpoints.join("；")}` : ""),
     });
     return NextResponse.json({ ok: true, note_id: noteId, content, model: profile.name });
   } catch (error) {

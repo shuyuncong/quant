@@ -334,6 +334,7 @@ def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
             content=content,
             report_path=str(payload.get("report_path", "")),
             confirmed_at=str(payload.get("confirmed_at", "")) or None,
+            action_summary=str(payload.get("action_summary", "")).strip(),
         )
     )
 

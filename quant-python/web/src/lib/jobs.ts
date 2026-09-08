@@ -14,7 +14,7 @@ import {
   updateJob,
 } from "./db";
 import { nowIso } from "./time";
-import { interpretReport, pickChatModel } from "./llm";
+import { interpretReport, pickChatModel, extractStandpoints } from "./llm";
 import { signalSystemDir } from "./paths";
 import {
   buildHoldingsContext,
@@ -91,12 +91,17 @@ async function autoInterpret(
       const context = buildHoldingsContext(reportText, holdings, totalCapital);
       content = await interpretReport(profile!, reportText, context);
       noteId = await addNote({ job_id: parentJobId, result_path: resultPath, content, model: profile!.name });
+    }
+    const standpoints = extractStandpoints(content);
+    if (!existingNote) {
       await addOperationLog({
         job_id: interpretationJobId,
         level: "info",
         module: "auto-interpret",
         message: "自动解读完成",
-        detail: `模型 ${profile!.name}，笔记 #${noteId}`,
+        detail:
+          `模型 ${profile!.name}，笔记 #${noteId}` +
+          (standpoints.length > 0 ? `\n操作主张：${standpoints.join("；")}` : ""),
       });
     }
     const pushOutcome = await runBridge(
@@ -106,6 +111,7 @@ async function autoInterpret(
         content,
         report_path: resultPath,
         confirmed_at: notificationAt,
+        action_summary: standpoints.join("；"),
         overrides: await buildOverrides(),
       },
       { timeoutMs: 120_000 }

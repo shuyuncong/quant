@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInterpretationContext, readStreamContent, resolveProxy, INTERPRET_SYSTEM_PROMPT } from "../llm";
+import { buildInterpretationContext, readStreamContent, resolveProxy, INTERPRET_SYSTEM_PROMPT, extractStandpoints } from "../llm";
 
 function bars(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -118,6 +118,41 @@ describe("INTERPRET_SYSTEM_PROMPT", () => {
     expect(INTERPRET_SYSTEM_PROMPT).toContain("清仓");
     expect(INTERPRET_SYSTEM_PROMPT).toContain("可建仓");
     expect(INTERPRET_SYSTEM_PROMPT).toContain("暂不建仓");
-    expect(INTERPRET_SYSTEM_PROMPT).toContain("浮盈");
+    expect(INTERPRET_SYSTEM_PROMPT).toContain("操作主张");
+  });
+});
+
+describe("extractStandpoints", () => {
+  it("parses the action standpoint section with symbols and reasons", () => {
+    const content = `## 操作主张
+- **600036.SH 招商银行**：持有（日线仍在均线上方，浮盈 +10%）
+- **000001.SZ 平安银行**：可建仓（回踩确认，建议仓位 10%）
+
+### 详细分析
+...`;
+    expect(extractStandpoints(content)).toEqual([
+      "招商银行(600036.SH)：持有，日线仍在均线上方，浮盈 +10%",
+      "平安银行(000001.SZ)：可建仓，回踩确认，建议仓位 10%",
+    ]);
+  });
+
+  it("returns empty when no standpoint section exists", () => {
+    expect(extractStandpoints("## 详细分析\n无主张内容")).toEqual([]);
+    expect(extractStandpoints("")).toEqual([]);
+  });
+
+  it("ignores lines without a recognized stance word", () => {
+    const content = `## 操作主张
+- **600036.SH 招商银行**：持有
+- 一些其他说明
+- 暂无操作主张`;
+    expect(extractStandpoints(content)).toEqual(["招商银行(600036.SH)：持有"]);
+  });
+
+  it("keeps a stance in a bullet without symbol", () => {
+    const content = `## 操作主张
+- 招商银行：持有（逻辑类似）
+`;
+    expect(extractStandpoints(content)).toEqual(["招商银行：持有，逻辑类似"]);
   });
 });

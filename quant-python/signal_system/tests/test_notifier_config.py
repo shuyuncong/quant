@@ -91,6 +91,54 @@ class NotifierAndConfigTests(unittest.TestCase):
         self.assertIn("MACD 回落确认", markdown)
         self.assertIn("确认信号（进入候选评估）", markdown)
 
+    def test_ai_analysis_markdown_prepends_action_summary(self):
+        payload = {
+            "event_id": "ai-1",
+            "side": "info",
+            "symbol": "SYSTEM",
+            "name": "AI自动解读 #12",
+            "timeframe": "report",
+            "signal_type": "ai_analysis",
+            "price": 0.0,
+            "score": 0,
+            "confirmed_at": "2025-01-02T15:00:00",
+            "risk_notice": "量化信号仅供研究",
+            "evidence": {
+                "notification_kind": "ai_analysis",
+                "content": "## 操作主张\n- **000001.SZ 平安银行**：持有（理由）\n\n详细分析…",
+                "report_path": "output/analysis.json",
+                "action_summary": "平安银行(000001.SZ)：持有，理由",
+            },
+        }
+        markdown = SignalNotifier._markdown(payload)
+        self.assertIn("操作主张", markdown)
+        self.assertIn("平安银行(000001.SZ)：持有，理由", markdown)
+        self.assertLess(
+            markdown.index("平安银行(000001.SZ)：持有，理由"),
+            markdown.index("详细分析"),
+        )
+
+    def test_ai_analysis_markdown_omits_summary_when_absent(self):
+        payload = {
+            "event_id": "ai-2",
+            "side": "info",
+            "symbol": "SYSTEM",
+            "name": "AI自动解读 #13",
+            "timeframe": "report",
+            "signal_type": "ai_analysis",
+            "price": 0.0,
+            "score": 0,
+            "confirmed_at": "2025-01-02T15:00:00",
+            "risk_notice": "量化信号仅供研究",
+            "evidence": {
+                "notification_kind": "ai_analysis",
+                "content": "## 操作主张\n暂无操作主张",
+                "report_path": "output/analysis2.json",
+            },
+        }
+        markdown = SignalNotifier._markdown(payload)
+        self.assertNotIn("**操作主张**", markdown)
+
     def test_candidate_markdown_contains_zone_and_confirmations(self):
         payload = {
             "event_id": "candidate-1",

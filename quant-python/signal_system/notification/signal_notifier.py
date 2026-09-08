@@ -62,8 +62,11 @@ class SignalNotifier:
             )
         if kind == "ai_analysis":
             report_path = evidence.get("report_path") or "未记录"
+            summary = str(evidence.get("action_summary") or "").strip()
+            summary_block = f"\n> **操作主张**：{summary}\n" if summary else ""
             return (
                 f"# {payload.get('name', 'AI自动解读')}\n\n"
+                f"{summary_block}"
                 f"{evidence.get('content', '')}\n\n"
                 f"> 报告：{report_path}\n"
                 f"> {payload['risk_notice']}\n"

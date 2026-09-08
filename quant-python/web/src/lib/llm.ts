@@ -288,7 +288,40 @@ export function buildInterpretationContext(reportText: string, maxChars = 60_000
 
 /** AI 解读的系统提示词：必须结合【我的持仓】给出明确操作主张。 */
 export const INTERPRET_SYSTEM_PROMPT =
-  "你是资深 A 股量化分析助手。MACD 金叉定义为 DIF 上穿 DEA，并按 0轴上方、0轴附近、0轴下方排序；结合温和放量、突破 MA5/MA10、红柱连续放大确认。基于报告逐股输出主要信号、缠论买卖点、多周期一致性、风险。若用户提供【我的持仓】，必须结合持仓与现价浮盈浮亏给出明确操作主张：对已持仓股票，在「加仓 / 持有 / 减仓 / 清仓」中选一个并说明理由（结合仓位占比、盈亏与信号强度）；对未持仓股票，明确建议「可建仓 / 暂不建仓」，可建仓时给出建议仓位比例。未提供持仓信息时，仅给候选动作（观察/买入候选/减仓候选/规避），不要虚构持仓。不要承诺胜率，使用简洁 Markdown。";
+  "你是资深 A 股量化分析助手。MACD 金叉定义为 DIF 上穿 DEA，并按 0轴上方、0轴附近、0轴下方排序；结合温和放量、突破 MA5/MA10、红柱连续放大确认。基于报告逐股输出主要信号、缠论买卖点、多周期一致性、风险。若用户提供【我的持仓】，必须结合持仓与现价浮盈浮亏给出明确操作主张：对已持仓股票，在「加仓 / 持有 / 减仓 / 清仓」中选一个并说明理由（结合仓位占比、盈亏与信号强度）；对未持仓股票，明确建议「可建仓 / 暂不建仓」，可建仓时给出建议仓位比例。未提供持仓信息时，仅给候选动作（观察/买入候选/减仓候选/规避），不要虚构持仓。不要承诺胜率，使用简洁 Markdown。\n\n输出格式：解读正文开头必须有一个「## 操作主张」小节，按股票逐行列出，每行格式为「- **代码 名称**：主张（一句话理由）」，主张只能是 加仓/持有/减仓/清仓/可建仓/暂不建仓 之一；该小节之后才是详细分析。若没有任何可给主张的股票，该小节写「暂无操作主张」。";
+
+/** 主张关键词：模型允许给出的操作主张。 */
+const STANCE_WORDS = ["加仓", "持有", "减仓", "清仓", "可建仓", "暂不建仓"];
+
+/**
+ * 从解读正文提取「## 操作主张」小节中每只股票的 `代码 名称：主张（理由）` 行。
+ * 找不到小节或没有有效行时返回空数组，不抛错。
+ */
+export function extractStandpoints(content: string): string[] {
+  if (!content) return [];
+  const sectionMatch = content.match(/##\s*操作主张\s*\n([\s\S]*?)(?=\n##\s|$)/);
+  const section = sectionMatch?.[1] ?? "";
+  const lines = section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "));
+  const standpoints: string[] = [];
+  for (const line of lines) {
+    const body = line.replace(/^-\s+/, "").replace(/\*\*/g, "").trim();
+    const stance = STANCE_WORDS.find((word) => body.includes(word));
+    if (!stance) continue;
+    const [head, ...reasonParts] = body.split(/[：:]/);
+    const reason = reasonParts.join("：").trim();
+    const reasonMatch = reason.match(/[（(]([^()（）]*)[)）]/);
+    const reasonText = (reasonMatch?.[1] ?? reason.replace(new RegExp(`^${stance}`), "")).trim();
+    const parts = head.trim();
+    const match = parts.match(/(\d{6}(?:\.(?:SH|SZ|BJ))?)\s*(.*)/);
+    const symbol = match?.[1] ?? "";
+    const name = (match?.[2] ?? parts).trim();
+    standpoints.push(`${name || symbol}${symbol ? `(${symbol})` : ""}：${stance}${reasonText ? `，${reasonText}` : ""}`);
+  }
+  return standpoints;
+}
 
 export async function interpretReport(
   profile: ModelProfile,

@@ -170,10 +170,21 @@ class SummaryNotificationTests(unittest.TestCase):
         with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
             result = web_bridge._cmd_notify_summary(
                 web_bridge._default_config_path(),
-                {"title": "AI", "content": "内容", "report_path": "a.json"},
+                {
+                    "title": "AI",
+                    "content": "内容",
+                    "report_path": "a.json",
+                    "action_summary": "招商银行：持有",
+                },
             )
         self.assertEqual(0, result)
-        monitor.notify_ai_analysis.assert_called_once()
+        monitor.notify_ai_analysis.assert_called_once_with(
+            title="AI",
+            content="内容",
+            report_path="a.json",
+            confirmed_at=None,
+            action_summary="招商银行：持有",
+        )
 
     def test_dispatch_requeues_failed_only_when_requested(self):
         monitor = mock.MagicMock()

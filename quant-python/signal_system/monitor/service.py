@@ -465,6 +465,7 @@ class SignalMonitor:
         content: str,
         report_path: str = "",
         confirmed_at: str | None = None,
+        action_summary: str = "",
     ) -> dict[str, Any]:
         if not self.push_ai_analysis:
             return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "disabled"}
@@ -486,6 +487,7 @@ class SignalMonitor:
                 "notification_kind": "ai_analysis",
                 "content": content.strip()[:12000],
                 "report_path": report_path,
+                "action_summary": action_summary,
             },
         )
         inserted = self.store.enqueue_event(event, channels)
