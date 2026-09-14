@@ -347,6 +347,84 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(["1m", "15m", "1m"], [call.args[1] for call in client.get_bars.call_args_list])
             self.assertEqual([300, 300, 600], [call.kwargs["limit"] for call in client.get_bars.call_args_list])
 
+    def test_index_bars_falls_back_to_tencent_when_eastmoney_unavailable(self):
+        """东财 push2his 端点故障时（Remote end closed），腾讯 ifzq 备用源接管，
+        市场闸门不回退到 regime=unknown。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+
+            def broken(_url, *_args, **_kwargs):
+                raise ConnectionError("Remote end closed connection without response")
+
+            client._http_json = broken
+            tencent = pd.DataFrame(
+                {
+                    "datetime": pd.bdate_range("2025-01-02", periods=30),
+                    "open": [10.0] * 30,
+                    "high": [10.5] * 30,
+                    "low": [9.5] * 30,
+                    "close": [10.2] * 30,
+                    "volume": [1000.0] * 30,
+                    "amount": [100000.0] * 30,
+                    "is_closed": [True] * 30,
+                }
+            )
+            client._fetch_index_bars_tencent = lambda *_args, **_kwargs: tencent
+
+            frame = client.get_index_bars("000001.SH", limit=300)
+
+            self.assertEqual(30, len(frame))
+            self.assertEqual(date(2025, 1, 2), frame["datetime"].iloc[0].date())
+            self.assertEqual(10.2, frame["close"].iloc[-1])
+
+    def test_index_bars_raises_when_all_sources_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._http_json = MagicMock(side_effect=RuntimeError("no eastmoney"))
+            client._fetch_index_bars_tencent = lambda *_args, **_kwargs: None
+            with self.assertRaises(RuntimeError):
+                client.get_index_bars("000001.SH")
+
+    def test_http_json_falls_back_from_https_to_http_on_push2his(self):
+        """东财 push2his 间歇性故障（HTTPS 502/断连而 HTTP 可用）时，
+        _http_json 自动降级 HTTP 重试，不再把失败抛给降级链。"""
+        https_url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        http_url = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
+        payload = {"data": {"klines": ["2026-09-14,1,2,3,4,5,6,7,8,9,10"]}}
+        calls = []
+
+        def fake_once(url: str, params):
+            calls.append(url)
+            if url.startswith("https://"):
+                raise ConnectionError("Remote end closed connection without response")
+            return payload
+
+        with patch.object(MarketDataClient, "_http_json_once", new=fake_once):
+            with patch("data.market_data.time.sleep"):
+                result = MarketDataClient._http_json(https_url, {})
+
+        self.assertEqual(payload, result)
+        # HTTPS 重试两次失败后降级 HTTP 并成功
+        self.assertEqual([https_url, https_url, http_url], calls)
+
+    def test_http_json_does_not_retry_non_push2his_endpoints(self):
+        payload = {"ok": True}
+        calls = []
+
+        def fake_once(url: str, params):
+            calls.append(url)
+            return payload
+
+        with patch.object(MarketDataClient, "_http_json_once", new=fake_once):
+            result = MarketDataClient._http_json(
+                "https://vip.stock.finance.sina.com.cn/api", {}
+            )
+
+        self.assertEqual(payload, result)
+        self.assertEqual(1, len(calls))
+
 
 if __name__ == "__main__":
     unittest.main()

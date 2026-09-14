@@ -113,7 +113,7 @@ class SignalMonitor:
         self.candidate_ttl = int(monitor.get("candidate_ttl_business_days", 5))
         self.max_scan_symbols = int(monitor.get("max_scan_symbols_per_run", 500))
         self.max_monitor_symbols = max(1, int(monitor.get("max_symbols_per_cycle", 20)))
-        self.daily_scan_time = str(monitor.get("daily_scan_time", "15:20"))
+        self.daily_scan_time = str(monitor.get("daily_scan_time", "17:00"))
         stock_pool = config.get("stock_pool", {})
         configured_listing_days = int(
             stock_pool.get(
@@ -500,8 +500,14 @@ class SignalMonitor:
         universe_mode: str,
         completed_round: bool,
         candidates: list[dict[str, Any]] | None = None,
+        observed_candidates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """推送每日扫描完成通知（统一一条汇总，不逐股推送）。"""
+        """推送每日扫描完成通知（统一一条汇总，不逐股推送）。
+
+        闸门未开时符合指标的候选进入候选池并标记 execution_mode=observe_only
+        （列表内标注"观察，闸门未开"）；policy 级 observe_only 的信号进入
+        observed_candidates：仍展示，但不作为独立入场依据。
+        """
         channels = self.notifier.active_channels()
         if not channels:
             return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "no_channels"}
@@ -516,6 +522,8 @@ class SignalMonitor:
                     "symbol": str(item["symbol"]),
                     "name": str(item.get("name", "")),
                     "golden_cross_zone_label": str(item.get("golden_cross_zone_label") or ""),
+                    "execution_mode": str(item.get("execution_mode") or "enabled"),
+                    "observe_reason": str(item.get("observe_reason") or ""),
                 }
             )
         lines = []
@@ -523,11 +531,39 @@ class SignalMonitor:
             line = " ".join(part for part in (item["symbol"], item["name"]) if part)
             if item["golden_cross_zone_label"]:
                 line += f"（{item['golden_cross_zone_label']}）"
+            if item["execution_mode"] == "observe_only":
+                line += "[观察，闸门未开]"
             lines.append(line)
         if lines:
             content += "\n\n" + "\n".join(lines)
             if len(listed) < candidate_count:
                 content += f"\n… 其余 {candidate_count - len(listed)} 只见股票池"
+        observed_listed: list[dict[str, Any]] = []
+        for item in (observed_candidates or [])[:50]:
+            observed_listed.append(
+                {
+                    "symbol": str(item["symbol"]),
+                    "name": str(item.get("name", "")),
+                    "golden_cross_zone_label": str(item.get("golden_cross_zone_label") or ""),
+                    "reason": str(item.get("reason") or ""),
+                }
+            )
+        observed_lines = []
+        for item in observed_listed:
+            line = " ".join(part for part in (item["symbol"], item["name"]) if part)
+            if item["golden_cross_zone_label"]:
+                line += f"（{item['golden_cross_zone_label']}）"
+            if item["reason"]:
+                line += f"[{item['reason']}]"
+            observed_lines.append(line)
+        if observed_lines:
+            content += (
+                f"\n\n另有 {len(observed_candidates)} 只观察候选"
+                "（闸门未开，仅记录展示，不作为独立入场依据）："
+            )
+            content += "\n" + "\n".join(observed_lines)
+            if len(observed_listed) < len(observed_candidates):
+                content += f"\n… 其余 {len(observed_candidates) - len(observed_listed)} 只见报告"
         event = SignalEvent(
             symbol="SYSTEM",
             name="每日扫描完成",
@@ -543,8 +579,10 @@ class SignalMonitor:
                 "content": content,
                 "universe_mode": universe_mode,
                 "candidate_count": candidate_count,
+                "observed_count": len(observed_candidates or []),
                 "completed_round": completed_round,
                 "candidates": listed,
+                "observed_candidates": observed_listed,
             },
         )
         inserted = self.store.enqueue_event(event, channels)
@@ -678,7 +716,23 @@ class SignalMonitor:
                 position_ready = bool(
                     indicators.get("above_ma_long") and indicators.get("ma_long_up")
                 )
-                if entry_ready and zone in {"above", "near"} and confirmation_met:
+                # 状态式筛选（用户选定）：曾于 0 轴上方/附近金叉且已确认
+                # （confirmed_pullback）、当前仍多头（DIF>DEA）即入池。
+                # 不要求确认发生在最后一根 K 线（不再使用 confirmation_is_latest），
+                # 指标池是筛选而非当日入场触发器。
+                screen_state = str(indicators.get("golden_cross_state") or "none")
+                current_zone = str(indicators.get("golden_cross_zone") or zone)
+                current_bullish = bool(
+                    float(indicators.get("dif", 0) or 0)
+                    > float(indicators.get("dea", 0) or 0)
+                )
+                screen_ready = bool(
+                    screen_state == "confirmed_pullback"
+                    and zone in {"above", "near"}
+                    and current_zone in {"above", "near"}
+                    and current_bullish
+                )
+                if screen_ready and confirmation_met:
                     signal_type = (
                         "macd_golden_cross_pullback_confirmed_"
                         f"{zone}"
@@ -712,7 +766,21 @@ class SignalMonitor:
                         market_context.get("allows_entries", False)
                         and (not position_gate_enabled or position_ready)
                     ):
-                        continue
+                        # 市场/仓位闸门只决定候选是否可执行，不决定指标是否成立。
+                        # 熊市不开新仓 ≠ 不从市场筛选符合指标的股票：闸门未开时把
+                        # 候选降级为观察记录（execution_mode=observe_only）并保留原因，
+                        # 继续走股票池/基本面过滤后进入候选池，而不是静默丢弃，
+                        # 避免指标池在熊市"看似 0 数据"。
+                        observe_reason = (
+                            "position_gate_not_ready"
+                            if position_gate_enabled and not position_ready
+                            else "market_gate_closed"
+                        )
+                        execution_mode = "observe_only"
+                        entry_gate_blocked = True
+                    else:
+                        observe_reason = ""
+                        entry_gate_blocked = False
                     stock_pool_history = daily
                     stock_pool_fetch_error = ""
                     if stock_pool_settings["enabled"]:
@@ -741,6 +809,47 @@ class SignalMonitor:
                                 + ["stock_pool_history_fetch_failed"]
                             )
                         )
+                    # 自愈：收盘后第一轮扫描常在数据源回补前把"只到上一交易日"的
+                    # 数据以当日 end_day 键缓存 24h，后续重跑会恒命中陈旧缓存。
+                    # 检测到 stock_pool_history_stale 时失效该符号当日缓存并重拉
+                    # 一次：源已回补则池子正常产出，仍未回补则按原拒绝流程记录。
+                    if (
+                        stock_pool_settings["enabled"]
+                        and "stock_pool_history_stale" in stock_pool_evaluation["reasons"]
+                    ):
+                        try:
+                            invalidated = self.market.invalidate_stock_pool_history(
+                                symbol,
+                                limit=stock_pool_history_limit,
+                                end=latest_date,
+                            )
+                            if invalidated:
+                                retried_history = self.market.get_stock_pool_history(
+                                    symbol,
+                                    limit=stock_pool_history_limit,
+                                    end=latest_date,
+                                )
+                                retried_evaluation = evaluate_stock_pool(
+                                    retried_history,
+                                    latest_date,
+                                    self.config,
+                                    name=name,
+                                )
+                                if retried_evaluation["passed"]:
+                                    stock_pool_evaluation = retried_evaluation
+                                    logger.info(
+                                        "股票池历史自愈成功: %s 已回补到 %s",
+                                        symbol,
+                                        latest_date,
+                                    )
+                                else:
+                                    logger.info(
+                                        "股票池历史自愈后仍不合格: %s (%s)",
+                                        symbol,
+                                        ",".join(retried_evaluation["reasons"]),
+                                    )
+                        except Exception as exc:
+                            logger.warning("股票池历史自愈失败 %s: %s", symbol, exc)
                     if not stock_pool_evaluation["passed"]:
                         stock_pool_rejections.update(stock_pool_evaluation["reasons"])
                         stock_pool_rejection_details.append(
@@ -806,6 +915,8 @@ class SignalMonitor:
                             "golden_cross_state": indicators.get("golden_cross_state"),
                             "signal_type": signal_type,
                             "execution_mode": execution_mode,
+                            "entry_gate_blocked": entry_gate_blocked,
+                            "observe_reason": observe_reason,
                             "golden_cross_entry_ready": entry_ready,
                             "golden_cross_confirmation_bars": indicators.get("golden_cross_confirmation_bars"),
                             "position_ready": position_ready,
@@ -885,6 +996,7 @@ class SignalMonitor:
                     universe_mode=universe_mode,
                     completed_round=completed_round,
                     candidates=sorted_candidates,
+                    observed_candidates=observed_candidates,
                 )["delivery"]
             else:
                 delivery = self.dispatch_outbox()
@@ -901,6 +1013,7 @@ class SignalMonitor:
             "market_context": market_context,
             "signal_execution_policy": signal_policy,
             "observed_candidates": observed_candidates,
+            "observed_count": len(observed_candidates),
             "stock_pool": {
                 "config": stock_pool_settings,
                 "rejections": dict(stock_pool_rejections),

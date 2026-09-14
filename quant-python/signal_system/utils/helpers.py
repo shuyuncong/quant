@@ -283,7 +283,7 @@ DEFAULT_CONFIG = {
     },
     "runtime": {
         "schedule": {
-            "daily_scan_time": "04:00",
+            "daily_scan_time": "17:00",
             "weekly_review_day": "Friday",
         },
         "logging": {

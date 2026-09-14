@@ -86,6 +86,19 @@ class StockPoolTests(unittest.TestCase):
                 self.assertFalse(result["passed"])
                 self.assertIn(reason, result["reasons"])
 
+    def test_listing_gate_rejection_does_not_report_unneeded_metric_data_failures(self):
+        frame = history(periods=19).drop(
+            columns=["amount", "turnover_rate", "circulating_market_cap"]
+        )
+
+        result = evaluate_stock_pool(
+            frame,
+            frame.iloc[-1]["datetime"].date(),
+            pool_config(),
+        )
+
+        self.assertEqual(["stock_pool_listing_days_below_min"], result["reasons"])
+
     def test_rejects_st_and_delisting_names(self):
         frame = history()
         for name, reason in (
@@ -202,6 +215,10 @@ class StockPoolTests(unittest.TestCase):
                             "indicators": {
                                 "golden_cross_entry_ready": True,
                                 "golden_cross_entry_zone": "above",
+                                "golden_cross_zone": "above",
+                                "golden_cross_state": "confirmed_pullback",
+                                "dif": 1.2,
+                                "dea": 0.8,
                                 "golden_cross_zone_label": "0轴上方金叉",
                                 "above_ma_long": True,
                                 "ma_long_up": True,
@@ -273,6 +290,10 @@ class StockPoolTests(unittest.TestCase):
                         "indicators": {
                             "golden_cross_entry_ready": True,
                             "golden_cross_entry_zone": "above",
+                            "golden_cross_zone": "above",
+                            "golden_cross_state": "confirmed_pullback",
+                            "dif": 1.2,
+                            "dea": 0.8,
                         },
                         "chan": {"fresh_signals": []},
                     }
@@ -301,6 +322,228 @@ class StockPoolTests(unittest.TestCase):
             self.assertEqual(1, len(report["observed_candidates"]))
             self.assertEqual("observe_only", report["observed_candidates"][0]["execution_mode"])
             self.assertEqual("range", report["observed_candidates"][0]["regime"])
+
+    def test_live_scan_keeps_gate_closed_candidates_in_pool_as_observe_only(self):
+        """市场闸门关闭（熊市）时，enabled 信号不再被静默丢弃，也不仅进观察列表：
+        候选降级 execution_mode=observe_only 后继续进入候选池，指标池照常产出，
+        开仓语义不变（执行模式仍为观察）。"""
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = object.__new__(SignalMonitor)
+            monitor.config = {
+                **pool_config(enabled=False),
+                "scan": {"universe_mode": "all_a"},
+                "entry_filters": {"position_gate_enabled": False},
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {
+                            "macd_golden_cross_pullback_confirmed_near": "enabled",
+                        },
+                    }
+                },
+            }
+            monitor.market = MagicMock()
+            monitor.market.refresh_daily_histories_from_snapshot.return_value = 0
+            monitor.market.latest_expected_trade_date.return_value = date(2025, 7, 16)
+            monitor.market.get_stock_list.return_value = pd.DataFrame(
+                [{"code": "000001", "name": "熊市零轴金叉"}]
+            )
+            monitor.market.get_bars.return_value = history(periods=140)
+            monitor.analyzer = MagicMock()
+            monitor.analyzer.analyze.side_effect = lambda *_: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {
+                        "latest_time": "2025-07-16",
+                        "latest_price": 10.0,
+                        "buy_score": 70,
+                        "indicators": {
+                            "golden_cross_entry_ready": True,
+                            "golden_cross_entry_zone": "near",
+                            "golden_cross_zone": "near",
+                            "golden_cross_state": "confirmed_pullback",
+                            "dif": 1.2,
+                            "dea": 0.8,
+                        },
+                        "chan": {"fresh_signals": []},
+                    }
+                },
+            }
+            monitor.store = MagicMock()
+            monitor.store.get_state.return_value = "true"
+            monitor.notifier = MagicMock()
+            monitor.notifier.active_channels.return_value = []
+            monitor.output_dir = Path(directory)
+            monitor.watchlist = []
+            monitor.max_scan_symbols = 500
+            monitor.min_daily_bars = 120
+            monitor.candidate_ttl = 5
+            monitor.candidate_limit = 100
+            monitor.push_candidate_pool = False
+            monitor._name_map = None
+            monitor._market_entry_context = lambda: {
+                "allows_entries": False,
+                "regime": "bear",
+            }
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            self.assertEqual(1, report["candidate_count"])
+            self.assertEqual(0, report["observed_count"])
+            self.assertEqual([], report["observed_candidates"])
+            entry = report["candidates"][0]
+            self.assertEqual("observe_only", entry["execution_mode"])
+            self.assertEqual("market_gate_closed", entry["observe_reason"])
+            self.assertTrue(entry["entry_gate_blocked"])
+            self.assertEqual("bear", entry["market_context"]["regime"])
+            self.assertEqual("near", entry["golden_cross_zone"])
+
+    def test_live_scan_keeps_position_gate_blocked_candidates_in_pool_as_observe_only(self):
+        """仓位闸门未满足（个股不在上行长期均线上）时同样降级：
+        进入候选池但 execution_mode=observe_only，并标注 observe_reason。"""
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = object.__new__(SignalMonitor)
+            monitor.config = {
+                **pool_config(enabled=False),
+                "scan": {"universe_mode": "all_a"},
+                "entry_filters": {"position_gate_enabled": True},
+                "signal_strategy": {
+                    "execution_policy": {
+                        "signals": {
+                            "macd_golden_cross_pullback_confirmed_above": "enabled",
+                        },
+                    }
+                },
+            }
+            monitor.market = MagicMock()
+            monitor.market.refresh_daily_histories_from_snapshot.return_value = 0
+            monitor.market.latest_expected_trade_date.return_value = date(2025, 7, 16)
+            monitor.market.get_stock_list.return_value = pd.DataFrame(
+                [{"code": "000001", "name": "仓位不足样本"}]
+            )
+            monitor.market.get_bars.return_value = history(periods=140)
+            monitor.analyzer = MagicMock()
+            monitor.analyzer.analyze.side_effect = lambda *_: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {
+                        "latest_time": "2025-07-16",
+                        "latest_price": 10.0,
+                        "buy_score": 70,
+                        "indicators": {
+                            "golden_cross_entry_ready": True,
+                            "golden_cross_entry_zone": "above",
+                            "golden_cross_zone": "above",
+                            "golden_cross_state": "confirmed_pullback",
+                            "dif": 1.2,
+                            "dea": 0.8,
+                            "above_ma_long": False,
+                            "ma_long_up": False,
+                        },
+                        "chan": {"fresh_signals": []},
+                    }
+                },
+            }
+            monitor.store = MagicMock()
+            monitor.store.get_state.return_value = "true"
+            monitor.notifier = MagicMock()
+            monitor.notifier.active_channels.return_value = []
+            monitor.output_dir = Path(directory)
+            monitor.watchlist = []
+            monitor.max_scan_symbols = 500
+            monitor.min_daily_bars = 120
+            monitor.candidate_ttl = 5
+            monitor.candidate_limit = 100
+            monitor.push_candidate_pool = False
+            monitor._name_map = None
+            monitor._market_entry_context = lambda: {
+                "allows_entries": True,
+                "regime": "bull",
+            }
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            self.assertEqual(1, report["candidate_count"])
+            self.assertEqual(0, report["observed_count"])
+            entry = report["candidates"][0]
+            self.assertEqual("observe_only", entry["execution_mode"])
+            self.assertEqual("position_gate_not_ready", entry["observe_reason"])
+            self.assertTrue(entry["entry_gate_blocked"])
+
+    def test_live_scan_self_heals_stale_stock_pool_history(self):
+        """股票池历史停在上一交易日（收盘后首扫缓存 24h）时：
+        scan 失效当日缓存并重拉一次，源回补后候选正常入池，
+        而不是被 stock_pool_history_stale 拒绝。"""
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = object.__new__(SignalMonitor)
+            monitor.config = {
+                **pool_config(),
+                "scan": {"universe_mode": "all_a"},
+                "entry_filters": {"position_gate_enabled": False},
+            }
+            monitor.market = MagicMock()
+            monitor.market.refresh_daily_histories_from_snapshot.return_value = 0
+            monitor.market.latest_expected_trade_date.return_value = date(2025, 7, 16)
+            monitor.market.get_stock_list.return_value = pd.DataFrame(
+                [{"code": "000001", "name": "自愈样本"}]
+            )
+            monitor.market.get_bars.return_value = history(periods=140)
+            stale = history(periods=139)  # 停在 2025-07-15 < as_of 2025-07-16
+            fresh = history(periods=140)
+            monitor.market.get_stock_pool_history.side_effect = [stale, fresh]
+            call_log = []
+            monitor.market.invalidate_stock_pool_history.side_effect = (
+                lambda *args, **kwargs: call_log.append((args, kwargs)) or True
+            )
+            monitor.analyzer = MagicMock()
+            monitor.analyzer.analyze.side_effect = lambda *_: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {
+                        "latest_time": "2025-07-16",
+                        "latest_price": 10.0,
+                        "buy_score": 70,
+                        "indicators": {
+                            "golden_cross_entry_ready": True,
+                            "golden_cross_entry_zone": "above",
+                            "golden_cross_zone": "above",
+                            "golden_cross_state": "confirmed_pullback",
+                            "dif": 1.2,
+                            "dea": 0.8,
+                            "golden_cross_zone_label": "0轴上方金叉",
+                            "above_ma_long": True,
+                            "ma_long_up": True,
+                        },
+                        "chan": {"fresh_signals": []},
+                    }
+                },
+            }
+            monitor.store = MagicMock()
+            monitor.store.get_state.return_value = "true"
+            monitor.notifier = MagicMock()
+            monitor.notifier.active_channels.return_value = []
+            monitor.output_dir = Path(directory)
+            monitor.watchlist = []
+            monitor.max_scan_symbols = 500
+            monitor.min_daily_bars = 120
+            monitor.candidate_ttl = 5
+            monitor.candidate_limit = 100
+            monitor.push_candidate_pool = False
+            monitor._name_map = None
+            monitor._market_entry_context = lambda: {
+                "allows_entries": True,
+                "regime": "bull",
+            }
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            self.assertEqual(1, len(call_log))
+            self.assertEqual(0, report["stock_pool"]["rejected_candidates"])
+            self.assertEqual(1, report["candidate_count"])
+            self.assertEqual("000001", report["candidates"][0]["symbol"])
+            self.assertEqual(
+                "2025-07-16",
+                report["candidates"][0]["stock_pool_metrics"]["as_of"],
+            )
 
 
 if __name__ == "__main__":

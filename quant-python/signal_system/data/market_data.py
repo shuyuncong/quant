@@ -234,6 +234,19 @@ class MarketDataClient:
 
     @staticmethod
     def _http_json(url: str, params: dict[str, Any]) -> Any:
+        """Fetch JSON with a fallback for the intermittent Eastmoney kline API.
+
+        东财 push2his 端点 2026-09 实测存在间歇性故障（502 / "Remote end
+        closed connection"，HTTPS 与 HTTP 后端节点状态不同）。对 kline 端点
+        先试 HTTPS，失败后降级 HTTP，各重试两次，保证指数与股票池历史在
+        端点抖动时仍可从数据源取到最新 bar。
+        """
+        if "push2his.eastmoney.com" in url:
+            return MarketDataClient._http_json_eastmoney(url, params)
+        return MarketDataClient._http_json_once(url, params)
+
+    @staticmethod
+    def _http_json_once(url: str, params: dict[str, Any]) -> Any:
         request = Request(
             f"{url}?{urlencode(params)}",
             headers={
@@ -246,6 +259,26 @@ class MarketDataClient:
         if len(body) > 20 * 1024 * 1024:
             raise RuntimeError("行情响应体超过20MB")
         return json.loads(body.decode("utf-8"))
+
+    @staticmethod
+    def _http_json_eastmoney(url: str, params: dict[str, Any]) -> Any:
+        candidates = [url, url.replace("https://", "http://", 1)]
+        last_exc: Exception | None = None
+        for candidate in candidates:
+            for attempt in range(2):
+                try:
+                    return MarketDataClient._http_json_once(candidate, params)
+                except Exception as exc:  # noqa: BLE001 - 网络抖动需兜底
+                    last_exc = exc
+                    logger.warning(
+                        "东方财富行情端点请求失败 %s (retry %d/2): %s",
+                        candidate,
+                        attempt + 1,
+                        exc,
+                    )
+                    if attempt == 0:
+                        time.sleep(0.4)
+        raise last_exc  # type: ignore[misc]
 
     def _throttle(self) -> None:
         remaining = self.request_interval - (time.monotonic() - self._last_request)
@@ -611,6 +644,35 @@ class MarketDataClient:
         self._save_cache(cache_key, result)
         return result
 
+    def invalidate_stock_pool_history(
+        self,
+        symbol: str,
+        limit: int = 300,
+        end: date | None = None,
+    ) -> bool:
+        """Drop the cached stock-pool history for one symbol+end day.
+
+        Self-heal for the close-time gap: a scan run before the data source
+        publishes today's daily bar caches a stale frame under today's end-day
+        key (24h TTL).  Invalidating lets the next fetch go back to the wire.
+        """
+        end_day = end or self._latest_expected_trade_date()
+        requested = max(int(limit), 1)
+        cache_key = (
+            f"stock_pool_history_v1|{normalize_symbol(symbol)}|"
+            f"{requested}|{end_day.isoformat()}"
+        )
+        path = self._cache_path(cache_key)
+        if not path.exists():
+            return False
+        try:
+            path.unlink()
+            logger.info("失效股票池历史缓存: %s @ %s", symbol, end_day.isoformat())
+            return True
+        except OSError as exc:
+            logger.warning("失效股票池历史缓存失败 %s: %s", symbol, exc)
+            return False
+
     def get_stock_pool_history(
         self,
         symbol: str,
@@ -780,27 +842,49 @@ class MarketDataClient:
         return frame
 
     def get_index_bars(self, symbol: str = "000001.SH", limit: int = 300) -> pd.DataFrame:
-        """Fetch closed daily index bars for the market-regime gate."""
+        """Fetch closed daily index bars for the market-regime gate.
+
+        Primary source: Eastmoney push2his.  Falls back to Tencent ifzq when
+        Eastmoney is unavailable or returns no klines (observed outage:
+        "Remote end closed connection"), so the market gate degrades to a
+        stale-data / fallback decision instead of regime "unknown".
+        """
         key = f"index_bars|{str(symbol).upper()}|1d|{limit}"
         cached = self._cached(key, 4 * 3600)
         if cached is not None:
             return cached.tail(limit).reset_index(drop=True)
 
-        self._throttle()
-        payload = self._http_json(
-            "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-            {
-                "secid": eastmoney_index_secid(symbol),
-                "klt": "101",
-                "fqt": 0,
-                "beg": 0,
-                "end": "20500101",
-                "lmt": max(limit, 300),
-                "fields1": "f1,f2,f3,f4,f5,f6",
-                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-            },
-        )
+        frame = self._fetch_index_bars_eastmoney(symbol, limit)
+        if frame is None or frame.empty:
+            frame = self._fetch_index_bars_tencent(symbol, limit)
+        if frame is None or frame.empty:
+            raise RuntimeError(f"指数日线获取失败: {symbol}")
+        frame = frame[frame["is_closed"]].tail(limit).reset_index(drop=True)
+        self._save_cache(key, frame)
+        return frame
+
+    def _fetch_index_bars_eastmoney(self, symbol: str, limit: int) -> pd.DataFrame | None:
+        try:
+            self._throttle()
+            payload = self._http_json(
+                "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                {
+                    "secid": eastmoney_index_secid(symbol),
+                    "klt": "101",
+                    "fqt": 0,
+                    "beg": 0,
+                    "end": "20500101",
+                    "lmt": max(limit, 300),
+                    "fields1": "f1,f2,f3,f4,f5,f6",
+                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                },
+            )
+        except Exception as exc:
+            logger.warning("东方财富指数日线失败，尝试腾讯: %s", exc)
+            return None
         klines = (payload.get("data") or {}).get("klines") or []
+        if not klines:
+            return None
         rows = []
         for line in klines:
             fields = str(line).split(",")
@@ -817,10 +901,54 @@ class MarketDataClient:
                     "amount": fields[6],
                 }
             )
-        frame = standardize_bars(pd.DataFrame(rows), "1d", "eastmoney-index", adjust="none")
-        frame = frame[frame["is_closed"]].tail(limit).reset_index(drop=True)
-        self._save_cache(key, frame)
-        return frame
+        if not rows:
+            return None
+        return standardize_bars(pd.DataFrame(rows), "1d", "eastmoney-index", adjust="none")
+
+    def _fetch_index_bars_tencent(self, symbol: str, limit: int) -> pd.DataFrame | None:
+        """Tencent ifzq daily kline fallback for index symbols."""
+        code = tencent_symbol(symbol)
+        if not code:
+            return None
+        try:
+            self._throttle()
+            url = (
+                "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
+                f"param={code},day,,,{max(limit, 300)},qfq"
+            )
+            request = Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 quant-signal-monitor/1.0"},
+            )
+            with urlopen(request, timeout=15) as response:
+                body = response.read(20 * 1024 * 1024 + 1)
+            payload = json.loads(body.decode("utf-8"))
+            data = payload.get("data", {})
+            node = data.get(code) or {}
+            klines = node.get("qfqday") or node.get("day") or []
+            if not klines:
+                klines = data.get(code + "qfqday") or data.get(code + "day") or []
+        except Exception as exc:
+            logger.warning("腾讯指数日线失败: %s", exc)
+            return None
+        rows = []
+        for item in klines:
+            if not isinstance(item, (list, tuple)) or len(item) < 6:
+                continue
+            rows.append(
+                {
+                    "datetime": item[0],
+                    "open": item[1],
+                    "close": item[2],
+                    "high": item[3],
+                    "low": item[4],
+                    "volume": item[5],
+                    "amount": 0.0,
+                }
+            )
+        if not rows:
+            return None
+        return standardize_bars(pd.DataFrame(rows), "1d", "tencent-ifzq-index", adjust="none")
 
     def _fetch_akshare(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
         ak = self._get_akshare()

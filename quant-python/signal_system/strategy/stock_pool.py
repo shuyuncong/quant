@@ -151,13 +151,17 @@ def evaluate_stock_pool(
         reasons.append("stock_pool_delisting_risk")
 
     listing_days = len(frame)
+    listing_below_min = False
     if frame.empty:
         missing("stock_pool_listing_days_missing")
     elif listing_days < settings["min_listing_trade_days"]:
+        listing_below_min = True
         reasons.append("stock_pool_listing_days_below_min")
 
     metrics_frame = frame
-    if not frame.empty and frame.iloc[-1]["datetime"].date() != as_of:
+    if listing_below_min:
+        metrics_frame = pd.DataFrame()
+    elif not frame.empty and frame.iloc[-1]["datetime"].date() != as_of:
         missing("stock_pool_history_stale")
         metrics_frame = pd.DataFrame()
 
@@ -166,7 +170,7 @@ def evaluate_stock_pool(
     avg_turnover = None
     if frame.empty:
         missing("stock_pool_history_missing")
-    elif not metrics_frame.empty:
+    elif not listing_below_min and not metrics_frame.empty:
         market_cap = _market_cap(metrics_frame, settings["volume_unit_shares"])
         avg_amount = _average_amount(
             metrics_frame,
@@ -175,24 +179,25 @@ def evaluate_stock_pool(
         )
         avg_turnover = _average_turnover(metrics_frame, settings["turnover_window"])
 
-    if market_cap is None:
-        missing("stock_pool_market_cap_missing")
-    elif market_cap < settings["min_market_cap"]:
-        reasons.append("stock_pool_market_cap_below_min")
-    elif market_cap > settings["max_market_cap"]:
-        reasons.append("stock_pool_market_cap_above_max")
+    if not listing_below_min:
+        if market_cap is None:
+            missing("stock_pool_market_cap_missing")
+        elif market_cap < settings["min_market_cap"]:
+            reasons.append("stock_pool_market_cap_below_min")
+        elif market_cap > settings["max_market_cap"]:
+            reasons.append("stock_pool_market_cap_above_max")
 
-    if avg_amount is None:
-        missing("stock_pool_avg_amount_missing")
-    elif avg_amount < settings["min_avg_amount"]:
-        reasons.append("stock_pool_avg_amount_below_min")
+        if avg_amount is None:
+            missing("stock_pool_avg_amount_missing")
+        elif avg_amount < settings["min_avg_amount"]:
+            reasons.append("stock_pool_avg_amount_below_min")
 
-    if avg_turnover is None:
-        missing("stock_pool_turnover_missing")
-    elif avg_turnover < settings["min_avg_turnover_rate"]:
-        reasons.append("stock_pool_turnover_below_min")
-    elif avg_turnover > settings["max_avg_turnover_rate"]:
-        reasons.append("stock_pool_turnover_above_max")
+        if avg_turnover is None:
+            missing("stock_pool_turnover_missing")
+        elif avg_turnover < settings["min_avg_turnover_rate"]:
+            reasons.append("stock_pool_turnover_below_min")
+        elif avg_turnover > settings["max_avg_turnover_rate"]:
+            reasons.append("stock_pool_turnover_above_max")
 
     metrics = {
         "enabled": True,

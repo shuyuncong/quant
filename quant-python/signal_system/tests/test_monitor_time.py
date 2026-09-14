@@ -422,7 +422,7 @@ class MonitorTimeTests(unittest.TestCase):
             monitor.analyzer.analyze = lambda *args, **kwargs: {
                 "event_objects": [],
                 "timeframes": {
-                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_state": "confirmed_pullback", "dif": 1.2, "dea": 0.8, "golden_cross_zone_label": "0轴上方金叉"}}
                 },
             }
             monitor.notifier.active_channels = MagicMock(return_value=["webhook"])
@@ -467,7 +467,7 @@ class MonitorTimeTests(unittest.TestCase):
             monitor.analyzer.analyze = lambda *args, **kwargs: {
                 "event_objects": [],
                 "timeframes": {
-                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_zone_label": "0轴上方金叉"}}
+                    "1d": {"indicators": {"golden_cross": True, "golden_cross_entry_ready": True, "golden_cross_entry_zone": "above", "golden_cross_zone": "above", "golden_cross_state": "confirmed_pullback", "dif": 1.2, "dea": 0.8, "golden_cross_zone_label": "0轴上方金叉"}}
                 },
             }
             monitor.notifier.active_channels = MagicMock(return_value=["webhook"])

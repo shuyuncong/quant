@@ -127,6 +127,33 @@ def _first_pullback_confirmation_index(
     return None
 
 
+def _unique_confirmation_entries(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep one actionable path for each confirmation bar and signal zone.
+
+    Multiple nearby golden crosses can independently satisfy the pullback rule
+    on the same closed bar.  They imply the same candidate identity and entry
+    action, so the most recent cross supersedes older pending paths.
+    """
+    latest_by_confirmation: dict[tuple[int, str], dict[str, Any]] = {}
+    for entry in entries:
+        key = (int(entry["confirmation_index"]), str(entry["zone"]))
+        previous = latest_by_confirmation.get(key)
+        if previous is None or int(entry["cross_index"]) > int(
+            previous["cross_index"]
+        ):
+            latest_by_confirmation[key] = entry
+    return sorted(
+        latest_by_confirmation.values(),
+        key=lambda entry: (
+            int(entry["confirmation_index"]),
+            str(entry["zone"]),
+            int(entry["cross_index"]),
+        ),
+    )
+
+
 def find_golden_cross_entries(
     frame: pd.DataFrame,
     fast: int = 12,
@@ -182,7 +209,7 @@ def find_golden_cross_entries(
                 break
             if state["state"] == "invalidated":
                 break
-    return entries
+    return _unique_confirmation_entries(entries)
 
 
 def analyze_macd(
