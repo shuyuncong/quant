@@ -24,6 +24,16 @@ class CandidateIntegrityError(RuntimeError):
     """Raised when a candidate export cannot be canonicalized safely."""
 
 
+def guard_development_path(path: Path, allow_holdout: bool = False) -> Path:
+    resolved = path.expanduser().resolve()
+    if not allow_holdout and any("holdout" in part.lower() for part in resolved.parts):
+        raise CandidateIntegrityError(
+            f"Holdout path is blocked for development experiments: {resolved}. "
+            "Use only after the experiment is frozen and separately authorized."
+        )
+    return resolved
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -143,9 +153,11 @@ def normalize_candidate_directory(
     input_dir: Path,
     output_dir: Path,
     splits: Iterable[str] = DEFAULT_SPLITS,
+    *,
+    allow_holdout: bool = False,
 ) -> dict[str, Any]:
-    input_dir = input_dir.expanduser().resolve()
-    output_dir = output_dir.expanduser().resolve()
+    input_dir = guard_development_path(input_dir, allow_holdout)
+    output_dir = guard_development_path(output_dir, allow_holdout)
     if input_dir == output_dir:
         raise CandidateIntegrityError("input and output directories must differ")
     if output_dir.exists():
@@ -209,11 +221,17 @@ def main() -> int:
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--splits", nargs="+", default=list(DEFAULT_SPLITS))
+    parser.add_argument(
+        "--allow-holdout",
+        action="store_true",
+        help="explicit override; do not use during strategy development",
+    )
     args = parser.parse_args()
     result = normalize_candidate_directory(
         Path(args.input_dir),
         Path(args.output_dir),
         args.splits,
+        allow_holdout=args.allow_holdout,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

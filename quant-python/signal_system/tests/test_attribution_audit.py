@@ -11,6 +11,7 @@ from attribution_audit import exit_reason_category, judge
 def test_exit_reason_semantics_distinguish_chan_sell_from_risk_stop():
     assert exit_reason_category("sell_1") == "chan_sell_1"
     assert exit_reason_category("stop_loss") == "risk_stop_loss"
+    assert exit_reason_category("weak_market_low_open") == "risk_weak_market_low_open"
     assert exit_reason_category("timeout_ma_break") == "time_limit_ma_break"
     assert exit_reason_category("timeout_hard_cap") == "time_limit_hard_cap"
 

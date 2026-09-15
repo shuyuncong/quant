@@ -219,6 +219,27 @@ class MacdTests(unittest.TestCase):
         with patch("strategy.macd.calculate_macd", return_value=death_after_pullback):
             self.assertEqual([], find_golden_cross_entries(frame, confirmation_bars=5))
 
+    def test_same_day_same_zone_confirmation_keeps_latest_cross_path(self):
+        closes = [10.0] * 48 + [10.0, 9.95, 9.9, 9.95, 10.2]
+        frame = self._frame(closes)
+        frame.loc[48:52, "low"] = [9.8, 9.9, 9.85, 9.8, 9.9]
+        macd = pd.DataFrame(
+            {
+                "dif": [0.10] * 48 + [0.25, 0.22, 0.15, 0.25, 0.28],
+                "dea": [0.20] * 48 + [0.20, 0.20, 0.20, 0.20, 0.22],
+                "hist": [0.0] * 53,
+            }
+        )
+
+        with patch("strategy.macd.calculate_macd", return_value=macd):
+            entries = find_golden_cross_entries(frame, confirmation_bars=5)
+
+        self.assertEqual(1, len(entries))
+        self.assertEqual(51, entries[0]["cross_index"])
+        self.assertEqual(52, entries[0]["confirmation_index"])
+        self.assertEqual(1, entries[0]["confirmation_bars"])
+        self.assertEqual("above", entries[0]["zone"])
+
     def test_golden_cross_below_zero_is_classified_as_high_risk(self):
         frame = self._frame([10.0] * 50)
         macd = pd.DataFrame(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import logging
 import math
@@ -19,6 +20,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
@@ -64,6 +66,10 @@ DEFAULT_SIGNAL_PRIORITY = (
     "buy_2",
     "buy_3",
 )
+LOCAL_STOCK_POOL_CACHE_LOOKBACK_DAYS = 1095
+LOCAL_STOCK_POOL_CACHE_REQUEST_SIZES = (800, 300)
+PREFLIGHT_STOCK_POOL_CACHE_LOOKBACK_DAYS = 45
+LOCAL_STOCK_LIST_CACHE_VERSION = 4
 
 
 def _zero_axis_exit_confirmation_bars(config: dict[str, Any]) -> int:
@@ -119,6 +125,213 @@ def _symbol_code(symbol: str) -> str:
     raw = str(symbol).upper().split(".")[0]
     digits = "".join(character for character in raw if character.isdigit())
     return digits[-6:].zfill(6)
+
+
+def _normalized_universe_symbol(value: Any) -> str:
+    raw = str(value).strip().upper()
+    if raw.endswith((".SH", ".SZ", ".BJ")):
+        raw = raw[:-3]
+    if raw.startswith(("SH", "SZ", "BJ")):
+        raw = raw[2:]
+    if not raw.isdigit() or len(raw) > 6:
+        raise ValueError(f"invalid universe symbol: {value!r}")
+    code = raw.zfill(6)
+    if code == "000000":
+        raise ValueError(f"invalid universe symbol: {value!r}")
+    return code
+
+
+def _universe_manifest_sha256(rows: list[dict[str, str]]) -> str:
+    payload = "\n".join(row["symbol"] for row in rows).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _normalize_universe_rows(values: Any) -> list[dict[str, str]]:
+    if isinstance(values, pd.DataFrame):
+        if not {"code", "name"}.issubset(values.columns):
+            raise ValueError("universe DataFrame requires code and name columns")
+        records = values.to_dict("records")
+    elif isinstance(values, list):
+        records = values
+    elif isinstance(values, dict):
+        for key in ("symbols", "codes", "universe", "stock_list"):
+            if isinstance(values.get(key), list):
+                records = values[key]
+                break
+        else:
+            raise ValueError("universe JSON object requires a symbols/codes/universe list")
+    else:
+        raise ValueError("universe must be a DataFrame or JSON list/object")
+
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in records:
+        if isinstance(item, dict):
+            raw_symbol = item.get("code", item.get("symbol", item.get("ts_code")))
+            name = str(item.get("name", ""))
+        else:
+            raw_symbol = item
+            name = ""
+        code = _normalized_universe_symbol(raw_symbol)
+        if code in seen:
+            raise ValueError(f"duplicate universe symbol after normalization: {code}")
+        seen.add(code)
+        rows.append({"symbol": code, "name": name})
+    if not rows:
+        raise ValueError("universe is empty")
+    rows.sort(key=lambda row: row["symbol"])
+    return rows
+
+
+def _stock_list_cache_key(config: dict[str, Any]) -> str:
+    market_data = config.get("market_data", config.get("data_source", {}))
+    stock_pool = config.get("stock_pool", {})
+    market_data = market_data if isinstance(market_data, dict) else {}
+    stock_pool = stock_pool if isinstance(stock_pool, dict) else {}
+    min_listing_trade_days = int(
+        stock_pool.get(
+            "min_listing_trade_days",
+            market_data.get("min_listing_trade_days", 120),
+        )
+    )
+    exclude_st = bool(stock_pool.get("exclude_st", True))
+    exclude_delisting = bool(stock_pool.get("exclude_delisting", True))
+    return (
+        f"stock_list_v{LOCAL_STOCK_LIST_CACHE_VERSION}_"
+        f"{min_listing_trade_days}_{int(exclude_st)}_{int(exclude_delisting)}"
+    )
+
+
+def _load_universe_file(
+    path: Path,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"universe file does not exist: {resolved}")
+    actual_sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    if expected_sha256 and actual_sha256 != str(expected_sha256).lower():
+        raise RuntimeError(
+            "universe file SHA256 mismatch: "
+            f"expected={str(expected_sha256).lower()}, actual={actual_sha256}"
+        )
+    if resolved.suffix.lower() in {".pkl", ".pickle"}:
+        raw = pd.read_pickle(resolved)
+    elif resolved.suffix.lower() == ".json":
+        raw = json.loads(resolved.read_text(encoding="utf-8"))
+    else:
+        raise ValueError("universe file must be PKL, PICKLE or JSON")
+    rows = _normalize_universe_rows(raw)
+    return rows, {
+        "source_path": str(resolved),
+        "source_sha256": actual_sha256,
+        "expected_sha256": str(expected_sha256).lower() if expected_sha256 else None,
+        "source_mtime_utc": pd.Timestamp(
+            resolved.stat().st_mtime, unit="s", tz="UTC"
+        ).isoformat(),
+    }
+
+
+def load_local_stock_universe(
+    config: dict[str, Any],
+    *,
+    cache_dir: Path | None = None,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Load the configuration-matched stock-list cache without TTL or network access."""
+    resolved_cache = (cache_dir or BASE_DIR / "cache").expanduser().resolve()
+    cache_key = _stock_list_cache_key(config)
+    digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
+    rows, metadata = _load_universe_file(resolved_cache / f"{digest}.pkl")
+    metadata["cache_key"] = cache_key
+    return rows, metadata
+
+
+def resolve_backtest_universe(
+    config: dict[str, Any],
+    *,
+    history_dir: Path = HISTORY_DIR,
+    cache_dir: Path | None = None,
+    local_data_only: bool = False,
+    universe_file: Path | None = None,
+    universe_sha256: str | None = None,
+    symbols_file: Path | None = None,
+    limit: int = 0,
+) -> tuple[list[Path], list[dict[str, str]], dict[str, Any]]:
+    """Resolve the exact requested universe without hiding missing history files."""
+    if universe_file is not None and symbols_file is not None:
+        raise ValueError("--universe-file and --symbols-file cannot be combined")
+    if universe_file is not None and limit > 0:
+        raise ValueError("--limit cannot be used with a strict --universe-file")
+    resolved_history = history_dir.expanduser().resolve()
+    if universe_file is not None:
+        all_rows, source = _load_universe_file(
+            universe_file,
+            expected_sha256=universe_sha256,
+        )
+        source.update({"source": "frozen_universe_file", "strict": True})
+    elif universe_sha256 is not None:
+        raise ValueError("--universe-sha256 requires --universe-file")
+    elif symbols_file is not None:
+        symbols_path = symbols_file.expanduser().resolve()
+        raw = json.loads(symbols_path.read_text(encoding="utf-8"))
+        wanted_rows = _normalize_universe_rows(raw)
+        available = {
+            path.name.split("_")[0]
+            for path in resolved_history.glob("*_none.pkl")
+        }
+        all_rows = [row for row in wanted_rows if row["symbol"] in available]
+        source = {
+            "source": "legacy_symbols_file_filter",
+            "strict": False,
+            "source_path": str(symbols_path),
+            "source_sha256": hashlib.sha256(symbols_path.read_bytes()).hexdigest(),
+            "requested_in_file": len(wanted_rows),
+            "silently_filtered_missing_none": len(wanted_rows) - len(all_rows),
+        }
+        if not all_rows:
+            raise ValueError("legacy symbols file selected no available *_none.pkl files")
+    elif local_data_only:
+        all_rows, source = load_local_stock_universe(config, cache_dir=cache_dir)
+        source.update({"source": "local_stock_list_cache", "strict": True})
+    else:
+        all_rows = [
+            {"symbol": path.name.split("_")[0], "name": ""}
+            for path in sorted(resolved_history.glob("*_none.pkl"))
+        ]
+        if not all_rows:
+            raise ValueError(f"no *_none.pkl files found under {resolved_history}")
+        source = {
+            "source": "daily_history_scan",
+            "strict": False,
+            "source_path": str(resolved_history),
+        }
+
+    selected_rows = all_rows[:limit] if limit > 0 else list(all_rows)
+    source.update(
+        {
+            "source_symbols": len(all_rows),
+            "selected_symbols": len(selected_rows),
+            "symbol_manifest_sha256": _universe_manifest_sha256(selected_rows),
+        }
+    )
+    source_symbols = {row["symbol"] for row in all_rows}
+    source["unexpected_local_history"] = {
+        "none": sorted(
+            path.name.split("_")[0]
+            for path in resolved_history.glob("*_none.pkl")
+            if path.name.split("_")[0] not in source_symbols
+        ),
+        "qfq": sorted(
+            path.name.split("_")[0]
+            for path in resolved_history.glob("*_qfq.pkl")
+            if path.name.split("_")[0] not in source_symbols
+        ),
+    }
+    files = [
+        resolved_history / f"{row['symbol']}_none.pkl" for row in selected_rows
+    ]
+    return files, selected_rows, source
 
 
 def price_limit_rate(
@@ -251,15 +464,43 @@ def load_stock_pool_history(
     history_bars: int,
     end: date,
     local_only: bool = False,
+    cache_dir: Path | None = None,
+    history_dir: Path | None = None,
+    cache_lookback_days: int = LOCAL_STOCK_POOL_CACHE_LOOKBACK_DAYS,
 ) -> pd.DataFrame:
     """Load unadjusted, signal-day liquidity metrics for stock-pool filtering."""
     if local_only:
-        path = HISTORY_DIR / f"{_symbol_code(symbol)}_none.pkl"
-        if not path.exists():
-            raise FileNotFoundError(f"local stock-pool history not found: {path}")
-        frame = prepare_closed_bars(pd.read_pickle(path))
-        frame = frame[pd.to_datetime(frame["datetime"]).dt.date <= end]
-        return frame.tail(max(int(history_bars), 1)).reset_index(drop=True)
+        resolved_history_dir = history_dir or HISTORY_DIR
+        path = resolved_history_dir / f"{_symbol_code(symbol)}_none.pkl"
+        if path.exists():
+            frame = prepare_closed_bars(pd.read_pickle(path))
+            frame = frame[pd.to_datetime(frame["datetime"]).dt.date <= end]
+            if "turnover_rate" in frame.columns:
+                result = frame.tail(max(int(history_bars), 1)).reset_index(drop=True)
+                result.attrs["stock_pool_history_source"] = "daily_history_none"
+                result.attrs["stock_pool_history_path"] = str(path.resolve())
+                return result
+        cache_path = _find_local_stock_pool_cache(
+            symbol,
+            history_bars=history_bars,
+            end=end,
+            cache_dir=(cache_dir or BASE_DIR / "cache"),
+            lookback_days=cache_lookback_days,
+        )
+        if cache_path is None:
+            raise FileNotFoundError(
+                "local stock-pool history with turnover data not found for "
+                f"{_symbol_code(symbol)} through {end.isoformat()}; "
+                f"daily_history={path}"
+            )
+        cached = prepare_closed_bars(pd.read_pickle(cache_path))
+        cached = cached[pd.to_datetime(cached["datetime"]).dt.date <= end]
+        if cached.empty or "turnover_rate" not in cached.columns:
+            raise RuntimeError(f"invalid local stock-pool cache: {cache_path}")
+        result = cached.tail(max(int(history_bars), 1)).reset_index(drop=True)
+        result.attrs["stock_pool_history_source"] = "hashed_local_cache"
+        result.attrs["stock_pool_history_path"] = str(cache_path.resolve())
+        return result
     clients = getattr(_BACKTEST_CLIENTS, "clients", None)
     if clients is None:
         clients = {}
@@ -278,6 +519,99 @@ def load_stock_pool_history(
         limit=history_bars,
         end=end,
     )
+
+
+@lru_cache(maxsize=8)
+def _local_cache_file_names(cache_dir: str) -> frozenset[str]:
+    return frozenset(path.stem for path in Path(cache_dir).glob("*.pkl"))
+
+
+def _find_local_stock_pool_cache(
+    symbol: str,
+    *,
+    history_bars: int,
+    end: date,
+    cache_dir: Path,
+    lookback_days: int = LOCAL_STOCK_POOL_CACHE_LOOKBACK_DAYS,
+) -> Path | None:
+    """Find the newest provider cache without invoking a network client."""
+    resolved_cache_dir = cache_dir.expanduser().resolve()
+    available = _local_cache_file_names(str(resolved_cache_dir))
+    request_sizes = tuple(
+        dict.fromkeys(
+            [max(int(history_bars), 1), *LOCAL_STOCK_POOL_CACHE_REQUEST_SIZES]
+        )
+    )
+    normalized = _symbol_code(symbol)
+    for offset in range(max(int(lookback_days), 0) + 1):
+        cache_end = end - timedelta(days=offset)
+        for requested in request_sizes:
+            key = (
+                f"stock_pool_history_v1|{normalized}|{requested}|"
+                f"{cache_end.isoformat()}"
+            )
+            digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+            if digest in available:
+                return resolved_cache_dir / f"{digest}.pkl"
+    return None
+
+
+def _file_manifest_rows(paths: set[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for raw_path in sorted(paths):
+        path = Path(raw_path).resolve()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        rows.append(
+            {
+                "file": path.name,
+                "path": str(path),
+                "sha256": digest,
+            }
+        )
+    return rows
+
+
+def _file_manifest(paths: set[str]) -> dict[str, Any]:
+    rows = _file_manifest_rows(paths)
+    entries = [f"{row['file']}|{row['sha256']}" for row in rows]
+    payload = "\n".join(entries).encode("utf-8")
+    return {
+        "files": len(entries),
+        "manifest_sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
+def _qfq_history_manifest(
+    universe_rows: list[dict[str, str]],
+    history_dir: Path,
+    adjustment: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    entries: list[str] = []
+    missing = 0
+    for universe_row in universe_rows:
+        symbol = universe_row["symbol"]
+        path = (history_dir / f"{symbol}_{adjustment}.pkl").resolve()
+        exists = path.exists() and path.is_file()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest() if exists else None
+        missing += int(not exists)
+        rows.append(
+            {
+                "symbol": symbol,
+                "file": path.name,
+                "path": str(path),
+                "exists": exists,
+                "sha256": digest,
+            }
+        )
+        entries.append(f"{symbol}|{digest or 'MISSING'}")
+    return rows, {
+        "symbols": len(rows),
+        "missing_symbols": missing,
+        "manifest_sha256": hashlib.sha256(
+            "\n".join(entries).encode("utf-8")
+        ).hexdigest(),
+    }
 
 
 def _confirmation_details(
@@ -812,6 +1146,7 @@ def _risk_trigger(
     stop_price: float | None,
     take_price: float | None,
     conflict: str,
+    stop_reason: str = "stop_loss",
 ) -> tuple[str, float, str] | None:
     open_price = float(bar["open"])
     stop_hit = stop_price is not None and float(bar["low"]) <= stop_price
@@ -819,12 +1154,12 @@ def _risk_trigger(
     if not stop_hit and not take_hit:
         return None
     if stop_hit and take_hit:
-        reason = "take_profit" if conflict == "take_first" else "stop_loss"
+        reason = "take_profit" if conflict == "take_first" else stop_reason
     elif stop_hit:
-        reason = "stop_loss"
+        reason = stop_reason
     else:
         reason = "take_profit"
-    if reason == "stop_loss":
+    if reason != "take_profit":
         assert stop_price is not None
         return (reason, open_price, "open") if open_price <= stop_price else (reason, float(stop_price), "intraday")
     assert take_price is not None
@@ -919,6 +1254,22 @@ def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
         "take_profit_pct",
         costs.get("stop_profit_pct", risk.get("stop_profit_pct")),
     )
+    stop_policy = costs.get("stop_loss_policy", {}) or {}
+    stop_policy_mode = str(stop_policy.get("mode", "fixed")).lower().strip()
+    if stop_policy_mode not in {"fixed", "market_regime"}:
+        raise ValueError(
+            "stop_loss_policy.mode must be 'fixed' or 'market_regime', "
+            f"got {stop_policy_mode!r}"
+        )
+    weak_market_stop_loss = stop_policy.get("weak_market_stop_loss_pct", 0.05)
+    weak_market_low_open_exit = stop_policy.get("weak_market_low_open_exit_pct")
+    protection = costs.get("profit_protection", {}) or {}
+    protection_mode = str(protection.get("mode", "none")).lower().strip()
+    if protection_mode not in {"none", "mfe_lock", "atr_trailing"}:
+        raise ValueError(
+            "profit_protection.mode must be 'none', 'mfe_lock' or "
+            f"'atr_trailing', got {protection_mode!r}"
+        )
     return {
         "commission_pct": float(costs.get("commission_pct", 0.0003)),
         "minimum_commission": max(float(costs.get("minimum_commission", 5.0)), 0.0),
@@ -930,6 +1281,17 @@ def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
         "st_symbols": tuple(str(item) for item in costs.get("st_symbols", [])),
         "stop_loss_pct": None if stop_loss is None else max(float(stop_loss), 0.0),
         "take_profit_pct": None if take_profit is None else max(float(take_profit), 0.0),
+        "stop_loss_policy_mode": stop_policy_mode,
+        "weak_market_stop_loss_pct": (
+            None
+            if weak_market_stop_loss is None
+            else max(float(weak_market_stop_loss), 0.0)
+        ),
+        "weak_market_low_open_exit_pct": (
+            None
+            if weak_market_low_open_exit is None
+            else max(float(weak_market_low_open_exit), 0.0)
+        ),
         "intrabar_conflict": str(costs.get("intrabar_conflict", "stop_first")),
         "max_holding_bars": max_holding_bars,
         "timeout_exit_mode": timeout_exit_mode,
@@ -953,7 +1315,64 @@ def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
             max_holding_bars,
             1,
         ),
+        "profit_protection_mode": protection_mode,
+        "profit_activation_pct": max(
+            float(protection.get("activation_pct", 0.08)), 0.0
+        ),
+        "profit_lock_pct": max(float(protection.get("lock_pct", 0.02)), 0.0),
+        "trailing_atr_period": max(int(protection.get("atr_period", 14)), 2),
+        "trailing_atr_multiple": max(
+            float(protection.get("atr_multiple", 2.5)), 0.0
+        ),
+        "trailing_floor_pct": max(
+            float(protection.get("floor_pct", 0.0)), 0.0
+        ),
     }
+
+
+def _atr_series(closed: pd.DataFrame, period: int) -> pd.Series:
+    """Return a causal ATR series calculated from closed daily bars."""
+    high = pd.to_numeric(closed["high"], errors="coerce").astype(float)
+    low = pd.to_numeric(closed["low"], errors="coerce").astype(float)
+    close = pd.to_numeric(closed["close"], errors="coerce").astype(float)
+    previous_close = close.shift(1)
+    true_range = pd.concat(
+        [
+            high - low,
+            (high - previous_close).abs(),
+            (low - previous_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return true_range.rolling(period, min_periods=period).mean()
+
+
+def _next_profit_protection_stop(
+    *,
+    execution: dict[str, Any],
+    entry_price: float,
+    peak_high: float,
+    atr_value: float | None,
+) -> tuple[float | None, str | None]:
+    """Build tomorrow's protection stop from information known today.
+
+    The returned level is never applied to the same bar that established the
+    peak/ATR observation. ``simulate_single_trade`` activates it from the
+    following trading session, which is conservative for daily OHLC data.
+    """
+    mode = execution["profit_protection_mode"]
+    if mode == "none" or entry_price <= 0:
+        return None, None
+    peak_return = peak_high / entry_price - 1.0
+    if peak_return < execution["profit_activation_pct"]:
+        return None, None
+    if mode == "mfe_lock":
+        return entry_price * (1.0 + execution["profit_lock_pct"]), "profit_lock"
+    if atr_value is None or not math.isfinite(float(atr_value)):
+        return None, None
+    floor = entry_price * (1.0 + execution["trailing_floor_pct"])
+    trailing = peak_high - float(atr_value) * execution["trailing_atr_multiple"]
+    return max(floor, trailing), "atr_trailing"
 
 
 def _timeout_ma_break_confirmed(
@@ -1052,6 +1471,7 @@ def simulate_single_trade(
     *,
     allow_incomplete: bool = False,
     market_context: dict[str, Any] | None = None,
+    market_weak_by_day: dict[str, bool] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Simulate one signal without considering any other position."""
     execution = _execution_values(costs)
@@ -1084,6 +1504,14 @@ def simulate_single_trade(
         if execution["take_profit_pct"] is not None and execution["take_profit_pct"] > 0
         else None
     )
+    atr = (
+        _atr_series(closed, execution["trailing_atr_period"])
+        if execution["profit_protection_mode"] == "atr_trailing"
+        else None
+    )
+    peak_high = entry_price
+    protection_stop: float | None = None
+    protection_reason: str | None = None
     pending_exit: tuple[str, int] | None = None
     price_limit_deferred_bars = 0
     for index in range(entry_idx, len(closed)):
@@ -1104,6 +1532,43 @@ def simulate_single_trade(
                 trigger_idx, exit_session, execution, market_context,
                 price_limit_deferred_bars
             ), None
+        market_weak: bool | None = None
+        if (
+            execution["stop_loss_policy_mode"] == "market_regime"
+            or execution["weak_market_low_open_exit_pct"] is not None
+        ):
+            market_day = dates[index].isoformat()
+            if market_weak_by_day is None or market_day not in market_weak_by_day:
+                raise RuntimeError(
+                    "market-regime stop policy is missing a causal index state for "
+                    f"{market_day}"
+                )
+            market_weak = bool(market_weak_by_day[market_day])
+        low_open_threshold = execution["weak_market_low_open_exit_pct"]
+        if (
+            index > entry_idx
+            and low_open_threshold is not None
+            and market_weak
+        ):
+            previous_close = float(closed.iloc[index - 1]["close"])
+            current_open = float(closed.iloc[index]["open"])
+            if previous_close <= 0 or current_open <= 0:
+                return None, "invalid_exit_price"
+            open_gap = current_open / previous_close - 1.0
+            if open_gap <= -low_open_threshold + 1e-12:
+                resolved = _resolve_sell_fill(
+                    symbol, closed, index, current_open, "open", execution
+                )
+                if resolved is None:
+                    pending_exit = ("weak_market_low_open", index)
+                    price_limit_deferred_bars += 1
+                    continue
+                exit_price, exit_session = resolved
+                return _build_trade(
+                    symbol, closed, dates, buy, entry_idx, index, exit_price,
+                    "weak_market_low_open", index, exit_session, execution,
+                    market_context, price_limit_deferred_bars
+                ), None
         if timeout_mode == "fixed" and index == timeout_idx:
             desired_price = float(closed.iloc[index]["open"])
             if desired_price <= 0:
@@ -1142,8 +1607,26 @@ def simulate_single_trade(
             ), None
         if timeout_mode == "ma_break" and index > hard_cap_idx:
             continue
+        effective_stop = stop_price
+        if execution["stop_loss_policy_mode"] == "market_regime" and market_weak:
+            weak_stop_pct = execution["weak_market_stop_loss_pct"]
+            effective_stop = (
+                entry_price * (1 - weak_stop_pct)
+                if weak_stop_pct is not None and weak_stop_pct > 0
+                else None
+            )
+        effective_stop_reason = "stop_loss"
+        if protection_stop is not None and (
+            effective_stop is None or protection_stop > effective_stop
+        ):
+            effective_stop = protection_stop
+            effective_stop_reason = str(protection_reason or "profit_lock")
         risk = _risk_trigger(
-            closed.iloc[index], stop_price, take_price, execution["intrabar_conflict"]
+            closed.iloc[index],
+            effective_stop,
+            take_price,
+            execution["intrabar_conflict"],
+            effective_stop_reason,
         )
         if risk is not None:
             reason, risk_price, session = risk
@@ -1180,6 +1663,24 @@ def simulate_single_trade(
             # The condition is observed at today's close and therefore fills
             # at the next trading day's open via pending_exit.
             pending_exit = ("timeout_ma_break", index)
+        if pending_exit is None:
+            current_high = float(closed.iloc[index]["high"])
+            if math.isfinite(current_high):
+                peak_high = max(peak_high, current_high)
+            atr_value = None
+            if atr is not None and not pd.isna(atr.iloc[index]):
+                atr_value = float(atr.iloc[index])
+            next_stop, next_reason = _next_profit_protection_stop(
+                execution=execution,
+                entry_price=entry_price,
+                peak_high=peak_high,
+                atr_value=atr_value,
+            )
+            if next_stop is not None and (
+                protection_stop is None or next_stop > protection_stop
+            ):
+                protection_stop = next_stop
+                protection_reason = next_reason
     if pending_exit is not None:
         return None, "unresolved_limit_down"
     if not allow_incomplete:
@@ -1211,6 +1712,7 @@ def simulate_signal_mode(
     *,
     market_gate: dict[str, dict[str, Any]] | None = None,
     market_gate_enabled: bool = False,
+    market_weak_by_day: dict[str, bool] | None = None,
     allow_incomplete: bool = False,
 ) -> dict[str, Any]:
     """Independently simulate every buy signal, including overlapping ones."""
@@ -1239,7 +1741,8 @@ def simulate_signal_mode(
                 continue
         trade, reason = simulate_single_trade(
             symbol, closed, dates, buy, sells_by_index, costs,
-            allow_incomplete=allow_incomplete, market_context=context
+            allow_incomplete=allow_incomplete, market_context=context,
+            market_weak_by_day=market_weak_by_day,
         )
         if trade is None:
             skipped[str(reason or "unknown")] += 1
@@ -1266,6 +1769,32 @@ def _public_trade(trade: dict[str, Any]) -> dict[str, Any]:
         for key, value in trade.items()
         if not key.startswith("_") and key not in {"entry_unit_cost", "exit_unit_gain"}
     }
+
+
+def _portfolio_candidate_id(candidate: dict[str, Any]) -> str:
+    return str(
+        candidate.get("candidate_id")
+        or (
+            f"{candidate.get('symbol', '')}|{candidate.get('signal_day', '')}|"
+            f"{candidate.get('signal_type', '')}"
+        )
+    )
+
+
+def _candidate_output_sort_key(candidate: dict[str, Any]) -> tuple[str, ...]:
+    """Stable artifact ordering independent of worker completion order."""
+    return (
+        str(candidate.get("signal_day", "")),
+        str(candidate.get("entry_day", "")),
+        str(candidate.get("signal_type", "")),
+        str(candidate.get("symbol", "")),
+        str(candidate.get("exit_day", "")),
+        _portfolio_candidate_id(candidate),
+    )
+
+
+def _canonical_detail_key(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def summarize(trades: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1549,6 +2078,17 @@ def _candidate_score(
     rank: dict[str, int],
 ) -> float:
     """Compute an orderable score using only information known at entry time."""
+    if mode == "external_causal_score":
+        value = candidate.get("_portfolio_rank_score")
+        if value is None:
+            raise ValueError("external_causal_score requires _portfolio_rank_score")
+        try:
+            score = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("_portfolio_rank_score must be numeric") from exc
+        if not math.isfinite(score):
+            raise ValueError("_portfolio_rank_score must be finite")
+        return score
     if _is_p5b_mode(mode):
         return _p5b_mode_score(candidate, mode, rank)
     if _is_p5a_variant(mode):
@@ -1831,9 +2371,13 @@ def run_portfolio(
     cash = initial_cash
     positions: dict[str, dict[str, Any]] = {}
     completed: list[dict[str, Any]] = []
+    accepted_entries: list[dict[str, Any]] = []
     rejections: list[dict[str, Any]] = []
     equity_curve: list[dict[str, Any]] = []
     max_positions_used = 0
+    gross_buy_notional = 0.0
+    gross_sell_notional = 0.0
+    transaction_cost_cash = 0.0
 
     def reject(candidate: dict[str, Any], reason: str) -> None:
         rejections.append(
@@ -1847,10 +2391,16 @@ def run_portfolio(
         )
 
     def close_position(symbol: str) -> None:
-        nonlocal cash
+        nonlocal cash, gross_sell_notional, transaction_cost_cash
         trade = positions.pop(symbol)
         quantity = int(trade["quantity"])
         exit_cash = _sell_cash(float(trade["exit_price"]), quantity, execution)
+        gross_sell_notional += float(trade["exit_price"]) * quantity
+        transaction_cost_cash += (
+            float(exit_cash["commission"])
+            + float(exit_cash["stamp_tax"])
+            + float(exit_cash["slippage"])
+        )
         proceeds = exit_cash["total"]
         cash += proceeds
         entry_cost_exact = float(trade["_entry_cost_cash_exact"])
@@ -1907,7 +2457,23 @@ def run_portfolio(
             accepted["entry_commission_cash"] = round(entry_cash["commission"], 2)
             accepted["entry_slippage_cash"] = round(entry_cash["slippage"], 2)
             cash -= entry_cost
+            gross_buy_notional += float(candidate["entry_price"]) * quantity
+            transaction_cost_cash += (
+                float(entry_cash["commission"]) + float(entry_cash["slippage"])
+            )
             positions[symbol] = accepted
+            accepted_entries.append(
+                {
+                    "candidate_id": _portfolio_candidate_id(candidate),
+                    "symbol": symbol,
+                    "signal_day": candidate["signal_day"],
+                    "entry_day": candidate["entry_day"],
+                    "signal_type": candidate["signal_type"],
+                    "quantity": quantity,
+                    "entry_price": float(candidate["entry_price"]),
+                    "entry_cost_cash": round(entry_cost, 2),
+                }
+            )
             max_positions_used = max(max_positions_used, len(positions))
         for symbol, trade in list(positions.items()):
             if trade["exit_day"] == day_key and trade.get("exit_session") != "open":
@@ -1954,12 +2520,83 @@ def run_portfolio(
         "accepted": len(completed) + len(positions),
         "rejected": len(rejections),
     }
+    session_count = len(equity_curve)
+    equities = [float(point["equity"]) for point in equity_curve]
+    average_equity = sum(equities) / session_count if session_count else initial_cash
+    valid_points = [
+        point for point in equity_curve if float(point.get("equity", 0.0)) > 0
+    ]
+    average_gross_exposure = (
+        sum(float(point["market_value"]) / float(point["equity"]) for point in valid_points)
+        / len(valid_points)
+        if valid_points
+        else 0.0
+    )
+    average_cash_ratio = (
+        sum(float(point["cash"]) / float(point["equity"]) for point in valid_points)
+        / len(valid_points)
+        if valid_points
+        else 1.0
+    )
+    one_way_turnover = (
+        (gross_buy_notional + gross_sell_notional) / 2.0 / average_equity
+        if average_equity > 0
+        else None
+    )
+    portfolio_attribution = {
+        "calendar_scope": "observed_candidate_and_position_sessions",
+        "session_count": session_count,
+        "invested_session_count": sum(
+            1 for point in equity_curve if int(point["positions"]) > 0
+        ),
+        "invested_session_pct": round(
+            sum(1 for point in equity_curve if int(point["positions"]) > 0)
+            / session_count
+            * 100.0,
+            2,
+        ) if session_count else None,
+        "position_session_count": sum(int(point["positions"]) for point in equity_curve),
+        "average_positions": round(
+            sum(int(point["positions"]) for point in equity_curve) / session_count,
+            4,
+        ) if session_count else 0.0,
+        "position_capacity_utilization_pct": round(
+            sum(int(point["positions"]) for point in equity_curve)
+            / session_count
+            / max_positions
+            * 100.0,
+            2,
+        ) if session_count else 0.0,
+        "average_gross_exposure_pct": round(average_gross_exposure * 100.0, 2),
+        "average_cash_pct": round(average_cash_ratio * 100.0, 2),
+        "gross_buy_notional_cash": round(gross_buy_notional, 2),
+        "gross_sell_notional_cash": round(gross_sell_notional, 2),
+        "one_way_turnover_ratio": round(one_way_turnover, 6) if one_way_turnover is not None else None,
+        "annualized_one_way_turnover_ratio": (
+            round(one_way_turnover * 252.0 / session_count, 6)
+            if one_way_turnover is not None and session_count
+            else None
+        ),
+        "transaction_cost_cash": round(transaction_cost_cash, 2),
+        "transaction_cost_pct_initial_cash": round(
+            transaction_cost_cash / initial_cash * 100.0, 4
+        ) if initial_cash > 0 else None,
+        "candidate_acceptance_pct": round(
+            len(accepted_entries) / len(merged) * 100.0, 2
+        ) if merged else None,
+        "max_positions_rejections": sum(
+            1 for rejection in rejections if rejection["reason"] == "max_positions"
+        ),
+        "average_completed_holding_days": trade_summary.get("avg_holding_days"),
+    }
     return {
         "summary": summary,
         "trades": public_completed,
+        "accepted_entries": accepted_entries,
         "rejections": rejections,
         "rejection_reasons": dict(Counter(item["reason"] for item in rejections)),
         "equity_curve": equity_curve,
+        "attribution": portfolio_attribution,
     }
 
 
@@ -1969,6 +2606,9 @@ def _resolve_execution_config(config: dict[str, Any]) -> dict[str, Any]:
     result["stop_loss_pct"] = float(risk.get("stop_loss_pct", 0.08))
     result["take_profit_pct"] = float(risk.get("stop_profit_pct", 0.30))
     result.setdefault("intrabar_conflict", "stop_first")
+    protection = dict(result.get("profit_protection", {}) or {})
+    protection.setdefault("mode", "none")
+    result["profit_protection"] = protection
     return result
 
 
@@ -1998,6 +2638,425 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _insufficient_history_analysis_result(history_source: str) -> dict[str, Any]:
+    """Return the complete per-symbol result contract for a short history."""
+    return {
+        "trades": [],
+        "skipped": {"insufficient_history": 1},
+        "history_source": history_source,
+        "stock_pool_history_source": None,
+        "stock_pool_history_path": None,
+        "stock_pool_rejections": [],
+        "fundamental_rejections": [],
+        "observed_signals": [],
+        "signal_policy_counts": {},
+    }
+
+
+def _guard_preflight_path(path: Path, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if any("holdout" in part.lower() for part in resolved.parts):
+        raise ValueError(f"Holdout path is blocked in preflight ({label}): {resolved}")
+    return resolved
+
+
+def _preflight_history_dates(frame: pd.DataFrame, start: date, end: date) -> list[date]:
+    if frame.empty or "datetime" not in frame.columns:
+        return []
+    values = pd.to_datetime(frame["datetime"], errors="coerce").dropna().dt.date
+    return sorted({value for value in values if start <= value <= end})
+
+
+def _stock_pool_preflight_failures(
+    qfq: pd.DataFrame,
+    stock_pool_history: pd.DataFrame,
+    *,
+    start: date,
+    end: date,
+    settings: dict[str, Any],
+) -> dict[str, int]:
+    """Conservatively check stock-pool inputs on every possible QFQ signal day."""
+    qfq_datetimes = pd.to_datetime(
+        qfq.get("datetime", pd.Series(dtype="datetime64[ns]")), errors="coerce"
+    ).dropna()
+    all_qfq_days = sorted({value for value in qfq_datetimes.dt.date if value <= end})
+    min_listing_days = max(int(settings.get("min_listing_trade_days", 0)), 0)
+    first_eligible_index = max(min_listing_days - 1, 0)
+    eligible_qfq_days = (
+        all_qfq_days[first_eligible_index:]
+        if min_listing_days > 0
+        else all_qfq_days
+    )
+    qfq_days = [day for day in eligible_qfq_days if start <= day <= end]
+    if not qfq_days:
+        return {}
+    frame = stock_pool_history.copy()
+    if frame.empty or "datetime" not in frame.columns:
+        return {"stock_pool_history_missing": len(qfq_days)}
+    frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
+    frame = (
+        frame.dropna(subset=["datetime"])
+        .sort_values("datetime")
+        .drop_duplicates("datetime", keep="last")
+        .reset_index(drop=True)
+    )
+    for column in (
+        "close",
+        "volume",
+        "amount",
+        "turnover_rate",
+        "circulating_market_cap",
+    ):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    index_by_day = {
+        value.date(): index for index, value in enumerate(frame["datetime"])
+    }
+    missing_exact = [day for day in qfq_days if day not in index_by_day]
+    failures: Counter = Counter()
+    if missing_exact:
+        failures["stock_pool_exact_date_missing"] = len(missing_exact)
+
+    turnover = (
+        frame["turnover_rate"]
+        if "turnover_rate" in frame.columns
+        else pd.Series(float("nan"), index=frame.index, dtype="float64")
+    )
+    close = (
+        frame["close"]
+        if "close" in frame.columns
+        else pd.Series(float("nan"), index=frame.index, dtype="float64")
+    )
+    volume = (
+        frame["volume"]
+        if "volume" in frame.columns
+        else pd.Series(float("nan"), index=frame.index, dtype="float64")
+    )
+    direct_market_cap = (
+        frame["circulating_market_cap"]
+        if "circulating_market_cap" in frame.columns
+        else pd.Series(float("nan"), index=frame.index, dtype="float64")
+    )
+    derived_market_cap_valid = (
+        close.notna() & volume.notna() & turnover.notna() & (turnover > 0)
+    )
+    market_cap_valid = (
+        (direct_market_cap.notna() & (direct_market_cap >= 0))
+        | derived_market_cap_valid
+    )
+
+    amount = (
+        frame["amount"].copy()
+        if "amount" in frame.columns
+        else pd.Series(float("nan"), index=frame.index, dtype="float64")
+    )
+    estimated_amount = close * volume * float(settings["volume_unit_shares"])
+    amount = amount.where(amount > 0, estimated_amount)
+    amount_window = int(settings["amount_window"])
+    turnover_window = int(settings["turnover_window"])
+    amount_ready = amount.notna().rolling(
+        amount_window, min_periods=amount_window
+    ).sum() >= amount_window
+    turnover_ready = turnover.notna().rolling(
+        turnover_window, min_periods=turnover_window
+    ).sum() >= turnover_window
+
+    for day in qfq_days:
+        index = index_by_day.get(day)
+        if index is None:
+            continue
+        if not bool(market_cap_valid.iloc[index]):
+            failures["stock_pool_market_cap_missing"] += 1
+        if not bool(amount_ready.iloc[index]):
+            failures["stock_pool_avg_amount_missing"] += 1
+        if not bool(turnover_ready.iloc[index]):
+            failures["stock_pool_turnover_missing"] += 1
+    return dict(sorted(failures.items()))
+
+
+def run_long_history_preflight(
+    config: dict[str, Any],
+    *,
+    config_path: Path,
+    universe_rows: list[dict[str, str]],
+    universe: dict[str, Any],
+    start: date,
+    end: date,
+    history_bars: int,
+    adjustment: str,
+    fetch_missing_adjusted: bool,
+    local_data_only: bool,
+    allow_incomplete: bool,
+    dataset_role: str,
+    index_data_path: Path | None,
+    history_dir: Path = HISTORY_DIR,
+    cache_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Inspect v5 local inputs without fitting, signals, network, DB, or writes."""
+    resolved_config = _guard_preflight_path(config_path, "config")
+    resolved_history = _guard_preflight_path(history_dir, "history_dir")
+    resolved_cache = _guard_preflight_path(cache_dir or BASE_DIR / "cache", "cache_dir")
+    source_path = universe.get("source_path")
+    if source_path:
+        _guard_preflight_path(Path(str(source_path)), "universe")
+    resolved_index = (
+        _guard_preflight_path(index_data_path, "index_data")
+        if index_data_path is not None
+        else None
+    )
+    stock_pool_settings = resolve_stock_pool_config(config)
+    checks: dict[str, bool] = {
+        "data_adjustment_is_qfq": adjustment == "qfq",
+        "local_data_only": bool(local_data_only),
+        "fetch_missing_adjusted_disabled": not bool(fetch_missing_adjusted),
+        "incomplete_trades_excluded": not bool(allow_incomplete),
+        "dataset_role_is_full": dataset_role == "full",
+        "strict_frozen_universe": (
+            universe.get("source") == "frozen_universe_file"
+            and universe.get("strict") is True
+            and bool(universe.get("expected_sha256"))
+            and universe.get("source_symbols") == len(universe_rows)
+            and universe.get("selected_symbols") == len(universe_rows)
+            and universe.get("symbol_manifest_sha256")
+            == _universe_manifest_sha256(universe_rows)
+        ),
+        "stock_pool_missing_data_policy_is_reject": (
+            not stock_pool_settings["enabled"]
+            or stock_pool_settings["missing_data_policy"] == "reject"
+        ),
+        "index_data_explicit": resolved_index is not None,
+    }
+
+    index_record: dict[str, Any] = {
+        "path": str(resolved_index) if resolved_index is not None else None,
+        "sha256": None,
+        "readable": False,
+    }
+    if resolved_index is not None and resolved_index.exists():
+        index_record["sha256"] = hashlib.sha256(resolved_index.read_bytes()).hexdigest()
+        try:
+            index_frame = _load_index_history(str(resolved_index), config, history_bars)
+            index_frame = prepare_closed_bars(index_frame)
+            market_gate_required = bool(
+                (config.get("entry_filters", {}) or {}).get(
+                    "market_gate_enabled", False
+                )
+            )
+            gate = build_market_gate(index_frame, config) if market_gate_required else {}
+            usable_gate_days = sum(
+                1
+                for context in gate.values()
+                if "insufficient_history" not in context.get("blocked_by", [])
+            )
+            gate_usable = (
+                not market_gate_required
+                or (bool(gate) and usable_gate_days > 0)
+            )
+            index_record.update(
+                {
+                    "readable": not index_frame.empty and gate_usable,
+                    "bars": len(index_frame),
+                    "first_day": (
+                        _day(index_frame["datetime"].iloc[0]).isoformat()
+                        if not index_frame.empty
+                        else None
+                    ),
+                    "last_day": (
+                        _day(index_frame["datetime"].iloc[-1]).isoformat()
+                        if not index_frame.empty
+                        else None
+                    ),
+                    "market_gate_required": market_gate_required,
+                    "market_gate_usable_days": usable_gate_days,
+                }
+            )
+        except Exception as exc:
+            index_record["error"] = f"{type(exc).__name__}: {exc}"
+    checks["index_data_readable"] = bool(index_record["readable"])
+
+    blocking: Counter = Counter()
+    nonblocking: Counter = Counter()
+    symbol_records: list[dict[str, Any]] = []
+    universe_symbols = {row["symbol"] for row in universe_rows}
+    for row in universe_rows:
+        symbol = row["symbol"]
+        qfq_path = resolved_history / f"{symbol}_{adjustment}.pkl"
+        record: dict[str, Any] = {
+            "symbol": symbol,
+            "qfq": {"path": str(qfq_path), "bars": 0, "date_range": None},
+            "stock_pool": {"required": bool(stock_pool_settings["enabled"])},
+            "blocking_issues": {},
+            "nonblocking_issues": {},
+        }
+        qfq = pd.DataFrame()
+        try:
+            qfq, source = load_backtest_history(
+                symbol,
+                adjustment=adjustment,
+                config=config,
+                history_bars=history_bars,
+                end=end,
+                fetch_missing=False,
+                history_dir=resolved_history,
+                local_only=True,
+            )
+            qfq = qfq[
+                pd.to_datetime(qfq["datetime"], errors="coerce").dt.date <= end
+            ].reset_index(drop=True)
+            record["qfq"].update(
+                {
+                    "source": source,
+                    "sha256": hashlib.sha256(qfq_path.read_bytes()).hexdigest(),
+                    "bars": len(qfq),
+                    "date_range": {
+                        "first": _day(qfq["datetime"].iloc[0]).isoformat(),
+                        "last": _day(qfq["datetime"].iloc[-1]).isoformat(),
+                    },
+                }
+            )
+            if len(qfq) < 60:
+                record["nonblocking_issues"]["insufficient_history"] = 1
+                nonblocking["insufficient_history"] += 1
+            if len(qfq) < history_bars:
+                record["nonblocking_issues"]["qfq_below_requested_bars"] = 1
+                nonblocking["qfq_below_requested_bars"] += 1
+        except Exception as exc:
+            reason = "qfq_history_missing" if not qfq_path.exists() else "qfq_history_invalid"
+            record["qfq"]["error"] = f"{type(exc).__name__}: {exc}"
+            record["blocking_issues"][reason] = 1
+            blocking[reason] += 1
+
+        qfq_days = _preflight_history_dates(qfq, start, end)
+        if len(qfq) >= 60 and not qfq_days:
+            record["nonblocking_issues"]["no_history_in_window"] = 1
+            nonblocking["no_history_in_window"] += 1
+        if stock_pool_settings["enabled"] and qfq_days and len(qfq) >= 60:
+            try:
+                stock_history = load_stock_pool_history(
+                    symbol,
+                    config=config,
+                    history_bars=history_bars,
+                    end=end,
+                    local_only=True,
+                    cache_dir=resolved_cache,
+                    history_dir=resolved_history,
+                    cache_lookback_days=PREFLIGHT_STOCK_POOL_CACHE_LOOKBACK_DAYS,
+                )
+                stock_path = Path(
+                    str(stock_history.attrs.get("stock_pool_history_path", ""))
+                )
+                record["stock_pool"].update(
+                    {
+                        "source": stock_history.attrs.get("stock_pool_history_source"),
+                        "path": str(stock_path),
+                        "sha256": (
+                            hashlib.sha256(stock_path.read_bytes()).hexdigest()
+                            if stock_path.exists()
+                            else None
+                        ),
+                        "bars": len(stock_history),
+                    }
+                )
+                failures = _stock_pool_preflight_failures(
+                    qfq,
+                    stock_history,
+                    start=start,
+                    end=end,
+                    settings=stock_pool_settings,
+                )
+                record["blocking_issues"].update(failures)
+                for reason in failures:
+                    blocking[reason] += 1
+            except Exception as exc:
+                reason = (
+                    "stock_pool_history_missing"
+                    if isinstance(exc, FileNotFoundError)
+                    else "stock_pool_history_invalid"
+                )
+                record["stock_pool"]["error"] = f"{type(exc).__name__}: {exc}"
+                record["blocking_issues"][reason] = 1
+                blocking[reason] += 1
+        symbol_records.append(record)
+
+    extra_none = sorted(
+        path.name.split("_")[0]
+        for path in resolved_history.glob("*_none.pkl")
+        if path.name.split("_")[0] not in universe_symbols
+    )
+    extra_qfq = sorted(
+        path.name.split("_")[0]
+        for path in resolved_history.glob("*_qfq.pkl")
+        if path.name.split("_")[0] not in universe_symbols
+    )
+    warning_by_reason = {
+        key: value
+        for key, value in (
+            ("unexpected_none_history", len(extra_none)),
+            ("unexpected_qfq_history", len(extra_qfq)),
+        )
+        if value
+    }
+    checks["all_universe_qfq_loadable"] = not any(
+        key.startswith("qfq_") for key in blocking
+    )
+    checks["stock_pool_coverage_ready"] = not any(
+        key.startswith("stock_pool_") for key in blocking
+    )
+    passes = all(checks.values()) and not blocking
+    return {
+        "version": "long_history_preflight.v1",
+        "mode": "read_only_preflight",
+        "passes_preflight": passes,
+        "production_eligible": False,
+        "policy": {
+            "holdout_used": False,
+            "network_used": False,
+            "database_used": False,
+            "writes_performed": False,
+        },
+        "effective_run": {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "history_bars": history_bars,
+            "adjustment": adjustment,
+            "local_data_only": bool(local_data_only),
+            "fetch_missing_adjusted": bool(fetch_missing_adjusted),
+            "allow_incomplete": bool(allow_incomplete),
+            "dataset_role": dataset_role,
+            "stock_pool": stock_pool_settings,
+        },
+        "inputs": {
+            "config": {
+                "path": str(resolved_config),
+                "sha256": hashlib.sha256(resolved_config.read_bytes()).hexdigest(),
+            },
+            "index_data": index_record,
+            "universe": universe,
+        },
+        "checks": checks,
+        "summary": {
+            "symbols": len(universe_rows),
+            "blocking_symbols": sum(bool(item["blocking_issues"]) for item in symbol_records),
+            "blocking_by_reason": dict(sorted(blocking.items())),
+            "nonblocking_by_reason": dict(sorted(nonblocking.items())),
+            "warning_by_reason": warning_by_reason,
+        },
+        "unexpected_local_history": {
+            "none": extra_none,
+            "qfq": extra_qfq,
+        },
+        "symbols": symbol_records,
+        "equivalent_to_source_report_audit": False,
+        "formal_post_run_checks_required": [
+            "actual_symbols_succeeded_equals_requested",
+            "actual_stock_pool_data_failures_zero",
+            "candidate_artifact_path_count_and_unique_ids",
+            "universe_and_stock_pool_manifest_artifact_hashes",
+            "formal_and_verify_run_determinism",
+        ],
+    }
 
 
 def main() -> int:
@@ -2034,6 +3093,23 @@ def main() -> int:
         action="store_true",
         help="research safety mode: use local history/cache only and never fetch stock-pool history",
     )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="read-only v5 local-data readiness check; prints JSON and performs no backtest writes",
+    )
+    parser.add_argument(
+        "--universe-file",
+        type=str,
+        default=None,
+        help="strict frozen universe PKL/JSON; every symbol is counted even when history is missing",
+    )
+    parser.add_argument(
+        "--universe-sha256",
+        type=str,
+        default=None,
+        help="required expected SHA256 for a v5 preflight frozen universe",
+    )
     parser.add_argument("--index-data", type=str, default=None, help="historical index CSV/JSON/PKL")
     parser.add_argument("--index-limit", type=int, default=1200)
     parser.add_argument(
@@ -2051,7 +3127,7 @@ def main() -> int:
         "--symbols-file",
         type=str,
         default=None,
-        help="JSON file with list of symbols to analyze (filters the directory scan)",
+        help="legacy JSON filter over existing *_none.pkl files; not valid for v5 freezing",
     )
     parser.add_argument(
         "--fundamental-missing-data-policy",
@@ -2138,6 +3214,23 @@ def main() -> int:
         "each mode writes its own report and portfolio outputs",
     )
     args = parser.parse_args()
+    if args.preflight_only or args.universe_file:
+        development_paths = {
+            "config": args.config,
+            "universe": args.universe_file,
+            "symbols": args.symbols_file,
+            "index_data": args.index_data,
+            "fundamental_data": args.fundamental_data,
+            "output": (None if args.preflight_only else args.out),
+        }
+        try:
+            for label, raw_path in development_paths.items():
+                if raw_path:
+                    _guard_preflight_path(Path(raw_path), label)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.universe_file and not args.index_data:
+        parser.error("--index-data is required with a strict --universe-file")
     start = date.fromisoformat(args.start)
     end = date.fromisoformat(args.end)
     if end < start:
@@ -2202,6 +3295,13 @@ def main() -> int:
         if args.fundamental_data
         else (config.get("backtest", {}).get("fundamental", {}) or {}).get("data_path")
     )
+    if (args.preflight_only or args.universe_file) and fundamental_data_path:
+        try:
+            _guard_preflight_path(
+                Path(str(fundamental_data_path)), "fundamental_data"
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
     fundamental_history: dict[str, list[dict[str, Any]]] = {}
     if fundamental_settings["enabled"]:
         if not fundamental_data_path:
@@ -2212,6 +3312,60 @@ def main() -> int:
     fundamental_coverage = history_coverage_report(fundamental_history)
     market_gate_settings = resolve_market_gate_settings(config)
     signal_execution_policy = resolve_signal_execution_policy(config)
+    try:
+        files, universe_rows, universe_metadata = resolve_backtest_universe(
+            config,
+            history_dir=HISTORY_DIR,
+            cache_dir=BASE_DIR / "cache",
+            local_data_only=bool(args.local_data_only),
+            universe_file=(Path(args.universe_file) if args.universe_file else None),
+            universe_sha256=args.universe_sha256,
+            symbols_file=(Path(args.symbols_file) if args.symbols_file else None),
+            limit=args.limit,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+    preflight_result: dict[str, Any] | None = None
+    if args.preflight_only or args.universe_file:
+        try:
+            preflight = run_long_history_preflight(
+                config,
+                config_path=Path(args.config),
+                universe_rows=universe_rows,
+                universe=universe_metadata,
+                start=start,
+                end=end,
+                history_bars=history_bars,
+                adjustment=adjustment,
+                fetch_missing_adjusted=fetch_missing_adjusted,
+                local_data_only=bool(args.local_data_only),
+                allow_incomplete=bool(args.allow_incomplete),
+                dataset_role=strategy_framework["dataset_role"],
+                index_data_path=(Path(args.index_data) if args.index_data else None),
+                history_dir=HISTORY_DIR,
+                cache_dir=BASE_DIR / "cache",
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            parser.error(str(exc))
+        if args.preflight_only or not preflight["passes_preflight"]:
+            print(json.dumps(preflight, ensure_ascii=False, sort_keys=True, indent=2))
+            return 0 if preflight["passes_preflight"] else 1
+        preflight_result = preflight
+    qfq_manifest_rows, qfq_manifest = _qfq_history_manifest(
+        universe_rows, HISTORY_DIR, adjustment
+    )
+    index_input_path = (
+        Path(args.index_data).expanduser().resolve() if args.index_data else None
+    )
+    index_input_sha256 = (
+        hashlib.sha256(index_input_path.read_bytes()).hexdigest()
+        if index_input_path and index_input_path.exists()
+        else None
+    )
+    engine_path = Path(__file__).resolve()
+    engine_sha256 = hashlib.sha256(engine_path.read_bytes()).hexdigest()
+    signal_engine_path = (BASE_DIR / "strategy" / "macd.py").resolve()
+    signal_engine_sha256 = hashlib.sha256(signal_engine_path.read_bytes()).hexdigest()
     market_gate_enabled = bool(entry_filters.get("market_gate_enabled", False))
     market_gate: dict[str, dict[str, Any]] | None = None
     market_gate_meta: dict[str, Any] = {"enabled": market_gate_enabled}
@@ -2239,17 +3393,6 @@ def main() -> int:
             }
         )
 
-    files = sorted(HISTORY_DIR.glob("*_none.pkl"))
-    if args.symbols_file:
-        with open(Path(args.symbols_file), encoding="utf-8") as symbols_handle:
-            symbol_list = json.load(symbols_handle)
-        wanted = {str(item).zfill(6) for item in symbol_list}
-        files = [
-            path for path in files
-            if str(path.name.split("_")[0]).zfill(6) in wanted
-        ]
-    if args.limit:
-        files = files[: args.limit]
     logger.info(
         "Backtesting %s symbols, window %s -> %s, mode=%s, adjust=%s, bars=%s",
         len(files), start, end, args.mode, adjustment, history_bars,
@@ -2270,6 +3413,8 @@ def main() -> int:
     fundamental_filter_details: list[dict[str, Any]] = []
     skipped: Counter = Counter()
     history_sources: Counter = Counter()
+    stock_pool_history_sources: Counter = Counter()
+    stock_pool_history_paths: set[str] = set()
     errors = 0
 
     def analyse_one(path: Path) -> dict[str, Any]:
@@ -2285,15 +3430,7 @@ def main() -> int:
         )
         closed = closed[pd.to_datetime(closed["datetime"]).dt.date <= end].reset_index(drop=True)
         if closed.empty or len(closed) < 60:
-            return {
-                "trades": [],
-                "skipped": {"insufficient_history": 1},
-                "history_source": history_source,
-                "stock_pool_rejections": [],
-                "fundamental_rejections": [],
-                "observed_signals": [],
-                "signal_policy_counts": {},
-            }
+            return _insufficient_history_analysis_result(history_source)
         events = find_signals(closed, config)
         events = {
             "buy": [
@@ -2335,6 +3472,8 @@ def main() -> int:
         fundamental_skipped: Counter = Counter()
         fundamental_details: list[dict[str, Any]] = []
         stock_pool_fetch_failed = False
+        stock_pool_history_source: str | None = None
+        stock_pool_history_path: str | None = None
         if stock_pool_settings["enabled"] and events.get("buy"):
             try:
                 stock_pool_history = load_stock_pool_history(
@@ -2344,8 +3483,17 @@ def main() -> int:
                     end=end,
                     local_only=bool(args.local_data_only),
                 )
+                stock_pool_history_source = str(
+                    stock_pool_history.attrs.get(
+                        "stock_pool_history_source", "provider_or_memory_cache"
+                    )
+                )
+                source_path = stock_pool_history.attrs.get("stock_pool_history_path")
+                if source_path:
+                    stock_pool_history_path = str(source_path)
             except Exception as exc:
                 stock_pool_fetch_failed = True
+                stock_pool_history_source = "missing_or_invalid"
                 logger.warning("stock-pool history failed for %s: %s", symbol, exc)
                 stock_pool_history = pd.DataFrame()
             events, stock_pool_skipped, stock_pool_details = filter_buy_events(
@@ -2384,6 +3532,8 @@ def main() -> int:
             "trades": result["trades"],
             "skipped": dict(combined),
             "history_source": history_source,
+            "stock_pool_history_source": stock_pool_history_source,
+            "stock_pool_history_path": stock_pool_history_path,
             "stock_pool_rejections": stock_pool_details,
             "fundamental_rejections": fundamental_details,
             "observed_signals": observed_records,
@@ -2402,11 +3552,31 @@ def main() -> int:
                 fundamental_filter_details.extend(result["fundamental_rejections"])
                 skipped.update(result["skipped"])
                 history_sources[result["history_source"]] += 1
+                if result["stock_pool_history_source"]:
+                    stock_pool_history_sources[result["stock_pool_history_source"]] += 1
+                if result["stock_pool_history_path"]:
+                    stock_pool_history_paths.add(result["stock_pool_history_path"])
             except Exception:
                 errors += 1
                 logger.exception("symbol analysis failed")
             if index % 200 == 0:
                 logger.info("processed %d/%d, candidates %d", index, len(files), len(all_candidates))
+
+    all_candidates.sort(key=_candidate_output_sort_key)
+    stock_pool_rejection_details.sort(
+        key=lambda item: (
+            str(item.get("day", item.get("signal_day", ""))),
+            str(item.get("symbol", "")),
+            _canonical_detail_key(item),
+        )
+    )
+    fundamental_filter_details.sort(
+        key=lambda item: (
+            str(item.get("day", item.get("signal_day", ""))),
+            str(item.get("symbol", "")),
+            _canonical_detail_key(item),
+        )
+    )
 
     effective_config = copy.deepcopy(config)
     effective_backtest = effective_config.setdefault("backtest", {})
@@ -2431,12 +3601,29 @@ def main() -> int:
     report: dict[str, Any] = {
         "report_version": 2,
         "strategy_framework": strategy_framework,
-        "config_source": config.get("_config_path"),
+        "config_source": str(Path(args.config).expanduser().resolve()),
         "config_snapshot": build_config_snapshot(effective_config),
         "experiment": {
             "id": strategy_framework["experiment_id"],
             "dataset_role": strategy_framework["dataset_role"],
             "window": {"start": start.isoformat(), "end": end.isoformat()},
+        },
+        "universe": universe_metadata,
+        "preflight_attestation": None,
+        "frozen_inputs": {
+            "index_data": {
+                "path": str(index_input_path) if index_input_path else None,
+                "sha256": index_input_sha256,
+            },
+            "backtest_engine": {
+                "path": str(engine_path),
+                "sha256": engine_sha256,
+            },
+            "signal_engine": {
+                "path": str(signal_engine_path),
+                "sha256": signal_engine_sha256,
+            },
+            "qfq_history": qfq_manifest,
         },
         "window": {"start": start.isoformat(), "end": end.isoformat()},
         "mode": args.mode,
@@ -2448,7 +3635,7 @@ def main() -> int:
         "symbols_analyzed": max(len(files) - errors, 0),
         "data_adjustment": adjustment,
         "history_bars_requested": history_bars,
-        "history_sources": dict(history_sources),
+        "history_sources": dict(sorted(history_sources.items())),
         "allow_incomplete": args.allow_incomplete,
         "execution": execution,
         "model_capabilities": {
@@ -2472,11 +3659,17 @@ def main() -> int:
             "signal_execution_policy": signal_execution_policy,
             "position_gate_enabled": bool(entry_filters.get("position_gate_enabled", False)),
             "stock_pool": stock_pool_settings,
+            "stock_pool_history": {
+                "sources": dict(sorted(stock_pool_history_sources.items())),
+                "local_cache_manifest": _file_manifest(stock_pool_history_paths),
+            },
             "stock_pool_rejections": dict(
-                Counter(
-                    reason
-                    for detail in stock_pool_rejection_details
-                    for reason in detail.get("reasons", [])
+                sorted(
+                    Counter(
+                        reason
+                        for detail in stock_pool_rejection_details
+                        for reason in detail.get("reasons", [])
+                    ).items()
                 )
             ),
             "stock_pool_rejected_candidates": len(stock_pool_rejection_details),
@@ -2534,6 +3727,60 @@ def main() -> int:
         out_path = BASE_DIR / out_path
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    if preflight_result is not None:
+        preflight_path = out_path.with_name(out_path.stem + "_preflight.json")
+        preflight_bytes = json.dumps(
+            preflight_result,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ).encode("utf-8")
+        preflight_path.write_bytes(preflight_bytes)
+        preflight_sha256 = hashlib.sha256(preflight_bytes).hexdigest()
+        report["artifacts"]["preflight"] = str(preflight_path)
+        report["preflight_attestation"] = {
+            "version": preflight_result["version"],
+            "passes_preflight": True,
+            "artifact": str(preflight_path),
+            "artifact_sha256": preflight_sha256,
+            "checks": preflight_result["checks"],
+            "summary": preflight_result["summary"],
+            "universe_source_sha256": preflight_result["inputs"]["universe"].get(
+                "source_sha256"
+            ),
+            "universe_symbol_manifest_sha256": preflight_result["inputs"][
+                "universe"
+            ].get("symbol_manifest_sha256"),
+            "index_sha256": preflight_result["inputs"]["index_data"].get(
+                "sha256"
+            ),
+            "full_result_sha256": preflight_sha256,
+        }
+
+    universe_manifest_path = out_path.with_name(
+        out_path.stem + "_universe_manifest.jsonl"
+    )
+    _write_jsonl(universe_manifest_path, universe_rows)
+    report["artifacts"]["universe_manifest"] = str(universe_manifest_path)
+
+    qfq_manifest_path = out_path.with_name(
+        out_path.stem + "_qfq_history_manifest.jsonl"
+    )
+    _write_jsonl(qfq_manifest_path, qfq_manifest_rows)
+    report["artifacts"]["qfq_history_manifest"] = str(qfq_manifest_path)
+
+    if stock_pool_history_paths:
+        stock_pool_manifest_path = out_path.with_name(
+            out_path.stem + "_stock_pool_history_manifest.jsonl"
+        )
+        _write_jsonl(
+            stock_pool_manifest_path,
+            _file_manifest_rows(stock_pool_history_paths),
+        )
+        report["artifacts"]["stock_pool_history_manifest"] = str(
+            stock_pool_manifest_path
+        )
+
     if stock_pool_rejection_details:
         stock_pool_rejections_path = out_path.with_name(
             out_path.stem + "_stock_pool_rejections.jsonl"
@@ -2563,8 +3810,14 @@ def main() -> int:
         signal_report = {
             "summary": summarize(public_candidates),
             "by_signal_type": {name: summarize(trades) for name, trades in sorted(by_signal.items())},
-            "exit_reasons": dict(Counter(trade["exit_reason"] for trade in public_candidates)),
-            "skipped": dict(skipped),
+            "exit_reasons": dict(
+                sorted(
+                    Counter(
+                        trade["exit_reason"] for trade in public_candidates
+                    ).items()
+                )
+            ),
+            "skipped": dict(sorted(skipped.items())),
         }
         # Regime × signal_type breakdown from executed trades (by signal day)
         by_regime_sig: dict[str, list[dict[str, Any]]] = defaultdict(list)

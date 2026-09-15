@@ -61,6 +61,14 @@ def test_candidate_id_rejects_missing_identity_fields():
         integrity.candidate_id({"symbol": "000001", "signal_day": "2026-01-02"})
 
 
+def test_holdout_paths_are_blocked_by_default(tmp_path):
+    with pytest.raises(integrity.CandidateIntegrityError, match="Holdout path is blocked"):
+        integrity.guard_development_path(tmp_path / "reserved_holdout")
+    assert integrity.guard_development_path(
+        tmp_path / "reserved_holdout", allow_holdout=True
+    ).name == "reserved_holdout"
+
+
 def test_directory_normalization_writes_manifest_and_refuses_overwrite(tmp_path):
     source = tmp_path / "source"
     target = tmp_path / "canonical"

@@ -55,7 +55,10 @@ FIELDS = ["future_5d", "future_20d", "future_40d", "mfe", "mae", "trade_pnl_pct"
 # sell_1/sell_2/sell_3 are Chan sell signals, not risk stop-loss exits.
 EXIT_REASON_SEMANTICS = {
     "stop_loss": "risk_stop_loss",
+    "weak_market_low_open": "risk_weak_market_low_open",
     "take_profit": "risk_take_profit",
+    "profit_lock": "risk_profit_lock",
+    "atr_trailing": "risk_atr_trailing",
     "sell_1": "chan_sell_1",
     "sell_2": "chan_sell_2",
     "sell_3": "chan_sell_3",
