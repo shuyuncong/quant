@@ -73,6 +73,7 @@ quant-python/signal_system/bt*.json
 quant-python/signal_system/bt*_trades.jsonl
 quant-python/signal_system/*_report.json
 quant-python/signal_system/bt_exec/
+tmpstrategy_*.log
 
 # Server-only Docker Compose environment
 quant-python/.env
