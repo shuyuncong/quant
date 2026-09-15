@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, time as clock_time
+import copy
 import json
 import logging
 from pathlib import Path
@@ -19,6 +20,7 @@ from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
 from strategy.macd import calculate_macd
+from strategy.yearline import POOL_TYPE_YEARLINE, last_bar_pullback_candidate
 from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
@@ -105,6 +107,7 @@ class SignalMonitor:
         self.notifier = SignalNotifier(config)
         self.output_dir = Path(runtime.get("output_dir", "./output"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._yearline_market: MarketDataClient | None = None
         monitor = config.get("monitor", {})
         self.timeframes = list(monitor.get("timeframes", DEFAULT_ORDER))
         self.watchlist = [normalize_symbol(item) for item in monitor.get("watchlist", [])]
@@ -1042,11 +1045,223 @@ class SignalMonitor:
         report["output_file"] = str(self._save_report("scan", report))
         return report
 
+    def _yearline_market_client(self) -> MarketDataClient:
+        """懒构建前复权(qfq)日线客户端, 与年线回测数据口径一致。
+
+        复用一个 MarketDataClient 副本把 adjust 改为 qfq, 缓存目录指向
+        现有 cache（与回测缓存的 *_qfq.pkl 同目录），不触碰生产 none 口径。
+        """
+        if self._yearline_market is None:
+            client_config = copy.deepcopy(self.config)
+            market_data = client_config.setdefault("market_data", {})
+            market_data["adjust"] = "qfq"
+            market_data["cache_dir"] = str(self.market.cache_dir)
+            self._yearline_market = MarketDataClient(client_config)
+        return self._yearline_market
+
+    def scan_yearline(self, notify: bool = True) -> dict[str, Any]:
+        """年线回踩(MA250)候选扫描 —— 研究展示池, 不进监控/不下单。
+
+        - 与 MACD 候选共用一张候选表, 以 pool_type='yearline_pullback' 区分,
+          同步/TTL/容量按池独立处理, 互不截断;
+        - 信号只在收盘确认, 入场参考为下一交易日开盘(仅记录字段);
+        - 动态止损为 research_only 展示字段, 不修改生产固定 8% 止损;
+        - 不推送任何通知(不进入生产信号/监控链路);
+        - all_a 模式与 MACD 一样分批轮询, 完成后才 sync, 未完成只 upsert。
+        """
+        scan_config = self.config.get("scan", {})
+        universe_mode = str(scan_config.get("universe_mode", "watchlist"))
+        market = self._yearline_market_client()
+        expected_trade_date = market.latest_expected_trade_date()
+        expected_iso = pd.Timestamp(expected_trade_date).date().isoformat()
+
+        cursor = 0
+        success_seed: set[str] = set()
+        deferred_seed: dict[str, str] = {}
+        deferred_today: set[str] = set()
+        if universe_mode == "watchlist":
+            rows = [{"code": item, "name": ""} for item in self.watchlist]
+            total = len(rows)
+            batch = rows
+        else:
+            stock_list = market.get_stock_list()
+            rows = stock_list[["code", "name"]].to_dict("records")
+            total = len(rows)
+            universe_symbols = {normalize_symbol(str(row["code"])) for row in rows}
+            saved_success = self.store.get_state("yearline_bootstrap_success", "[]") or "[]"
+            try:
+                success_seed = set(json.loads(saved_success))
+            except json.JSONDecodeError:
+                success_seed = set()
+            success_seed.intersection_update(universe_symbols)
+            saved_deferred = self.store.get_state("yearline_bootstrap_deferred", "{}") or "{}"
+            try:
+                loaded_deferred = json.loads(saved_deferred)
+                if isinstance(loaded_deferred, dict):
+                    deferred_seed = {
+                        normalize_symbol(str(sym)): str(day)
+                        for sym, day in loaded_deferred.items()
+                        if normalize_symbol(str(sym)) in universe_symbols
+                    }
+            except json.JSONDecodeError:
+                deferred_seed = {}
+            deferred_today = {
+                symbol
+                for symbol, checked_date in deferred_seed.items()
+                if checked_date == expected_iso
+            }
+            deferred_today.difference_update(success_seed)
+            remaining = [
+                row
+                for row in rows
+                if normalize_symbol(str(row["code"])) not in success_seed | deferred_today
+            ]
+            cursor = len(success_seed) + len(deferred_today)
+            batch = remaining[: self.max_scan_symbols]
+
+        candidates: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
+        successful_symbols: set[str] = set()
+        stale_symbols: set[str] = set()
+        names = self._resolve_names(
+            [normalize_symbol(str(row["code"])) for row in batch]
+        )
+        for row in batch:
+            symbol = normalize_symbol(str(row["code"]))
+            name = str(row.get("name") or "") or names.get(symbol, "")
+            try:
+                daily = market.get_bars(symbol, "1d", limit=300)
+                if daily is None or daily.empty:
+                    raise ValueError("日线为空")
+                columns = {str(col) for col in daily.columns}
+                if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(columns):
+                    raise ValueError(
+                        "日线缺少列: " + ",".join(sorted(
+                            {"datetime", "open", "high", "low", "close", "volume"} - columns
+                        ))
+                    )
+                latest_date = pd.Timestamp(daily["datetime"].iloc[-1]).date()
+                if latest_date < pd.Timestamp(expected_trade_date).date():
+                    raise ValueError(
+                        f"日线已过期: latest={latest_date}, expected={pd.Timestamp(expected_trade_date).date()}"
+                    )
+                candidate = last_bar_pullback_candidate(symbol, name, daily)
+                successful_symbols.add(symbol)
+                if candidate is not None:
+                    candidates.append(candidate)
+            except Exception as exc:
+                message = str(exc)
+                if _is_stale_data_error(message):
+                    stale_symbols.add(symbol)
+                else:
+                    successful_symbols.add(symbol)
+                errors.append({"symbol": symbol, "name": name, "error": message[:300]})
+
+        if universe_mode == "watchlist":
+            completed_round = len(successful_symbols) == total
+            coverage = 1.0 if total == 0 else len(successful_symbols) / total
+        else:
+            for symbol in stale_symbols:
+                deferred_seed[symbol] = expected_iso
+            for symbol in successful_symbols:
+                deferred_seed.pop(symbol, None)
+            self.store.set_state(
+                "yearline_bootstrap_deferred",
+                json.dumps(deferred_seed, ensure_ascii=False, sort_keys=True),
+            )
+            success_seed.update(successful_symbols)
+            self.store.set_state(
+                "yearline_bootstrap_success",
+                json.dumps(sorted(success_seed), ensure_ascii=False),
+            )
+            ineligible = deferred_today | stale_symbols
+            eligible_total = max(0, total - len(ineligible))
+            coverage = 1.0 if eligible_total == 0 else len(success_seed) / eligible_total
+            completed_round = len(success_seed) >= eligible_total
+            # 跨批次累积候选: 全市场分批扫描时, 整轮完成的一次 sync 必须拿到
+            # 本轮所有批次发现的候选(而不是只有最后一批), 否则会把前几批写丢。
+            cached = self._load_yearline_pool_cache()
+            for candidate in candidates:
+                cached[normalize_symbol(str(candidate["symbol"]))] = candidate
+            self.store.set_state(
+                "yearline_pool_cache",
+                json.dumps(list(cached.values()), ensure_ascii=False, default=str),
+            )
+            if cached:
+                candidates = list(cached.values())
+
+        if universe_mode == "all_a" and completed_round:
+            self.store.sync_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+                pool_type=POOL_TYPE_YEARLINE,
+            )
+            if completed_round:
+                self.store.set_state("yearline_bootstrap_success", "[]")
+                self.store.set_state("yearline_bootstrap_deferred", "{}")
+                self.store.set_state("yearline_pool_cache", "[]")
+        else:
+            self.store.upsert_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+                pool_type=POOL_TYPE_YEARLINE,
+            )
+
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda item: (item.get("score", 0),),
+            reverse=True,
+        )
+        # 研究池: 不发通知, 只投递队列中既有事件
+        delivery = self.dispatch_outbox()
+        report = {
+            "mode": "scan",
+            "pool_type": POOL_TYPE_YEARLINE,
+            "scanned_at": now_shanghai().isoformat(timespec="seconds"),
+            "universe_mode": universe_mode,
+            "batch_start": cursor,
+            "batch_size": len(batch),
+            "universe_size": total,
+            "coverage": coverage,
+            "completed_round": completed_round,
+            "research_only": True,
+            "entry_reference": "next_day_open",
+            "candidate_count": len(candidates),
+            "candidates": sorted_candidates,
+            "errors": errors,
+            "delivery": delivery,
+        }
+        report["output_file"] = str(self._save_report("scan_yearline", report))
+        return report
+
+    def _load_yearline_pool_cache(self) -> dict[str, dict[str, Any]]:
+        """读取全市场分批扫描累积的年线候选缓存 (key: symbol)。"""
+        raw = self.store.get_state("yearline_pool_cache", "[]") or "[]"
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError:
+            entries = []
+        if not isinstance(entries, list):
+            return {}
+        return {
+            normalize_symbol(str(item.get("symbol", ""))): item
+            for item in entries
+            if isinstance(item, dict) and item.get("symbol")
+        }
+
     def monitoring_symbols(
         self, extra_symbols: list[str] | None = None
     ) -> tuple[list[str], dict[str, str]]:
-        """监控范围 = 我的持仓 + 自选股票池(watchlist) + 指标股票池(candidates)。"""
-        candidates = self.store.active_candidates(limit=self.candidate_limit)
+        """监控范围 = 我的持仓 + 自选股票池(watchlist) + 指标股票池(MACD 池)。
+
+        显式限定 pool_type='macd_zero_axis'：年线池是研究展示池, 绝不进入
+        生产监控/下单链路。
+        """
+        candidates = self.store.active_candidates(
+            limit=self.candidate_limit, pool_type="macd_zero_axis"
+        )
         names = {normalize_symbol(item["symbol"]): item.get("name", "") for item in candidates}
         extra = [normalize_symbol(item) for item in (extra_symbols or []) if item]
         ordered = list(dict.fromkeys(extra + self.watchlist + list(names)))

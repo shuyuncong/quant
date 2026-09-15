@@ -51,4 +51,52 @@ describe("POST /api/run", () => {
     expect(response.status).toBe(422);
     expect(startJobMock).not.toHaveBeenCalled();
   });
+
+  it("accepts scan_kind=yearline_pullback and overrides the universe mode", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "scan",
+          scan_kind: "yearline_pullback",
+          universe_mode: "all_a",
+          notify: false,
+        }),
+      })
+    );
+    expect(response.status).toBe(202);
+    expect(startJobMock).toHaveBeenCalledWith("scan", {
+      scan_kind: "yearline_pullback",
+      notify: false,
+      overrides: { scan: { universe_mode: "all_a" } },
+    });
+  });
+
+  it("defaults scan_kind to macd_zero_axis for old scan requests", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "scan", notify: true }),
+      })
+    );
+    expect(response.status).toBe(202);
+    expect(startJobMock).toHaveBeenCalledWith("scan", {
+      scan_kind: "macd_zero_axis",
+      notify: true,
+    });
+  });
+
+  it("rejects unknown scan_kind", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "scan", scan_kind: "bogus" }),
+      })
+    );
+    expect(response.status).toBe(422);
+    expect(startJobMock).not.toHaveBeenCalled();
+  });
 });

@@ -211,6 +211,8 @@ const KIND_TO_COMMAND: Record<JobKind, string> = {
 
 export function shouldAutoInterpret(kind: JobKind, report: Record<string, unknown> | undefined): boolean {
   if (!AUTO_INTERPRET_KINDS.includes(kind)) return false;
+  // 年线扫描是研究展示池, 不进入生产信号链路, 也不做 AI 自动解读
+  if (report?.pool_type === "yearline_pullback") return false;
   if (["analyze", "scan", "monitor-once"].includes(kind)) return true;
   if (kind === "daily-scan") {
     return report?.completed_round === true && Number(report?.candidate_count ?? 0) > 0;

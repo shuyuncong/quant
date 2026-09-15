@@ -14,6 +14,34 @@ from models import SignalEvent
 from utils.time_utils import now_shanghai
 
 
+CANDIDATE_TABLE_DDL = """
+                CREATE TABLE IF NOT EXISTS candidate (
+                    symbol TEXT NOT NULL,
+                    pool_type TEXT NOT NULL DEFAULT 'macd_zero_axis',
+                    name TEXT NOT NULL,
+                    score INTEGER NOT NULL,
+                    expires_on TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (symbol, pool_type)
+                );
+            """
+
+EXPIRED_CANDIDATE_TABLE_DDL = """
+                CREATE TABLE IF NOT EXISTS expired_candidate (
+                    symbol TEXT NOT NULL,
+                    pool_type TEXT NOT NULL DEFAULT 'macd_zero_axis',
+                    name TEXT NOT NULL DEFAULT '',
+                    score INTEGER NOT NULL DEFAULT 0,
+                    expired_on TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT 'expired',
+                    payload TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (symbol, pool_type)
+                );
+            """
+
+
 class SignalStore:
     def __init__(self, path: str = "./state/signal_monitor.db"):
         self.path = Path(path)
@@ -35,7 +63,7 @@ class SignalStore:
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS signal_event (
                     event_id TEXT PRIMARY KEY,
                     symbol TEXT NOT NULL,
@@ -61,24 +89,9 @@ class SignalStore:
                     FOREIGN KEY (event_id) REFERENCES signal_event(event_id)
                 );
 
-                CREATE TABLE IF NOT EXISTS candidate (
-                    symbol TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    score INTEGER NOT NULL,
-                    expires_on TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
+                {CANDIDATE_TABLE_DDL}
 
-                CREATE TABLE IF NOT EXISTS expired_candidate (
-                    symbol TEXT PRIMARY KEY,
-                    name TEXT NOT NULL DEFAULT '',
-                    score INTEGER NOT NULL DEFAULT 0,
-                    expired_on TEXT NOT NULL,
-                    reason TEXT NOT NULL DEFAULT 'expired',
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
+                {EXPIRED_CANDIDATE_TABLE_DDL}
 
                 CREATE TABLE IF NOT EXISTS run_state (
                     state_key TEXT PRIMARY KEY,
@@ -95,6 +108,63 @@ class SignalStore:
                 connection.execute("ALTER TABLE outbox_delivery ADD COLUMN claimed_at TEXT")
             if "claim_token" not in columns:
                 connection.execute("ALTER TABLE outbox_delivery ADD COLUMN claim_token TEXT")
+            self._migrate_composite_pk(connection, "candidate")
+            self._migrate_composite_pk(connection, "expired_candidate")
+
+    @staticmethod
+    def _migrate_composite_pk(connection: sqlite3.Connection, table: str) -> None:
+        """把旧版 (symbol) 主键表非破坏式迁移为 (symbol, pool_type) 复合主键。
+
+        幂等: 已迁移（复合主键）或不存在时直接跳过。迁移在一个事务内完成
+        （重命名->重建->拷贝->校验->删除备份），任一步失败都会回滚，旧表原样保留；
+        迁移成功后校验行数一致，防止数据丢失。
+        """
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if exists is None:
+            return
+        info = connection.execute(f"PRAGMA table_info({table})").fetchall()
+        pk_columns = {str(row["name"]) for row in info if int(row["pk"]) > 0}
+        if pk_columns == {"symbol", "pool_type"}:
+            return
+        if table == "candidate":
+            ddl = CANDIDATE_TABLE_DDL
+        elif table == "expired_candidate":
+            ddl = EXPIRED_CANDIDATE_TABLE_DDL
+        else:
+            raise RuntimeError(f"unknown table for composite-pk migration: {table}")
+        backup = f"{table}_legacy_backup"
+        old_count = int(
+            connection.execute(
+                f'SELECT COUNT(*) AS count FROM "{table}"'
+            ).fetchone()["count"]
+        )
+        connection.execute(f'ALTER TABLE "{table}" RENAME TO "{backup}"')
+        connection.execute(ddl)
+        if table == "candidate":
+            copy_sql = f"""
+                INSERT INTO "{table}" (symbol, pool_type, name, score, expires_on, payload, updated_at)
+                SELECT symbol, 'macd_zero_axis', name, score, expires_on, payload, updated_at
+                FROM "{backup}"
+                """
+        else:
+            copy_sql = f"""
+                INSERT INTO "{table}" (symbol, pool_type, name, score, expired_on, reason, payload, updated_at)
+                SELECT symbol, 'macd_zero_axis', name, score, expired_on, reason, payload, updated_at
+                FROM "{backup}"
+                """
+        connection.execute(copy_sql)
+        new_count = int(
+            connection.execute(
+                f'SELECT COUNT(*) AS count FROM "{table}"'
+            ).fetchone()["count"]
+        )
+        if new_count != old_count:
+            raise RuntimeError(
+                f"{table} 迁移行数不一致: {old_count} -> {new_count}, 已回滚"
+            )
+        connection.execute(f'DROP TABLE "{backup}"')
 
     def enqueue_event(self, event: SignalEvent, channels: Iterable[str]) -> bool:
         payload = json.dumps(event.to_payload(), ensure_ascii=False)
@@ -283,24 +353,28 @@ class SignalStore:
         candidates: list[dict[str, Any]],
         ttl_business_days: int = 5,
         capacity: int = 100,
+        pool_type: str = "macd_zero_axis",
     ) -> None:
         now = now_shanghai()
         expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
         ranked = sorted(candidates, key=lambda item: item.get("score", 0), reverse=True)[:capacity]
         with self._connect() as connection:
-            connection.execute("DELETE FROM candidate")
+            connection.execute("DELETE FROM candidate WHERE pool_type = ?", (pool_type,))
             for candidate in ranked:
+                payload = dict(candidate)
+                payload["pool_type"] = pool_type
                 connection.execute(
                     """
-                    INSERT INTO candidate(symbol, name, score, expires_on, payload, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO candidate(symbol, pool_type, name, score, expires_on, payload, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         candidate["symbol"],
+                        pool_type,
                         candidate.get("name", ""),
                         int(candidate.get("score", 0)),
                         expires_on,
-                        json.dumps(candidate, ensure_ascii=False),
+                        json.dumps(payload, ensure_ascii=False),
                         now.isoformat(timespec="seconds"),
                     ),
                 )
@@ -310,16 +384,19 @@ class SignalStore:
         candidates: list[dict[str, Any]],
         ttl_business_days: int = 5,
         capacity: int = 100,
+        pool_type: str = "macd_zero_axis",
     ) -> None:
         now = now_shanghai()
         expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
         with self._connect() as connection:
             for candidate in candidates:
+                payload = dict(candidate)
+                payload["pool_type"] = pool_type
                 connection.execute(
                     """
-                    INSERT INTO candidate(symbol, name, score, expires_on, payload, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(symbol) DO UPDATE SET
+                    INSERT INTO candidate(symbol, pool_type, name, score, expires_on, payload, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(symbol, pool_type) DO UPDATE SET
                         name=excluded.name,
                         score=excluded.score,
                         expires_on=excluded.expires_on,
@@ -328,29 +405,47 @@ class SignalStore:
                     """,
                     (
                         candidate["symbol"],
+                        pool_type,
                         candidate.get("name", ""),
                         int(candidate.get("score", 0)),
                         expires_on,
-                        json.dumps(candidate, ensure_ascii=False),
+                        json.dumps(payload, ensure_ascii=False),
                         now.isoformat(timespec="seconds"),
                     ),
                 )
             connection.execute(
                 """
                 DELETE FROM candidate
-                WHERE symbol NOT IN (
-                    SELECT symbol FROM candidate ORDER BY score DESC, updated_at DESC LIMIT ?
-                )
+                WHERE pool_type = ?
+                  AND symbol NOT IN (
+                    SELECT symbol FROM candidate
+                    WHERE pool_type = ? ORDER BY score DESC, updated_at DESC LIMIT ?
+                  )
                 """,
-                (capacity,),
+                (pool_type, pool_type, capacity),
             )
 
-    def active_candidates(self, limit: int = 100) -> list[dict[str, Any]]:
+    def active_candidates(
+        self, limit: int = 100, pool_type: str | None = "macd_zero_axis"
+    ) -> list[dict[str, Any]]:
+        """返回候选池 payload 列表。
+
+        pool_type=None 或 "all" 时返回全部池; 默认只返回 MACD 池，确保生产
+        监控/旧式调用不会把年线候选读进监控或下单链路。过期清理与容量截断
+        都按 pool_type 独立执行。
+        """
         today = now_shanghai().date().isoformat()
+        scoped = pool_type not in (None, "all")
         with self._connect() as connection:
-            stale = connection.execute(
-                "SELECT * FROM candidate WHERE expires_on < ?", (today,)
-            ).fetchall()
+            if scoped:
+                stale = connection.execute(
+                    "SELECT * FROM candidate WHERE expires_on < ? AND pool_type = ?",
+                    (today, pool_type),
+                ).fetchall()
+            else:
+                stale = connection.execute(
+                    "SELECT * FROM candidate WHERE expires_on < ?", (today,)
+                ).fetchall()
             for row in stale:
                 self._store_expired(
                     connection,
@@ -358,11 +453,29 @@ class SignalStore:
                     reason="expired",
                     expired_on=str(row["expires_on"]),
                 )
-            connection.execute("DELETE FROM candidate WHERE expires_on < ?", (today,))
-            rows = connection.execute(
-                "SELECT payload FROM candidate ORDER BY score DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [json.loads(row["payload"]) for row in rows]
+            if scoped:
+                connection.execute(
+                    "DELETE FROM candidate WHERE expires_on < ? AND pool_type = ?",
+                    (today, pool_type),
+                )
+            else:
+                connection.execute("DELETE FROM candidate WHERE expires_on < ?", (today,))
+            if scoped:
+                rows = connection.execute(
+                    "SELECT * FROM candidate WHERE pool_type = ? ORDER BY score DESC LIMIT ?",
+                    (pool_type, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT * FROM candidate ORDER BY score DESC LIMIT ?", (limit,)
+                ).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json.loads(row["payload"])
+            payload.setdefault("pool_type", row["pool_type"])
+            payload.setdefault("name", row["name"])
+            result.append(payload)
+        return result
 
     @staticmethod
     def _store_expired(
@@ -371,11 +484,12 @@ class SignalStore:
         reason: str,
         expired_on: str,
     ) -> None:
+        pool_type = str(row.get("pool_type") or "macd_zero_axis")
         connection.execute(
             """
-            INSERT INTO expired_candidate(symbol, name, score, expired_on, reason, payload, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(symbol) DO UPDATE SET
+            INSERT INTO expired_candidate(symbol, pool_type, name, score, expired_on, reason, payload, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(symbol, pool_type) DO UPDATE SET
                 name=excluded.name,
                 score=excluded.score,
                 expired_on=excluded.expired_on,
@@ -385,6 +499,7 @@ class SignalStore:
             """,
             (
                 str(row["symbol"]),
+                pool_type,
                 str(row.get("name", "")),
                 int(row.get("score", 0)),
                 expired_on,
@@ -399,18 +514,22 @@ class SignalStore:
         candidates: list[dict[str, Any]],
         ttl_business_days: int = 5,
         capacity: int = 100,
+        pool_type: str = "macd_zero_axis",
     ) -> None:
         """Replace the candidate pool after a completed full-universe scan.
 
         Symbols that are no longer qualified are moved to the expired pool
-        instead of being dropped silently.
+        instead of being dropped silently. All operations are scoped to
+        pool_type so the two pools never truncate each other.
         """
         now = now_shanghai()
         expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
         ranked = sorted(candidates, key=lambda item: item.get("score", 0), reverse=True)[:capacity]
         confirmed = {str(item["symbol"]) for item in ranked}
         with self._connect() as connection:
-            rows = connection.execute("SELECT * FROM candidate").fetchall()
+            rows = connection.execute(
+                "SELECT * FROM candidate WHERE pool_type = ?", (pool_type,)
+            ).fetchall()
             for row in rows:
                 if row["symbol"] not in confirmed:
                     self._store_expired(
@@ -419,33 +538,45 @@ class SignalStore:
                         reason="no_longer_qualified",
                         expired_on=now.date().isoformat(),
                     )
-            connection.execute("DELETE FROM candidate")
+            connection.execute(
+                "DELETE FROM candidate WHERE pool_type = ?", (pool_type,)
+            )
             for candidate in ranked:
+                payload = dict(candidate)
+                payload["pool_type"] = pool_type
                 connection.execute(
                     """
-                    INSERT INTO candidate(symbol, name, score, expires_on, payload, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO candidate(symbol, pool_type, name, score, expires_on, payload, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         candidate["symbol"],
+                        pool_type,
                         candidate.get("name", ""),
                         int(candidate.get("score", 0)),
                         expires_on,
-                        json.dumps(candidate, ensure_ascii=False),
+                        json.dumps(payload, ensure_ascii=False),
                         now.isoformat(timespec="seconds"),
                     ),
                 )
 
-    def list_expired_candidates(self, limit: int = 200) -> list[dict[str, Any]]:
+    def list_expired_candidates(
+        self, limit: int = 200, pool_type: str | None = None
+    ) -> list[dict[str, Any]]:
+        filter_sql = " AND pool_type = ?" if pool_type and pool_type != "all" else ""
+        params: tuple = (max(1, int(limit)),)
+        if filter_sql:
+            params = (pool_type, max(1, int(limit)))
         with self._connect() as connection:
             rows = connection.execute(
-                """
-                SELECT symbol, name, score, expired_on, reason, payload
+                f"""
+                SELECT symbol, pool_type, name, score, expired_on, reason, payload
                 FROM expired_candidate
+                WHERE 1=1{filter_sql}
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (max(1, int(limit)),),
+                params,
             ).fetchall()
         records: list[dict[str, Any]] = []
         for row in rows:
@@ -459,9 +590,15 @@ class SignalStore:
             records.append(record)
         return records
 
-    def expired_candidate_count(self) -> int:
+    def expired_candidate_count(self, pool_type: str | None = None) -> int:
+        if pool_type and pool_type != "all":
+            sql = "SELECT COUNT(*) AS count FROM expired_candidate WHERE pool_type = ?"
+            params: tuple = (pool_type,)
+        else:
+            sql = "SELECT COUNT(*) AS count FROM expired_candidate"
+            params = ()
         with self._connect() as connection:
-            row = connection.execute("SELECT COUNT(*) AS count FROM expired_candidate").fetchone()
+            row = connection.execute(sql, params).fetchone()
         return int(row["count"])
 
     def get_state(self, key: str, default: str | None = None) -> str | None:

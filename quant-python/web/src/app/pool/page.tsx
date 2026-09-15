@@ -31,11 +31,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  CandidateTable,
+  type MacdCandidateRow,
+  type YearlineCandidateRow,
+} from "@/components/candidate-table";
 import { CheckCircle2, FileImage, FileText, Filter, Plus, RefreshCw, Trash2, XCircle } from "lucide-react";
 
 interface PoolRow {
@@ -45,21 +56,6 @@ interface PoolRow {
   created_at: string;
 }
 
-interface CandidateRow {
-  symbol: string;
-  name: string;
-  score: number;
-  strategy_score?: number;
-  confirmed_at?: string;
-  dif?: number;
-  dea?: number;
-  zero_distance?: number;
-  golden_cross_zone?: "above" | "near" | "below";
-  golden_cross_zone_label?: string;
-  confirmation_items?: string[];
-  chan_signals?: unknown[];
-}
-
 interface ExpiredCandidateRow {
   symbol: string;
   name: string;
@@ -67,6 +63,7 @@ interface ExpiredCandidateRow {
   expired_on: string;
   reason: string;
   updated_at: string;
+  pool_type?: string;
 }
 
 interface PendingItem {
@@ -99,6 +96,21 @@ const EMPTY_DIALOG: ImportDialogState = {
   imageUrl: "",
 };
 
+type PoolType = "macd_zero_axis" | "yearline_pullback";
+
+interface PoolData {
+  candidates: Array<MacdCandidateRow | YearlineCandidateRow>;
+  ttl_business_days?: number;
+  capacity?: number;
+  expired: ExpiredCandidateRow[];
+  expiredCount: number;
+}
+
+const POOL_LABEL: Record<PoolType, string> = {
+  macd_zero_axis: "日线零轴金叉",
+  yearline_pullback: "年线趋势",
+};
+
 export default function PoolPage() {
   const [pool, setPool] = useState<PoolRow[]>([]);
   const [pending, setPending] = useState<PendingItem[]>([]);
@@ -106,12 +118,33 @@ export default function PoolPage() {
   const [newName, setNewName] = useState("");
   const [dialog, setDialog] = useState<ImportDialogState>(EMPTY_DIALOG);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [candidates, setCandidates] = useState<CandidateRow[]>([]);
-  const [candidateMeta, setCandidateMeta] = useState<{ ttl_business_days?: number; capacity?: number }>({});
-  const [expired, setExpired] = useState<ExpiredCandidateRow[]>([]);
-  const [expiredCount, setExpiredCount] = useState(0);
+  const [poolType, setPoolType] = useState<PoolType>("macd_zero_axis");
+  const [poolData, setPoolData] = useState<Partial<Record<PoolType, PoolData>>>({});
   const [expiredOpen, setExpiredOpen] = useState(false);
   const [scanning, setScanning] = useState<string | null>(null);
+
+  const loadPool = useCallback(async (type: PoolType) => {
+    const response = await fetch(`/api/candidates?pool_type=${type}`).catch(() => null);
+    if (response?.ok) {
+      const data = (await response.json()) as {
+        candidates?: Array<MacdCandidateRow | YearlineCandidateRow>;
+        ttl_business_days?: number;
+        capacity?: number;
+        expired_candidates?: ExpiredCandidateRow[];
+        expired_count?: number;
+      };
+      setPoolData((prev) => ({
+        ...prev,
+        [type]: {
+          candidates: data.candidates ?? [],
+          ttl_business_days: data.ttl_business_days,
+          capacity: data.capacity,
+          expired: data.expired_candidates ?? [],
+          expiredCount: data.expired_count ?? 0,
+        },
+      }));
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -119,31 +152,18 @@ export default function PoolPage() {
         fetch("/api/pool"),
         fetch("/api/pool/import/pending"),
       ]);
-      const poolData = (await poolResponse.json()) as { pool: PoolRow[] };
+      const poolDataResponse = (await poolResponse.json()) as { pool: PoolRow[] };
       const pendingData = (await pendingResponse.json()) as { pending: PendingItem[] };
-      setPool(poolData.pool);
+      setPool(poolDataResponse.pool);
       setPending(pendingData.pending);
-      const candidatesResponse = await fetch("/api/candidates").catch(() => null);
-      if (candidatesResponse?.ok) {
-        const candidatesData = (await candidatesResponse.json()) as {
-          candidates?: CandidateRow[];
-          ttl_business_days?: number;
-          capacity?: number;
-          expired_candidates?: ExpiredCandidateRow[];
-          expired_count?: number;
-        };
-        setCandidates(candidatesData.candidates ?? []);
-        setCandidateMeta({
-          ttl_business_days: candidatesData.ttl_business_days,
-          capacity: candidatesData.capacity,
-        });
-        setExpired(candidatesData.expired_candidates ?? []);
-        setExpiredCount(candidatesData.expired_count ?? 0);
-      }
+      await Promise.all([
+        loadPool("macd_zero_axis"),
+        loadPool("yearline_pullback"),
+      ]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载股票池失败");
     }
-  }, []);
+  }, [loadPool]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -184,20 +204,27 @@ export default function PoolPage() {
     }
   };
 
-  const runScan = async (mode: "watchlist" | "all_a") => {
-    setScanning(mode);
+  const runScan = async (mode: "watchlist" | "all_a", scanKind: PoolType) => {
+    const key = `${scanKind}:${mode}`;
+    setScanning(key);
     try {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "scan", universe_mode: mode, notify: false }),
+        body: JSON.stringify({
+          kind: "scan",
+          scan_kind: scanKind,
+          universe_mode: mode,
+          notify: false,
+        }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string; jobId?: number };
       if (!response.ok) throw new Error(data.error || "启动筛选失败");
+      const label = POOL_LABEL[scanKind];
       toast.success(
-        mode === "all_a" ? "全市场零轴金叉筛选已启动，可在结果页查看进度" : "自选池零轴金叉筛选已启动，可在结果页查看进度"
+        mode === "all_a" ? `全市场${label}筛选已启动，可在结果页查看进度` : `自选池${label}筛选已启动，可在结果页查看进度`
       );
-      setTimeout(() => void load(), 8000);
+      setTimeout(() => void loadPool(scanKind), 8000);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "启动筛选失败");
     } finally {
@@ -415,122 +442,137 @@ export default function PoolPage() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div>
-            <CardTitle>指标股票池（日线零轴金叉）</CardTitle>
-            <CardDescription>
-              扫描生成的候选股：全市场或自选池日线零轴金叉筛选结果，保留{" "}
-              {candidateMeta.ttl_business_days ?? 5} 个交易日，最多{" "}
-              {candidateMeta.capacity ?? 100} 只。后续监控循环会对其做缠论买卖点分析。
-            </CardDescription>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <Button variant="outline" size="sm" onClick={() => void load()}>
-              <RefreshCw className="size-3.5" /> 刷新
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setExpiredOpen(true)}
-            >
-              失效/过期（{expiredCount}）
-            </Button>
-            <TooltipProvider delay={300}>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={scanning !== null}
-                      onClick={() => void runScan("watchlist")}
-                    >
-                      <Filter className="size-3.5" /> 筛选自选池
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">
-                  <p className="font-medium">筛选自选池</p>
-                  <p className="mt-0.5 text-background/70">
-                    只扫描自选池（config 的 monitor.watchlist）里的股票：逐只拉日线算 MACD，
-                    当日出现「零轴金叉」的按 0 轴位置打分写入候选池。只增不改、不淘汰，也不推送通知。
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      size="sm"
-                      disabled={scanning !== null}
-                      onClick={() => void runScan("all_a")}
-                    >
-                      <Filter className="size-3.5" /> 全市场筛选
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">
-                  <p className="font-medium">全市场筛选</p>
-                  <p className="mt-0.5 text-background/70">
-                    扫描全 A 股：首次运行分批回填日线历史（每轮最多 500 只），整轮扫完才把
-                    不再入选/过期的移入「失效/过期」池。通常要多跑几轮才覆盖完整，不推送通知。
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>代码</TableHead>
-                <TableHead>名称</TableHead>
-                <TableHead>位置</TableHead>
-                <TableHead>策略分</TableHead>
-                <TableHead>确认条件</TableHead>
-                <TableHead>确认时间</TableHead>
-                <TableHead>零轴距离</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {candidates.map((item) => (
-                <TableRow key={item.symbol}>
-                  <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
-                  <TableCell>{item.name || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.golden_cross_zone === "above" ? "default" : item.golden_cross_zone === "below" ? "destructive" : "secondary"}>
-                      {item.golden_cross_zone_label || "未识别"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{item.strategy_score ?? item.score}</TableCell>
-                  <TableCell className="max-w-64 text-xs">
-                    {item.confirmation_items?.length ? item.confirmation_items.join("、") : "暂无额外确认"}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{item.confirmed_at || "-"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {item.zero_distance != null ? item.zero_distance.toFixed(5) : "-"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {candidates.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    暂无候选，点击「筛选自选池」或「全市场筛选」生成
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
+        <Tabs value={poolType} onValueChange={(value) => setPoolType(value as PoolType)}>
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle>指标股票池</CardTitle>
+              <CardDescription>
+                扫描生成的候选股，两个池共用一张候选表、按 pool_type 独立保留 TTL 与容量；
+                年线池为研究展示，不进入监控与下单链路。
+              </CardDescription>
+            </div>
+            <TabsList>
+              <TabsTrigger value="macd_zero_axis">日线零轴金叉</TabsTrigger>
+              <TabsTrigger value="yearline_pullback">年线趋势</TabsTrigger>
+            </TabsList>
+          </CardHeader>
+          <CardContent>
+            <TabsContent value="macd_zero_axis">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-md text-xs text-muted-foreground">
+                  全市场或自选池日线零轴金叉筛选结果，保留{" "}
+                  {poolData.macd_zero_axis?.ttl_business_days ?? 5} 个交易日，最多{" "}
+                  {poolData.macd_zero_axis?.capacity ?? 100} 只。后续监控循环会对其做缠论买卖点分析。
+                </p>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void loadPool("macd_zero_axis")}>
+                    <RefreshCw className="size-3.5" /> 刷新
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
+                    失效/过期（{poolData.macd_zero_axis?.expiredCount ?? 0}）
+                  </Button>
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={scanning !== null}
+                            onClick={() => void runScan("watchlist", "macd_zero_axis")}
+                          >
+                            <Filter className="size-3.5" /> 筛选自选池
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="bottom">
+                        <p className="font-medium">筛选自选池</p>
+                        <p className="mt-0.5 text-background/70">
+                          只扫描自选池（config 的 monitor.watchlist）里的股票：逐只拉日线算 MACD，
+                          当日出现「零轴金叉」的按 0 轴位置打分写入候选池。只增不改、不淘汰，也不推送通知。
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="sm"
+                            disabled={scanning !== null}
+                            onClick={() => void runScan("all_a", "macd_zero_axis")}
+                          >
+                            <Filter className="size-3.5" /> 全市场筛选
+                          </Button>
+                        }
+                      />
+                      <TooltipContent side="bottom">
+                        <p className="font-medium">全市场筛选</p>
+                        <p className="mt-0.5 text-background/70">
+                          扫描全 A 股：首次运行分批回填日线历史（每轮最多 500 只），整轮扫完才把
+                          不再入选/过期的移入「失效/过期」池。通常要多跑几轮才覆盖完整，不推送通知。
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+              <CandidateTable
+                variant="macd"
+                rows={poolData.macd_zero_axis?.candidates ?? []}
+                emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+              />
+            </TabsContent>
+
+            <TabsContent value="yearline_pullback">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-md text-xs text-muted-foreground">
+                  年线回踩候选：MA250 上行且 MA60&gt;MA120&gt;MA250，前一日在年线上方，当日最低
+                  回踩年线区间、收盘不破且收阳。信号收盘确认，入场参考为下一交易日开盘（仅记录）；
+                  动态止损建议仅供研究展示，不进入下单链路，生产固定 8% 止损保持不变。保留{" "}
+                  {poolData.yearline_pullback?.ttl_business_days ?? 5} 个交易日，最多{" "}
+                  {poolData.yearline_pullback?.capacity ?? 100} 只。
+                </p>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void loadPool("yearline_pullback")}>
+                    <RefreshCw className="size-3.5" /> 刷新
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
+                    失效/过期（{poolData.yearline_pullback?.expiredCount ?? 0}）
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={scanning !== null}
+                    onClick={() => void runScan("watchlist", "yearline_pullback")}
+                  >
+                    <Filter className="size-3.5" /> 筛选自选池
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={scanning !== null}
+                    onClick={() => void runScan("all_a", "yearline_pullback")}
+                  >
+                    <Filter className="size-3.5" /> 全市场筛选
+                  </Button>
+                </div>
+              </div>
+              <CandidateTable
+                variant="yearline"
+                rows={poolData.yearline_pullback?.candidates ?? []}
+                emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+              />
+            </TabsContent>
+          </CardContent>
+        </Tabs>
       </Card>
 
       <Dialog open={expiredOpen} onOpenChange={setExpiredOpen}>
         <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>失效/过期指标股票池</DialogTitle>
+            <DialogTitle>失效/过期指标股票池（{POOL_LABEL[poolType]}）</DialogTitle>
             <DialogDescription>
-              不再符合条件或超过保留期的候选股（共 {expiredCount} 只），不再参与监控扫描；每日全市场扫描完成时更新。
+              不再符合条件或超过保留期的候选股（共 {poolData[poolType]?.expiredCount ?? 0} 只），
+              不再参与监控扫描；每日全市场扫描完成时更新。
             </DialogDescription>
           </DialogHeader>
           <Table>
@@ -544,7 +586,7 @@ export default function PoolPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {expired.map((item) => (
+              {(poolData[poolType]?.expired ?? []).map((item) => (
                 <TableRow key={item.symbol}>
                   <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
                   <TableCell>{item.name || "-"}</TableCell>
@@ -557,7 +599,7 @@ export default function PoolPage() {
                   <TableCell className="text-xs">{item.score}</TableCell>
                 </TableRow>
               ))}
-              {expired.length === 0 && (
+              {(poolData[poolType]?.expired ?? []).length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground">
                     暂无失效/过期记录

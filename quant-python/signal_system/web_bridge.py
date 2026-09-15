@@ -251,8 +251,14 @@ def _cmd_analyze(config_path: str, payload: dict[str, Any]) -> int:
 
 def _cmd_scan(config_path: str, payload: dict[str, Any]) -> int:
     notify = bool(payload.get("notify", True))
+    scan_kind = str(payload.get("scan_kind") or "macd_zero_axis").strip()
     monitor = _make_monitor(config_path, payload.get("overrides"))
-    report = monitor.scan_zero_axis(notify=notify)
+    if scan_kind == "yearline_pullback":
+        report = monitor.scan_yearline(notify=notify)
+    elif scan_kind == "macd_zero_axis":
+        report = monitor.scan_zero_axis(notify=notify)
+    else:
+        return _emit_error(f"不支持的 scan_kind: {scan_kind}", 2)
     return _emit({"report": report})
 
 
@@ -340,17 +346,33 @@ def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
 
 
 def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
-    """返回日线零轴金叉指标股票池（候选股，含 TTL 与容量）及失效/过期池。"""
+    """返回指标股票池（候选股，含 TTL 与容量）及失效/过期池。
+
+    pool_type 取值: macd_zero_axis(默认, 旧行为) | yearline_pullback | all。
+    TTL/容量/过期记录均按 pool_type 独立处理。
+    """
     monitor = _make_monitor(config_path, payload.get("overrides"))
-    candidates = monitor.store.active_candidates(limit=monitor.candidate_limit)
+    raw_pool_type = payload.get("pool_type") or "macd_zero_axis"
+    pool_type = str(raw_pool_type).strip()
+    if pool_type not in ("macd_zero_axis", "yearline_pullback", "all"):
+        return _emit_error(f"不支持的 pool_type: {pool_type}", 2)
+    store_pool_type = None if pool_type == "all" else pool_type
+    candidates = monitor.store.active_candidates(
+        limit=monitor.candidate_limit, pool_type=store_pool_type
+    )
     limit = max(1, min(int(payload.get("expired_limit", 100)), 500))
     return _emit(
         {
+            "pool_type": pool_type,
             "candidates": candidates,
             "ttl_business_days": monitor.candidate_ttl,
             "capacity": monitor.candidate_limit,
-            "expired_candidates": monitor.store.list_expired_candidates(limit=limit),
-            "expired_count": monitor.store.expired_candidate_count(),
+            "expired_candidates": monitor.store.list_expired_candidates(
+                limit=limit, pool_type=store_pool_type
+            ),
+            "expired_count": monitor.store.expired_candidate_count(
+                pool_type=store_pool_type
+            ),
         }
     )
 
