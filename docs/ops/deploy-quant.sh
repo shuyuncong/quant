@@ -101,6 +101,10 @@ if [ "$DB_MODE" = "selfhost" ]; then
             -e "DATABASE_URL=postgresql://quant_owner:${OWNER_PASSWORD}@quant-db:5432/quant" \
             -e DATABASE_SSL_MODE=disable \
             quant-web npm run db:setup 2>&1 | tee -a "$LOG"
+        # 迁移晚于容器启动时（新代码先起、后升 schema），instrumentation 启动即失败、
+        # 进程挂起不健康但端口仍在服务、全部 500。迁移成功后重启让进程重新加载。
+        log "重启 quant-web 以加载新 schema"
+        docker restart quant-web 2>&1 | tee -a "$LOG"
     fi
 else
     log "使用主 compose 模式（legacy）"
