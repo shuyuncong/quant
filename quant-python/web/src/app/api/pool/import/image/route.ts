@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createPendingImport } from "@/lib/db";
-import { pickVisionModel, recognizeSymbols } from "@/lib/llm";
+import { pickVisionModel, recognizeSymbolsWithFallback } from "@/lib/llm";
 
 const MAX_DATA_URL_LENGTH = 30 * 1024 * 1024;
 
@@ -26,12 +26,12 @@ export async function POST(request: Request) {
     );
   }
   try {
-    const candidates = await recognizeSymbols(profile, dataUrl);
+    const { candidates, model } = await recognizeSymbolsWithFallback(dataUrl);
     if (candidates.length === 0) {
       return NextResponse.json({ error: "模型未能识别出股票代码，请尝试文本导入" }, { status: 422 });
     }
     const pendingId = await createPendingImport("image", dataUrl.slice(0, 500), { symbols: candidates });
-    return NextResponse.json({ ok: true, pending_id: pendingId, candidates, model: profile.name });
+    return NextResponse.json({ ok: true, pending_id: pendingId, candidates, model: model.name });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? `图片识别失败: ${error.message}` : "图片识别失败" },

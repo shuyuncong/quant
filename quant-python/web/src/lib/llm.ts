@@ -29,17 +29,57 @@ export function resolveProxy(profile: ModelProfile): string {
   );
 }
 
-export async function enabledModels(): Promise<ModelProfile[]> {
-  return (await listModels()).filter((model) => model.enabled && resolveApiKey(model));
+export async function enabledModels(visionOnly = false): Promise<ModelProfile[]> {
+  const all = (await listModels()).filter((model) => model.enabled && resolveApiKey(model));
+  return visionOnly ? all.filter((model) => model.vision_supported) : all;
 }
 
 export async function pickVisionModel(): Promise<ModelProfile | null> {
-  return (await enabledModels()).find((model) => model.vision_supported) ?? null;
+  return (await enabledModels(true))[0] ?? null;
 }
 
 /** 任选一个已启用且有 API Key 的模型用于文本类任务（AI 解读等）。 */
 export async function pickChatModel(): Promise<ModelProfile | null> {
   return (await enabledModels())[0] ?? null;
+}
+
+export interface ChatWithFallbackResult {
+  content: string;
+  model: ModelProfile;
+}
+
+/**
+ * 按优先级（priority 升序）顺序尝试已启用模型：排序靠前的调用失败
+ * （网络/HTTP/超时/内容错误）自动切换下一个，全部失败抛出最后一次错误。
+ * visionOnly 时只尝试支持视觉的模型（图片识别链）。
+ */
+export async function chatWithFallback(
+  messages: ChatMessage[],
+  options: { timeoutMs?: number; stream?: boolean; visionOnly?: boolean } = {},
+): Promise<ChatWithFallbackResult> {
+  const candidates = await enabledModels(options.visionOnly === true);
+  if (candidates.length === 0) {
+    throw new Error(
+      options.visionOnly
+        ? "未配置可用的视觉模型（需启用并配置 API Key）"
+        : "未配置可用的模型（需启用并配置 API Key）",
+    );
+  }
+  let lastError: unknown;
+  for (const profile of candidates) {
+    try {
+      const content = await chatCompletion(
+        profile,
+        messages,
+        options.timeoutMs,
+        options.stream === true,
+      );
+      return { content, model: profile };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("所有可用模型调用均失败");
 }
 
 /**
@@ -164,28 +204,29 @@ export async function testModelById(id: number): Promise<{ ok: boolean; detail: 
   return testProfile(profile);
 }
 
-export async function recognizeSymbols(profile: ModelProfile, dataUrl: string): Promise<Array<{ symbol: string; name: string }>> {
-  const content = await chatCompletion(
-    profile,
-    [
-      {
-        role: "system",
-        content:
-          "你是A股股票代码识别助手。只输出 JSON，不要输出任何其他文字、解释或 Markdown。",
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "识别图片中的 A 股股票代码列表。返回 JSON 格式：{\"symbols\":[{\"symbol\":\"600036\",\"name\":\"招商银行\"}]}。symbol 只写 6 位数字；name 写股票名称，看不清就留空字符串。",
-          },
-          { type: "image_url", image_url: { url: dataUrl } },
-        ],
-      },
-    ],
-    90_000
-  );
+const SYMBOL_RECOGNITION_PROMPT =
+  "你是A股股票代码识别助手。只输出 JSON，不要输出任何其他文字、解释或 Markdown。";
+
+function buildSymbolRecognitionMessages(dataUrl: string): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: SYMBOL_RECOGNITION_PROMPT,
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "识别图片中的 A 股股票代码列表。返回 JSON 格式：{\"symbols\":[{\"symbol\":\"600036\",\"name\":\"招商银行\"}]}。symbol 只写 6 位数字；name 写股票名称，看不清就留空字符串。",
+        },
+        { type: "image_url", image_url: { url: dataUrl } },
+      ],
+    },
+  ];
+}
+
+function parseSymbolRecognition(content: string): Array<{ symbol: string; name: string }> {
   const parsed = JSON.parse(stripJsonFences(content)) as {
     symbols?: Array<{ symbol?: string; name?: string; code?: string }>;
   };
@@ -197,6 +238,22 @@ export async function recognizeSymbols(profile: ModelProfile, dataUrl: string): 
       return digits ? { symbol: normalizeSymbol(digits), name: String(item.name ?? "").trim() } : null;
     })
     .filter((item): item is { symbol: string; name: string } => item !== null);
+}
+
+export async function recognizeSymbols(profile: ModelProfile, dataUrl: string): Promise<Array<{ symbol: string; name: string }>> {
+  const content = await chatCompletion(profile, buildSymbolRecognitionMessages(dataUrl), 90_000);
+  return parseSymbolRecognition(content);
+}
+
+/** 图片识别降级链：按优先级尝试视觉模型，失败自动切换下一个。返回实际使用的模型。 */
+export async function recognizeSymbolsWithFallback(
+  dataUrl: string,
+): Promise<{ candidates: Array<{ symbol: string; name: string }>; model: ModelProfile }> {
+  const { content, model } = await chatWithFallback(buildSymbolRecognitionMessages(dataUrl), {
+    timeoutMs: 90_000,
+    visionOnly: true,
+  });
+  return { candidates: parseSymbolRecognition(content), model };
 }
 
 type JsonObject = Record<string, unknown>;
@@ -323,11 +380,7 @@ export function extractStandpoints(content: string): string[] {
   return standpoints;
 }
 
-export async function interpretReport(
-  profile: ModelProfile,
-  reportText: string,
-  supplementalContext?: string | null,
-): Promise<string> {
+function buildInterpretMessages(reportText: string, supplementalContext?: string | null): ChatMessage[] {
   // Compact the structured report first.  Holdings and other supplemental
   // context are appended after compaction so they cannot invalidate JSON
   // parsing or cause the report to be truncated from its beginning.
@@ -337,16 +390,38 @@ export async function interpretReport(
   const context = supplemental
     ? `${compacted}\n\n补充上下文：\n${supplemental}`
     : compacted;
+  return [
+    {
+      role: "system",
+      content: INTERPRET_SYSTEM_PROMPT,
+    },
+    { role: "user", content: context },
+  ];
+}
+
+export async function interpretReport(
+  profile: ModelProfile,
+  reportText: string,
+  supplementalContext?: string | null,
+): Promise<string> {
   return chatCompletion(
     profile,
-    [
-      {
-        role: "system",
-        content: INTERPRET_SYSTEM_PROMPT,
-      },
-      { role: "user", content: context },
-    ],
+    buildInterpretMessages(reportText, supplementalContext),
     interpretTimeoutMs(),
     true  /* stream — avoid Cloudflare 524 origin timeout */
   );
+}
+
+/**
+ * AI 解读降级链：按优先级依次尝试已启用模型，优先模型调用失败自动切换下一个。
+ * 返回解读内容与实际使用的模型（用于记录 analysis_note.model）。
+ */
+export async function interpretReportWithFallback(
+  reportText: string,
+  supplementalContext?: string | null,
+): Promise<ChatWithFallbackResult> {
+  return chatWithFallback(buildInterpretMessages(reportText, supplementalContext), {
+    timeoutMs: interpretTimeoutMs(),
+    stream: true,
+  });
 }

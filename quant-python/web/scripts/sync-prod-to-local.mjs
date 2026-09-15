@@ -56,7 +56,7 @@ const localClient = new Client({ connectionString: localUrl, ssl: sslFor(localUr
 
 const tables = [
   { name: "settings", key: ["key"], columns: ["key", "value", "updated_at"] },
-  { name: "model_profiles", key: ["id"], columns: ["id", "name", "base_url", "model", "api_key", "env_key", "enabled", "vision_supported", "created_at", "updated_at", "proxy"] },
+  { name: "model_profiles", key: ["id"], columns: ["id", "name", "base_url", "model", "api_key", "env_key", "enabled", "vision_supported", "priority", "created_at", "updated_at", "proxy"] },
   { name: "stock_pool", key: ["symbol"], columns: ["symbol", "name", "source", "created_at"] },
   { name: "pending_imports", key: ["id"], columns: ["id", "kind", "raw", "candidates", "status", "created_at"] },
   { name: "jobs", key: ["id"], columns: ["id", "kind", "status", "payload", "result_path", "error", "created_at", "started_at", "finished_at"] },

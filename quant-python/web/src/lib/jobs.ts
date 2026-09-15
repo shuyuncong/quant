@@ -14,7 +14,7 @@ import {
   updateJob,
 } from "./db";
 import { nowIso } from "./time";
-import { interpretReport, pickChatModel, extractStandpoints } from "./llm";
+import { interpretReportWithFallback, pickChatModel, extractStandpoints } from "./llm";
 import { signalSystemDir } from "./paths";
 import {
   buildHoldingsContext,
@@ -82,6 +82,7 @@ async function autoInterpret(
   try {
     let content = existingNote?.content ?? "";
     let noteId = existingNote?.id ?? 0;
+    let modelName = existingNote?.model ?? "";
     if (!content) {
       const full = resolveReportPath(resultPath);
       const reportText = fs.readFileSync(full, "utf8");
@@ -89,8 +90,15 @@ async function autoInterpret(
       const holdings = holdingsFromJobPayload(parentPayload);
       const totalCapital = totalCapitalFromJobPayload(parentPayload);
       const context = buildHoldingsContext(reportText, holdings, totalCapital);
-      content = await interpretReport(profile!, reportText, context);
-      noteId = await addNote({ job_id: parentJobId, result_path: resultPath, content, model: profile!.name });
+      const interpreted = await interpretReportWithFallback(reportText, context);
+      content = interpreted.content;
+      modelName = interpreted.model.name;
+      noteId = await addNote({
+        job_id: parentJobId,
+        result_path: resultPath,
+        content,
+        model: modelName,
+      });
     }
     const standpoints = extractStandpoints(content);
     if (!existingNote) {
@@ -100,7 +108,7 @@ async function autoInterpret(
         module: "auto-interpret",
         message: "自动解读完成",
         detail:
-          `模型 ${profile!.name}，笔记 #${noteId}` +
+          `模型 ${modelName}，笔记 #${noteId}` +
           (standpoints.length > 0 ? `\n操作主张：${standpoints.join("；")}` : ""),
       });
     }

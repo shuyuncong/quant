@@ -20,6 +20,7 @@ export interface ModelProfile {
   proxy: string;
   enabled: boolean;
   vision_supported: boolean;
+  priority: number;
   created_at: string;
   updated_at: string;
 }

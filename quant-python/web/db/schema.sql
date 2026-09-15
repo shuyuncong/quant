@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS quant.model_profiles (
   env_key TEXT NOT NULL DEFAULT '',
   enabled BOOLEAN NOT NULL DEFAULT FALSE,
   vision_supported BOOLEAN NOT NULL DEFAULT TRUE,
+  priority INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   proxy TEXT NOT NULL DEFAULT ''
@@ -151,3 +152,10 @@ BEGIN
   END IF;
 END
 $grants$;
+
+-- v3: 模型使用排序 —— 已启用模型按 priority 升序组成 AI 解读/图片识别的
+-- 降级链：优先用排序靠前的模型，调用失败自动切换下一个。
+-- 既有库通过幂等 ALTER 补齐列；新库直接建表已含 priority。
+ALTER TABLE quant.model_profiles ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;
+INSERT INTO quant.schema_meta (version) VALUES (3)
+ON CONFLICT (version) DO NOTHING;

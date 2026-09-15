@@ -18,7 +18,7 @@ import type {
 
 export type { ScheduleRow };
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const SCHEDULER_LOCK_KEY = 1_907_082_026;
 const WATCHLIST_LOCK_KEY = 1_907_082_027;
 
@@ -220,6 +220,7 @@ function rowToModel(row: Record<string, unknown>): ModelProfile {
     proxy: String(row.proxy ?? ""),
     enabled: Boolean(row.enabled),
     vision_supported: Boolean(row.vision_supported),
+    priority: Number(row.priority ?? 0),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
@@ -227,7 +228,7 @@ function rowToModel(row: Record<string, unknown>): ModelProfile {
 
 export async function listModels(db?: DbClient): Promise<ModelProfile[]> {
   const client = await resolveDb(db);
-  const result = await client.query("SELECT * FROM quant.model_profiles ORDER BY id");
+  const result = await client.query("SELECT * FROM quant.model_profiles ORDER BY priority, id");
   return result.rows.map(rowToModel);
 }
 
@@ -252,10 +253,15 @@ export async function createModel(
 ): Promise<number> {
   const client = await resolveDb(db);
   const now = nowIso();
+  // 新模型默认排到最末（MAX+1）；并发极少见，单条查询足够。
+  const priorityResult = await client.query<{ max: number | null }>(
+    "SELECT MAX(priority) AS max FROM quant.model_profiles",
+  );
+  const priority = Number(priorityResult.rows[0]?.max ?? -1) + 1;
   const result = await client.query<{ id: string | number }>(
     `INSERT INTO quant.model_profiles
-       (name, base_url, model, api_key, env_key, proxy, enabled, vision_supported, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+       (name, base_url, model, api_key, env_key, proxy, enabled, vision_supported, priority, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
      RETURNING id`,
     [
       input.name,
@@ -266,6 +272,7 @@ export async function createModel(
       input.proxy ?? "",
       Boolean(input.enabled),
       input.vision_supported !== false,
+      priority,
       now,
     ],
   );
@@ -317,6 +324,22 @@ export async function updateModel(
 export async function deleteModel(id: number, db?: DbClient): Promise<void> {
   const client = await resolveDb(db);
   await client.query("DELETE FROM quant.model_profiles WHERE id = $1", [id]);
+}
+
+/**
+ * 按传入 id 顺序重写全部模型的 priority（0..n-1）。
+ * 调用方必须传模型全集，保证不丢配置；事务内执行。
+ */
+export async function reorderModels(ids: number[], db?: DbClient): Promise<void> {
+  await inTransaction(db, async (client) => {
+    const now = nowIso();
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        "UPDATE quant.model_profiles SET priority = $1, updated_at = $2 WHERE id = $3",
+        [index, now, ids[index]],
+      );
+    }
+  });
 }
 
 // ---------- stock pool ----------

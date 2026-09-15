@@ -25,7 +25,7 @@ const ssl = local && !servername
 
 const tables = [
   { name: "settings", key: ["key"], columns: ["key", "value", "updated_at"] },
-  { name: "model_profiles", key: ["id"], columns: ["id", "name", "base_url", "model", "api_key", "env_key", "enabled", "vision_supported", "created_at", "updated_at", "proxy"] },
+  { name: "model_profiles", key: ["id"], columns: ["id", "name", "base_url", "model", "api_key", "env_key", "enabled", "vision_supported", "priority", "created_at", "updated_at", "proxy"] },
   { name: "stock_pool", key: ["symbol"], columns: ["symbol", "name", "source", "created_at"] },
   { name: "pending_imports", key: ["id"], columns: ["id", "kind", "raw", "candidates", "status", "created_at"] },
   { name: "jobs", key: ["id"], columns: ["id", "kind", "status", "payload", "result_path", "error", "created_at", "started_at", "finished_at"] },
@@ -78,6 +78,7 @@ function readSqlite() {
         if (column === "proxy") return "'' AS proxy";
         if (column === "fixed_times") return "'[]' AS fixed_times";
         if (column === "result_path") return "NULL AS result_path";
+        if (column === "priority") return "0 AS priority";
         throw new Error(`SQLite source table ${table.name} is missing required column ${column}`);
       });
       result.set(table.name, db.prepare(`SELECT ${expressions.join(", ")} FROM ${table.name}`).all());
@@ -214,7 +215,7 @@ async function exportPostgresToSqlite() {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
     sqlite.exec(`
       CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
-      CREATE TABLE model_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, base_url TEXT NOT NULL, model TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '', env_key TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 0, vision_supported INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, proxy TEXT NOT NULL DEFAULT '');
+      CREATE TABLE model_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, base_url TEXT NOT NULL, model TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '', env_key TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 0, vision_supported INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, proxy TEXT NOT NULL DEFAULT '');
       CREATE TABLE stock_pool (symbol TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL);
       CREATE TABLE pending_imports (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, raw TEXT NOT NULL DEFAULT '', candidates TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL);
       CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', payload TEXT NOT NULL DEFAULT '{}', result_path TEXT, error TEXT, created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT);

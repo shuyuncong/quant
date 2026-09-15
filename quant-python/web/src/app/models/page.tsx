@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, Copy, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 
 interface ModelItem {
   id: number;
@@ -42,6 +42,7 @@ interface ModelItem {
   proxy: string;
   enabled: boolean;
   vision_supported: boolean;
+  priority?: number;
   env_present?: boolean;
   created_at: string;
   updated_at: string;
@@ -75,6 +76,7 @@ export default function ModelsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<ModelForm>(EMPTY_FORM);
   const [testingId, setTestingId] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -111,6 +113,49 @@ export default function ModelsPage() {
       vision_supported: model.vision_supported,
     });
     setDialogOpen(true);
+  };
+
+  const duplicate = (model: ModelItem) => {
+    // 复制当前模型：预填副本表单（api_key 保持掩码，不复制密钥），用户修改后保存即新增。
+    setEditingId(null);
+    setForm({
+      name: `${model.name} 副本`,
+      base_url: model.base_url,
+      model: model.model,
+      api_key: model.api_key === "****" ? "****" : "",
+      env_key: model.env_key,
+      proxy: model.proxy,
+      enabled: model.enabled,
+      vision_supported: model.vision_supported,
+    });
+    setDialogOpen(true);
+  };
+
+  const reorder = async (ordered: ModelItem[]) => {
+    setReordering(true);
+    try {
+      const response = await fetch("/api/models/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ordered.map((model) => model.id) }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "排序失败");
+      void load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "排序失败");
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const move = (model: ModelItem, direction: -1 | 1) => {
+    const index = models.findIndex((item) => item.id === model.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= models.length) return;
+    const next = [...models];
+    [next[index], next[target]] = [next[target], next[index]];
+    void reorder(next);
   };
 
   const save = async () => {
@@ -189,21 +234,23 @@ export default function ModelsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10 text-center">顺序</TableHead>
                 <TableHead>名称</TableHead>
                 <TableHead>Base URL</TableHead>
                 <TableHead>模型</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>视觉</TableHead>
                 <TableHead>Key</TableHead>
-                <TableHead className="w-44">操作</TableHead>
+                <TableHead className="w-56">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {models.map((model) => (
+              {models.map((model, index) => (
                 <TableRow key={model.id}>
-                  <TableCell className="font-medium">{model.name}</TableCell>
-                  <TableCell className="max-w-56 truncate font-mono text-xs">{model.base_url}</TableCell>
-                  <TableCell className="font-mono text-xs">{model.model}</TableCell>
+                  <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+                  <TableCell className="max-w-44 truncate font-medium" title={model.name}>{model.name}</TableCell>
+                  <TableCell className="max-w-40 truncate font-mono text-xs" title={model.base_url}>{model.base_url}</TableCell>
+                  <TableCell className="max-w-32 truncate font-mono text-xs" title={model.model}>{model.model}</TableCell>
                   <TableCell>
                     {model.enabled ? (
                       <Badge><CheckCircle2 className="size-3" /> 启用</Badge>
@@ -217,6 +264,27 @@ export default function ModelsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => move(model, -1)}
+                        disabled={index === 0 || reordering}
+                        title="上移（提高优先级）"
+                      >
+                        <ArrowUp className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => move(model, 1)}
+                        disabled={index === models.length - 1 || reordering}
+                        title="下移（降低优先级）"
+                      >
+                        <ArrowDown className="size-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => duplicate(model)} title="复制当前模型">
+                        <Copy className="size-3.5" />
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => void test(model)} disabled={testingId === model.id}>
                         {testingId === model.id ? "测试中" : "测试"}
                       </Button>
@@ -232,7 +300,7 @@ export default function ModelsPage() {
               ))}
               {models.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     暂无模型，点击右上角新增
                   </TableCell>
                 </TableRow>
