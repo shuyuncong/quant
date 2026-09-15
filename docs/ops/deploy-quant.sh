@@ -89,6 +89,19 @@ cd "$COMPOSE_DIR"
 if [ "$DB_MODE" = "selfhost" ]; then
     log "使用自建库模式（叠加 docker-compose.oracle.db.yml）"
     docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d --build 2>&1 | tee -a "$LOG"
+    # 数据库 schema 迁移（幂等）：quant_app 只有 DML 权限，ALTER/CREATE 必须用
+    # quant_owner 连接执行 db:setup。schema.sql 全部幂等，每次部署跑一次安全；
+    # 缺此步时新代码要求的 schema_meta 版本不匹配，所有 /api/* 直接 500。
+    log "应用数据库 schema 迁移（db:setup，幂等）"
+    OWNER_PASSWORD="$(get_env PG_OWNER_PASSWORD)"
+    if [ -z "$OWNER_PASSWORD" ]; then
+        log "ERROR: 未找到 PG_OWNER_PASSWORD，跳过迁移（后续页面会 500，请手动执行 db:setup）"
+    else
+        docker exec \
+            -e "DATABASE_URL=postgresql://quant_owner:${OWNER_PASSWORD}@quant-db:5432/quant" \
+            -e DATABASE_SSL_MODE=disable \
+            quant-web npm run db:setup 2>&1 | tee -a "$LOG"
+    fi
 else
     log "使用主 compose 模式（legacy）"
     docker compose -f docker-compose.oracle.yml up -d --build 2>&1 | tee -a "$LOG"
