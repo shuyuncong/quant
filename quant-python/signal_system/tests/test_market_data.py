@@ -426,5 +426,78 @@ class MarketDataTests(unittest.TestCase):
         self.assertEqual(1, len(calls))
 
 
+class TradeCalendarTodayTests(unittest.TestCase):
+    """get_trade_dates 的当日兜底：腾讯日 K 当日 bar 收盘前不存在，
+    凌晨回源缺当日会导致整天 is_trading_day=false（2026-09 线上故障根因）。"""
+
+    def _client(self, cache_dir):
+        return MarketDataClient(
+            {"market_data": {"cache_dir": cache_dir, "provider": "auto"}}
+        )
+
+    def _set_today(self, iso):
+        today = date.fromisoformat(iso)
+
+        def fake_now():
+            class X:
+                @staticmethod
+                def date():
+                    return today
+
+            return X()
+
+        with patch("data.market_data.now_shanghai", new=fake_now):
+            return today
+
+    def test_weekday_missing_today_is_added(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            today = self._set_today("2026-09-17")  # 周四
+            dates = {date(2026, 9, 15), date(2026, 9, 16)}  # 昨日收盘数据
+            result = client._with_today_if_stale(dates)
+            self.assertIn(today, result)
+            self.assertEqual(result, {date(2026, 9, 15), date(2026, 9, 16), today})
+
+    def test_already_contains_today_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            today = self._set_today("2026-09-17")
+            dates = {date(2026, 9, 16), today}
+            result = client._with_today_if_stale(dates)
+            self.assertEqual(result, dates)
+
+    def test_weekend_not_added(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            today = self._set_today("2026-09-19")  # 周六
+            dates = {date(2026, 9, 17), date(2026, 9, 18)}
+            result = client._with_today_if_stale(dates)
+            self.assertNotIn(today, result)
+
+    def test_future_dated_calendar_unchanged(self):
+        # akshare 全表含未来交易日：不应被兜底改动
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            today = self._set_today("2026-09-17")
+            dates = {date(2026, 9, 16), date(2026, 9, 17), date(2026, 9, 18)}
+            result = client._with_today_if_stale(dates)
+            self.assertEqual(result, dates)
+
+    def test_empty_dates_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            self._set_today("2026-09-17")
+            self.assertEqual(client._with_today_if_stale(set()), set())
+
+    def test_cache_path_missing_today_also_gets_today(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            self._set_today("2026-09-17")
+            frame = pd.DataFrame({"trade_date": pd.to_datetime(["2026-09-15", "2026-09-16"])})
+            client._save_cache("trade_calendar", frame)
+            result = client.get_trade_dates()
+            self.assertIn(date(2026, 9, 17), result)
+
+
 if __name__ == "__main__":
     unittest.main()

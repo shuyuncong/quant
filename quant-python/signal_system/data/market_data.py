@@ -1225,7 +1225,9 @@ class MarketDataClient:
     def get_trade_dates(self) -> set[date]:
         cached = self._cached("trade_calendar", 24 * 3600)
         if cached is not None:
-            return set(pd.to_datetime(cached["trade_date"]).dt.date)
+            return self._with_today_if_stale(
+                set(pd.to_datetime(cached["trade_date"]).dt.date)
+            )
         try:
             self._throttle()
             if self.provider == "akshare":
@@ -1243,7 +1245,25 @@ class MarketDataClient:
                     {"trade_date": pd.to_datetime([item[0] for item in items if item])}
                 )
             self._save_cache("trade_calendar", result)
-            return set(result["trade_date"].dt.date)
+            return self._with_today_if_stale(
+                set(result["trade_date"].dt.date)
+            )
         except Exception as exc:
             logger.warning("交易日历获取失败，降级到工作日: %s", exc)
             return set()
+
+    @staticmethod
+    def _with_today_if_stale(dates: set[date]) -> set[date]:
+        """交易日历 24h 缓存自锁修复：缓存总在收盘后（15:4x）刷新且不含
+        次日，随后整天命中缺今日的旧缓存 → is_trading_day=false → 日扫与
+        盘中监控连续错过（2026-09 实测：monitor-cycle 9/4 后归零、daily-scan
+        拖到 15:4x 缓存过期回源才补跑）。工作日且数据最新不晚于今天时并入
+        当日；节假日误判为交易日只会空跑一次扫描（当日无 bar，事件去重自然
+        隔离），代价远低于整个交易日错失日扫与盘中监控。"""
+        if not dates:
+            return dates
+        today = now_shanghai().date()
+        if today.weekday() < 5 and today not in dates and max(dates) <= today:
+            dates = set(dates)
+            dates.add(today)
+        return dates
