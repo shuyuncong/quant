@@ -20,7 +20,11 @@ from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
 from strategy.macd import calculate_macd
-from strategy.yearline import POOL_TYPE_YEARLINE, last_bar_pullback_candidate
+from strategy.yearline import (
+    POOL_TYPE_YEARLINE,
+    last_bar_pullback_candidate,
+    prepare_yearline_bars,
+)
 from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
@@ -1088,6 +1092,12 @@ class SignalMonitor:
             rows = stock_list[["code", "name"]].to_dict("records")
             total = len(rows)
             universe_symbols = {normalize_symbol(str(row["code"])) for row in rows}
+            saved_scan_day = self.store.get_state("yearline_scan_day")
+            if saved_scan_day != expected_iso:
+                self.store.set_state("yearline_scan_day", expected_iso)
+                self.store.set_state("yearline_bootstrap_success", "[]")
+                self.store.set_state("yearline_bootstrap_deferred", "{}")
+                self.store.set_state("yearline_pool_cache", "[]")
             saved_success = self.store.get_state("yearline_bootstrap_success", "[]") or "[]"
             try:
                 success_seed = set(json.loads(saved_success))
@@ -1123,6 +1133,7 @@ class SignalMonitor:
         errors: list[dict[str, str]] = []
         successful_symbols: set[str] = set()
         stale_symbols: set[str] = set()
+        retryable_symbols: set[str] = set()
         names = self._resolve_names(
             [normalize_symbol(str(row["code"])) for row in batch]
         )
@@ -1130,20 +1141,24 @@ class SignalMonitor:
             symbol = normalize_symbol(str(row["code"]))
             name = str(row.get("name") or "") or names.get(symbol, "")
             try:
-                daily = market.get_bars(symbol, "1d", limit=300)
-                if daily is None or daily.empty:
-                    raise ValueError("日线为空")
-                columns = {str(col) for col in daily.columns}
+                raw_daily = market.get_bars(symbol, "1d", limit=300)
+                if raw_daily is None or raw_daily.empty:
+                    raise ValueError("yearline_daily_empty")
+                columns = {str(col) for col in raw_daily.columns}
                 if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(columns):
                     raise ValueError(
-                        "日线缺少列: " + ",".join(sorted(
+                        "yearline_daily_missing_columns:" + ",".join(sorted(
                             {"datetime", "open", "high", "low", "close", "volume"} - columns
                         ))
                     )
+                daily = prepare_yearline_bars(raw_daily)
+                if daily.empty:
+                    raise ValueError("yearline_no_closed_daily_bars")
                 latest_date = pd.Timestamp(daily["datetime"].iloc[-1]).date()
                 if latest_date < pd.Timestamp(expected_trade_date).date():
                     raise ValueError(
-                        f"日线已过期: latest={latest_date}, expected={pd.Timestamp(expected_trade_date).date()}"
+                        "yearline_daily_stale:"
+                        f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
                     )
                 candidate = last_bar_pullback_candidate(symbol, name, daily)
                 successful_symbols.add(symbol)
@@ -1151,10 +1166,10 @@ class SignalMonitor:
                     candidates.append(candidate)
             except Exception as exc:
                 message = str(exc)
-                if _is_stale_data_error(message):
+                if message.startswith("yearline_daily_stale:"):
                     stale_symbols.add(symbol)
                 else:
-                    successful_symbols.add(symbol)
+                    retryable_symbols.add(symbol)
                 errors.append({"symbol": symbol, "name": name, "error": message[:300]})
 
         if universe_mode == "watchlist":
@@ -1180,7 +1195,11 @@ class SignalMonitor:
             completed_round = len(success_seed) >= eligible_total
             # 跨批次累积候选: 全市场分批扫描时, 整轮完成的一次 sync 必须拿到
             # 本轮所有批次发现的候选(而不是只有最后一批), 否则会把前几批写丢。
-            cached = self._load_yearline_pool_cache()
+            cached = {
+                symbol: candidate
+                for symbol, candidate in self._load_yearline_pool_cache().items()
+                if symbol in universe_symbols
+            }
             for candidate in candidates:
                 cached[normalize_symbol(str(candidate["symbol"]))] = candidate
             self.store.set_state(
@@ -1211,11 +1230,14 @@ class SignalMonitor:
 
         sorted_candidates = sorted(
             candidates,
-            key=lambda item: (item.get("score", 0),),
-            reverse=True,
+            key=lambda item: (
+                -int(item.get("score", 0) or 0),
+                str(item.get("signal_date", "")),
+                str(item.get("symbol", "")),
+            ),
         )
-        # 研究池: 不发通知, 只投递队列中既有事件
-        delivery = self.dispatch_outbox()
+        # Research scans are isolated from the production notification outbox.
+        delivery = {"delivered": 0, "failed": 0}
         report = {
             "mode": "scan",
             "pool_type": POOL_TYPE_YEARLINE,
@@ -1226,6 +1248,8 @@ class SignalMonitor:
             "universe_size": total,
             "coverage": coverage,
             "completed_round": completed_round,
+            "retryable_error_count": len(retryable_symbols),
+            "stale_symbol_count": len(stale_symbols),
             "research_only": True,
             "entry_reference": "next_day_open",
             "candidate_count": len(candidates),

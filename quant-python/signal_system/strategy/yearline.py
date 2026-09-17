@@ -30,6 +30,30 @@ PULLBACK_ZONE_LOW = -0.005  # 回踩区间下界: 年线下方 0.5%
 PULLBACK_ZONE_HIGH = 0.02  # 回踩区间上界: 年线上方 2%
 STOP_FLOOR = 0.05
 STOP_CEIL = 0.08
+SIGNAL_COOLDOWN_BARS = 20
+
+
+def prepare_yearline_bars(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize daily bars to the closed-bar convention used by the backtest."""
+    if df is None or df.empty or "datetime" not in df.columns:
+        return pd.DataFrame()
+    out = df.copy()
+    if "is_closed" in out.columns:
+        out = out[out["is_closed"].fillna(False).astype(bool)]
+    out["datetime"] = pd.to_datetime(out["datetime"], errors="coerce")
+    out = out.dropna(subset=["datetime"])
+    required = ("open", "high", "low", "close", "volume")
+    for column in required:
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    if not set(required).issubset(out.columns):
+        return pd.DataFrame()
+    return (
+        out.dropna(subset=list(required))
+        .sort_values("datetime", kind="mergesort")
+        .drop_duplicates("datetime", keep="last")
+        .reset_index(drop=True)
+    )
 MIN_BARS = 270  # MA250 + 20 日斜率 + 少量余量
 
 
@@ -38,7 +62,9 @@ def add_yearline_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     期望输入列: datetime/open/high/low/close/volume。
     """
-    out = df.copy()
+    out = prepare_yearline_bars(df)
+    if out.empty:
+        return out
     close = pd.to_numeric(out["close"], errors="coerce")
     out["ma60"] = close.rolling(60).mean()
     out["ma120"] = close.rolling(120).mean()
@@ -72,9 +98,10 @@ def add_yearline_indicators(df: pd.DataFrame) -> pd.DataFrame:
     out["atr14"] = atr14
     out["atr14_pct"] = atr14 / close * 100.0
     volume = pd.to_numeric(out["volume"], errors="coerce")
-    vol_ma5 = volume.rolling(5).mean()
-    out["vol_ma5"] = vol_ma5
-    out["volume_ratio"] = volume / vol_ma5
+    prior_volume_mean20 = volume.shift(1).rolling(20, min_periods=20).mean()
+    out["prior_volume_mean20"] = prior_volume_mean20
+    out["volume_ratio_20"] = volume / prior_volume_mean20
+    out["volume_ratio"] = out["volume_ratio_20"]
     return out
 
 
@@ -90,7 +117,7 @@ def pullback_signal_at(df: pd.DataFrame, i: int) -> Optional[dict[str, Any]]:
     row = df.iloc[i]
     fields = [
         "ma250", "ma250_slope", "ma60", "ma120", "atr14", "atr14_pct",
-        "volume_ratio", "ma_align", "ma250_up", "above250_prev",
+        "volume_ratio_20", "ma_align", "ma250_up", "above250_prev",
         "low_in_zone", "close_hold", "close_ge_open",
     ]
     for field in fields:
@@ -126,7 +153,8 @@ def pullback_signal_at(df: pd.DataFrame, i: int) -> Optional[dict[str, Any]]:
         "ma250_slope": round(slope_abs, 3),
         "ma250_slope_pct": round(slope_pct, 4),
         "atr14_pct": round(float(row["atr14_pct"]), 3),
-        "volume_ratio": round(float(row["volume_ratio"]), 3),
+        "volume_ratio": round(float(row["volume_ratio_20"]), 3),
+        "volume_ratio_20": round(float(row["volume_ratio_20"]), 3),
         "low_vs_ma250_pct": round(
             (float(row["low"]) - ma250) / ma250 * 100.0, 4
         ),
@@ -147,8 +175,22 @@ def last_bar_pullback_candidate(
     daily 期望为市场客户端返回的日线框 (含 datetime/open/high/low/close/volume)。
     """
     df = add_yearline_indicators(daily)
+    if df.empty:
+        return None
     signal = pullback_signal_at(df, -1)
     if signal is None:
+        return None
+    latest_index = len(df) - 1
+    last_accepted_index: int | None = None
+    for index in range(MIN_BARS - 1, latest_index + 1):
+        if pullback_signal_at(df, index) is None:
+            continue
+        if (
+            last_accepted_index is None
+            or index - last_accepted_index >= SIGNAL_COOLDOWN_BARS
+        ):
+            last_accepted_index = index
+    if last_accepted_index != latest_index:
         return None
     candidate = {
         "symbol": symbol,

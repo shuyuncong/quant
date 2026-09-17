@@ -28,7 +28,7 @@ if str(BASE_DIR) not in sys.path:
 from backtest_winrate import _resolve_execution_config, run_portfolio
 from utils.helpers import load_config
 
-VERSION = "long_history_yearline_pullback_audit.v1"
+VERSION = "long_history_yearline_pullback_audit.v2"
 INPUT_VERSION = "long_history_yearline_trend_experiment.v1"
 PRIMARY_CONFIG_GIT_REVISION = "e2787288051ab1ec6bcdfba40c04fa7e59295863"
 CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
@@ -208,8 +208,15 @@ def _validate_report(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     route = report.get("routes", {}).get(ROUTE)
     if not isinstance(route, dict):
         raise TypeError(f"missing {ROUTE} route in {report_path}")
-    if route.get("screen", {}).get("passes_research_screen") is not True:
-        raise RuntimeError(f"frozen pullback efficacy screen did not pass: {report_path}")
+    # A failed research screen is an expected research outcome, not an input
+    # integrity failure.  Keep it in the replay report and let the audit's
+    # own checks decide whether the replay is valid.  Reject only malformed
+    # screen metadata so missing fields cannot silently pass through.
+    screen = route.get("screen")
+    if not isinstance(screen, dict) or not isinstance(
+        screen.get("passes_research_screen"), bool
+    ):
+        raise RuntimeError(f"invalid pullback screen metadata: {report_path}")
 
     artifact_checks: dict[str, Any] = {}
     for name, metadata in sorted(report.get("artifacts", {}).items()):
@@ -285,20 +292,20 @@ def _compare_replays(
         == FROZEN_EXPERIMENT_SHA256,
         "frozen_backtest_engine_hash_matches": _sha256(backtest_engine_path)
         == FROZEN_BACKTEST_ENGINE_SHA256,
-        "primary_pullback_screen_passed": primary["routes"][ROUTE]["screen"][
-            "passes_research_screen"
-        ]
-        is True,
-        "verify_pullback_screen_passed": verify["routes"][ROUTE]["screen"][
-            "passes_research_screen"
-        ]
-        is True,
     }
     return primary, verify, {
         "checks": checks,
         "checks_passed": all(checks.values()),
         "artifact_count": len(artifact_results),
         "artifact_comparison": artifact_results,
+        "input_screen": {
+            "primary_passes_research_screen": primary["routes"][ROUTE]["screen"][
+                "passes_research_screen"
+            ],
+            "verify_passes_research_screen": verify["routes"][ROUTE]["screen"][
+                "passes_research_screen"
+            ],
+        },
         "config_semantic_audit": config_semantics,
         "primary": primary_integrity,
         "verify": verify_integrity,

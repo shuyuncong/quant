@@ -17,15 +17,11 @@ export interface CandidateRow {
   chan_signals?: unknown[];
 }
 
-const POOL_TYPES: Record<string, true> = {
-  macd_zero_axis: true,
-  yearline_pullback: true,
-  all: true,
-};
+const POOL_TYPES = new Set(["macd_zero_axis", "yearline_pullback", "all"]);
 
 export async function GET(request: Request) {
   const poolType = new URL(request.url).searchParams.get("pool_type") || "macd_zero_axis";
-  if (!(poolType in POOL_TYPES)) {
+  if (!POOL_TYPES.has(poolType)) {
     return NextResponse.json(
       { error: "pool_type 仅支持 macd_zero_axis / yearline_pullback / all" },
       { status: 422 }

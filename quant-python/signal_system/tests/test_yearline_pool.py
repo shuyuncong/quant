@@ -29,6 +29,7 @@ from strategy.yearline import (
     POOL_TYPE_YEARLINE,
     add_yearline_indicators,
     last_bar_pullback_candidate,
+    prepare_yearline_bars,
     pullback_signal_at,
 )
 from monitor.service import SignalMonitor
@@ -77,6 +78,15 @@ def _signal_frame(
 # 信号逻辑
 # --------------------------------------------------------------------------- #
 class TestYearlineSignal:
+    def test_unclosed_last_bar_is_excluded(self):
+        df = _signal_frame()
+        df["is_closed"] = True
+        df.loc[len(df) - 1, "is_closed"] = False
+        prepared = prepare_yearline_bars(df)
+        assert len(prepared) == len(df) - 1
+        assert prepared["datetime"].iloc[-1] != df["datetime"].iloc[-1]
+        assert last_bar_pullback_candidate("600036", "", df) is None
+
     def test_pullback_signal_hits_on_synthetic_frame(self):
         df = _signal_frame()
         candidate = last_bar_pullback_candidate("600036", "招商银行", df)
@@ -94,7 +104,7 @@ class TestYearlineSignal:
         assert candidate["atr14_pct"] > 0
 
     def test_stop_suggestion_clips_to_5pct_when_atr_tiny(self):
-        df = _signal_frame(slope=1e-4, close_frac=0.005, low_frac=0.001)
+        df = _signal_frame(slope=0.02, close_frac=0.005, low_frac=0.001)
         candidate = last_bar_pullback_candidate("600036", "", df)
         assert candidate is not None
         assert candidate["stop_suggestion_pct"] == pytest.approx(5.0)
@@ -144,7 +154,7 @@ class TestYearlineSignal:
         assert before is not None
         mutated = df.copy()
         # 篡改未来数据(信号日之后)不应改变信号
-        extra = _signal_frame(n=30, end=date(2026, 10, 1))
+        extra = _signal_frame(n=30, end=date(2026, 10, 30))
         mutated = pd.concat([mutated, extra], ignore_index=True)
         after = pullback_signal_at(add_yearline_indicators(mutated), len(df) - 1)
         assert after == before
@@ -331,7 +341,7 @@ class TestScanYearline:
         # 写入的候选属于 yearline 池, 默认读(生产行为)看不到
         assert monitor.store.active_candidates(pool_type="yearline_pullback")
         assert monitor.store.active_candidates() == []
-        monitor.dispatch_outbox.assert_called_once()
+        monitor.dispatch_outbox.assert_not_called()
         # 报告文件落盘
         assert report["output_file"] and Path(report["output_file"]).exists()
 
@@ -403,6 +413,54 @@ class TestScanYearline:
         assert second["completed_round"] is True
         assert second["candidate_count"] == 1  # 只有 000001 命中
         assert [row["symbol"] for row in monitor.store.active_candidates(pool_type="yearline_pullback")] == ["000001"]
+
+    def test_retryable_data_error_does_not_complete_or_sync(self, tmp_path):
+        frame = _signal_frame()
+        bad_frame = frame.drop(columns=["volume"])
+        stock_list = pd.DataFrame(
+            [{"code": "600036", "name": "招商银行"}, {"code": "000001", "name": "平安银行"}]
+        )
+        monitor = self._monitor(
+            tmp_path, watchlist=[], max_scan_symbols=2, universe_mode="all_a"
+        )
+        monitor.market.get_stock_list = mock.MagicMock(return_value=stock_list)
+        monitor._yearline_market = _FakeYearlineMarket(
+            {"600036": bad_frame, "000001": frame}, stock_list
+        )
+
+        report = monitor.scan_yearline(notify=False)
+
+        assert report["completed_round"] is False
+        assert report["retryable_error_count"] == 1
+        assert report["stale_symbol_count"] == 0
+
+    def test_new_trade_day_resets_previous_partial_round(self, tmp_path):
+        frame = _signal_frame()
+        stock_list = pd.DataFrame(
+            [
+                {"code": "600036", "name": "招商银行"},
+                {"code": "000001", "name": "平安银行"},
+                {"code": "300750", "name": "宁德时代"},
+            ]
+        )
+        monitor = self._monitor(
+            tmp_path, watchlist=[], max_scan_symbols=1, universe_mode="all_a"
+        )
+        monitor.market.get_stock_list = mock.MagicMock(return_value=stock_list)
+        market = _FakeYearlineMarket(
+            {"600036": frame, "000001": frame, "300750": frame}, stock_list
+        )
+        monitor._yearline_market = market
+
+        first = monitor.scan_yearline(notify=False)
+        assert first["batch_start"] == 0
+        assert first["completed_round"] is False
+        assert monitor.store.get_state("yearline_bootstrap_success")
+
+        market.expected = date(2026, 8, 26)
+        second = monitor.scan_yearline(notify=False)
+        assert second["batch_start"] == 0
+        assert monitor.store.get_state("yearline_bootstrap_success") == "[]"
 
 
 # --------------------------------------------------------------------------- #

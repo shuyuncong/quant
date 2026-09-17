@@ -110,6 +110,18 @@ class SignalStore:
                 connection.execute("ALTER TABLE outbox_delivery ADD COLUMN claim_token TEXT")
             self._migrate_composite_pk(connection, "candidate")
             self._migrate_composite_pk(connection, "expired_candidate")
+            connection.executescript(
+                """
+                CREATE INDEX IF NOT EXISTS idx_candidate_pool_score
+                    ON candidate(pool_type, score DESC, symbol ASC);
+                CREATE INDEX IF NOT EXISTS idx_candidate_expiry
+                    ON candidate(expires_on);
+                CREATE INDEX IF NOT EXISTS idx_candidate_symbol
+                    ON candidate(symbol);
+                CREATE INDEX IF NOT EXISTS idx_expired_candidate_pool_updated
+                    ON expired_candidate(pool_type, updated_at DESC);
+                """
+            )
 
     @staticmethod
     def _migrate_composite_pk(connection: sqlite3.Connection, table: str) -> None:
@@ -348,6 +360,17 @@ class SignalStore:
                 remaining -= 1
         return current
 
+    @staticmethod
+    def _rank_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return a deterministic score-descending, symbol-ascending order."""
+        return sorted(
+            candidates,
+            key=lambda item: (
+                -int(item.get("score", 0) or 0),
+                str(item.get("symbol", "")),
+            ),
+        )
+
     def replace_candidates(
         self,
         candidates: list[dict[str, Any]],
@@ -357,7 +380,7 @@ class SignalStore:
     ) -> None:
         now = now_shanghai()
         expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
-        ranked = sorted(candidates, key=lambda item: item.get("score", 0), reverse=True)[:capacity]
+        ranked = self._rank_candidates(candidates)[:capacity]
         with self._connect() as connection:
             connection.execute("DELETE FROM candidate WHERE pool_type = ?", (pool_type,))
             for candidate in ranked:
@@ -419,7 +442,8 @@ class SignalStore:
                 WHERE pool_type = ?
                   AND symbol NOT IN (
                     SELECT symbol FROM candidate
-                    WHERE pool_type = ? ORDER BY score DESC, updated_at DESC LIMIT ?
+                    WHERE pool_type = ?
+                    ORDER BY score DESC, updated_at DESC, symbol ASC LIMIT ?
                   )
                 """,
                 (pool_type, pool_type, capacity),
@@ -462,15 +486,24 @@ class SignalStore:
                 connection.execute("DELETE FROM candidate WHERE expires_on < ?", (today,))
             if scoped:
                 rows = connection.execute(
-                    "SELECT * FROM candidate WHERE pool_type = ? ORDER BY score DESC LIMIT ?",
+                    """SELECT * FROM candidate WHERE pool_type = ?
+                       ORDER BY score DESC, updated_at DESC, symbol ASC LIMIT ?""",
                     (pool_type, limit),
                 ).fetchall()
             else:
                 rows = connection.execute(
-                    "SELECT * FROM candidate ORDER BY score DESC LIMIT ?", (limit,)
+                    """SELECT * FROM candidate
+                       ORDER BY pool_type ASC, score DESC, updated_at DESC, symbol ASC"""
                 ).fetchall()
         result: list[dict[str, Any]] = []
+        per_pool_counts: dict[str, int] = {}
         for row in rows:
+            row_pool_type = str(row["pool_type"])
+            if not scoped:
+                count = per_pool_counts.get(row_pool_type, 0)
+                if count >= limit:
+                    continue
+                per_pool_counts[row_pool_type] = count + 1
             payload = json.loads(row["payload"])
             payload.setdefault("pool_type", row["pool_type"])
             payload.setdefault("name", row["name"])
@@ -524,7 +557,7 @@ class SignalStore:
         """
         now = now_shanghai()
         expires_on = self._business_expiry(now.date(), ttl_business_days).isoformat()
-        ranked = sorted(candidates, key=lambda item: item.get("score", 0), reverse=True)[:capacity]
+        ranked = self._rank_candidates(candidates)[:capacity]
         confirmed = {str(item["symbol"]) for item in ranked}
         with self._connect() as connection:
             rows = connection.execute(
