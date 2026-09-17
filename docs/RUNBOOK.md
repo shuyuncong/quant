@@ -157,13 +157,6 @@ python quant-python/signal_system/backtest_winrate.py `
 5. 报告总体、bull/range/bear、信号类型、持仓周期、交易数、覆盖率和 P10/P50/P90。
 6. 未达到验收门槛前不修改生产 `config.yaml`；关闭研究开关即可回滚。
 
-完整需求、设计、测试和 UAT 用例见：
-
-- `docs/ai-dev-workflow/strategy-framework/requirements.md`
-- `docs/ai-dev-workflow/strategy-framework/overview-design.md`
-- `docs/ai-dev-workflow/strategy-framework/test-plan.md`
-- `docs/ai-dev-workflow/strategy-framework/uat-cases.md`
-
 ## 7. 常见问题
 
 如果日常扫描启动失败，先检查：

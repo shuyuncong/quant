@@ -153,7 +153,7 @@ python main.py test-notify
 5. 三笔共同重叠形成中枢，核心 `ZD/ZG` 在中枢扩展时保持不变。
 6. 一类点使用同向笔创新高/低且 MACD 柱面积衰减；二类点检查一类点后的回试；三类点检查离开中枢后的不回中枢回抽。
 
-完整定义见 [总体设计](../../docs/ai-dev-workflow/chan-signal-monitor/overview-design.md)。算法输出同时带 `structure_time` 和 `confirmed_at`，推送与去重以确认时间为准。
+算法输出同时带 `structure_time` 和 `confirmed_at`，推送与去重以确认时间为准。
 
 ## 测试
 
