@@ -187,4 +187,32 @@ describe("results page request isolation", () => {
     expect(host.textContent).toContain("该任务暂无 AI 解读");
     expect(host.textContent).not.toContain("A 的解读");
   });
+
+  it("starts a single job while the run request is still in flight", async () => {
+    const runRequest = deferred<Response>();
+    const startedJob = { ...jobs[0], id: 4, status: "running", result_path: null, note: null };
+    let jobPoll = 0;
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/jobs") {
+        jobPoll += 1;
+        return Promise.resolve(response({ jobs: jobPoll === 1 ? jobs : [startedJob, ...jobs] }));
+      }
+      if (url === "/api/run") return runRequest.promise;
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    });
+    await renderWith(fetchMock);
+
+    await act(async () => buttonIn(host, "个股分析").click());
+    // 请求还在飞：按钮立刻禁用并显示「启动中...」，不再留出可连点的窗口
+    expect(buttonIn(host, "启动中...").disabled).toBe(true);
+    await act(async () => {
+      buttonIn(host, "启动中...").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/run")).toHaveLength(1);
+
+    await act(async () => runRequest.resolve(response({ ok: true, jobId: 4 })));
+    // 新任务已经进入列表（running），禁用状态交回给任务状态，中间没有可点击空档
+    expect(buttonIn(host, "个股分析").disabled).toBe(true);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/run")).toHaveLength(1);
+  });
 });

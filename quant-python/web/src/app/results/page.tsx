@@ -35,7 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Check, Copy, Database, Download, Eye, Play, Sparkles } from "lucide-react";
+import { Check, Copy, Database, Download, Eye, Loader2, Play, Sparkles } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
   Tabs,
@@ -96,14 +96,18 @@ function fileName(resultPath: string | null): string {
   return resultPath.split(/[\\/]/).pop() ?? resultPath;
 }
 
-async function postJson(url: string, body: unknown) {
+async function postJson(url: string, body: unknown): Promise<Record<string, unknown>> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new Error(data.error || `请求失败: ${response.status}`);
+  const parsed: unknown = await response.json().catch(() => ({}));
+  // 边界：服务端 JSON 形状不由前端保证，先收窄成对象，字段用 typeof 读取。
+  const data =
+    parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  const error = typeof data.error === "string" ? data.error : "";
+  if (!response.ok) throw new Error(error || `请求失败: ${response.status}`);
   return data;
 }
 
@@ -325,7 +329,17 @@ export default function ResultsPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [reportRetry, setReportRetry] = useState(0);
+  const [startingKind, setStartingKind] = useState<string | null>(null);
   const dataRequest = useRef(0);
+  // 连点保护：从点击到新任务出现在最近任务列表之前，启动按钮保持禁用（只靠轮询状态会留出空档）。
+  const startGuard = useRef(false);
+  const pendingJobId = useRef<number | null>(null);
+
+  const releaseStart = useCallback(() => {
+    startGuard.current = false;
+    pendingJobId.current = null;
+    setStartingKind(null);
+  }, []);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -333,10 +347,14 @@ export default function ResultsPage() {
       if (!response.ok) return;
       const data = (await response.json()) as { jobs: JobRow[] };
       setJobs(data.jobs);
+      // 刚启动的任务一旦出现在列表里，「启动中」锁交回给任务自身的运行状态。
+      if (pendingJobId.current !== null && data.jobs.some((job) => job.id === pendingJobId.current)) {
+        releaseStart();
+      }
     } catch {
       /* ignore polling errors */
     }
-  }, []);
+  }, [releaseStart]);
 
   const openDataSource = useCallback(async (job: JobRow) => {
     const requestId = ++dataRequest.current;
@@ -371,15 +389,26 @@ export default function ResultsPage() {
 
   const runJob = useCallback(
     async (kind: string, extra: Record<string, unknown> = {}) => {
+      if (startGuard.current) return;
+      startGuard.current = true;
+      setStartingKind(kind);
       try {
-        const data = (await postJson("/api/run", { kind, notify, ...extra })) as { jobId?: number };
-        toast.success(`任务已启动 #${data.jobId ?? ""}`);
+        const data = await postJson("/api/run", { kind, notify, ...extra });
+        const jobId = typeof data.jobId === "number" ? data.jobId : null;
+        if (jobId === null) {
+          releaseStart();
+          toast.error("启动失败：服务端未返回任务号");
+          return;
+        }
+        toast.success(`任务已启动 #${jobId}`);
+        pendingJobId.current = jobId;
         void loadJobs();
       } catch (error) {
+        releaseStart();
         toast.error(error instanceof Error ? error.message : "启动失败");
       }
     },
-    [notify, loadJobs]
+    [notify, loadJobs, releaseStart]
   );
 
   const selectedJobView = selectedJob
@@ -390,15 +419,12 @@ export default function ResultsPage() {
     if (!selectedJobView) return;
     setInterpreting(true);
     try {
-      const data = (await postJson(`/api/jobs/${selectedJobView.id}/interpret`, {})) as {
-        content?: string;
-        model?: string;
-      };
+      const data = await postJson(`/api/jobs/${selectedJobView.id}/interpret`, {});
       toast.success("AI 解读已生成");
       const note: NoteRow = {
         id: Date.now(),
-        content: data.content ?? "",
-        model: data.model ?? "",
+        content: typeof data.content === "string" ? data.content : "",
+        model: typeof data.model === "string" ? data.model : "",
         created_at: new Date().toISOString(),
       };
       setSelectedJob((prev) => (prev?.id === selectedJobView.id ? { ...prev, note } : prev));
@@ -411,6 +437,7 @@ export default function ResultsPage() {
   }, [selectedJobView]);
 
   const running = jobs.some((job) => job.status === "running" || job.status === "pending");
+  const busy = running || startingKind !== null;
   const openAnalysis = (job: JobRow) => {
     setReportRetry(0);
     setSelectedJob(job);
@@ -453,9 +480,14 @@ export default function ResultsPage() {
                             : {}
                         )
                       }
-                      disabled={running}
+                      disabled={busy}
                     >
-                      <Play className="size-4" /> 个股分析
+                      {startingKind === "analyze" ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Play className="size-4" />
+                      )}{" "}
+                      {startingKind === "analyze" ? "启动中..." : "个股分析"}
                     </Button>
                   }
                 />
@@ -470,8 +502,8 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="secondary" onClick={() => runJob("scan")} disabled={running}>
-                      日线扫描
+                    <Button variant="secondary" onClick={() => runJob("scan")} disabled={busy}>
+                      {startingKind === "scan" ? "启动中..." : "日线扫描"}
                     </Button>
                   }
                 />
@@ -486,8 +518,8 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="secondary" onClick={() => runJob("monitor-once")} disabled={running}>
-                      监控一次
+                    <Button variant="secondary" onClick={() => runJob("monitor-once")} disabled={busy}>
+                      {startingKind === "monitor-once" ? "启动中..." : "监控一次"}
                     </Button>
                   }
                 />
@@ -502,8 +534,8 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="secondary" onClick={() => runJob("dispatch-outbox")} disabled={running}>
-                      补投队列
+                    <Button variant="secondary" onClick={() => runJob("dispatch-outbox")} disabled={busy}>
+                      {startingKind === "dispatch-outbox" ? "启动中..." : "补投队列"}
                     </Button>
                   }
                 />
@@ -518,8 +550,8 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="outline" onClick={() => runJob("test-notify")} disabled={running}>
-                      测试通知
+                    <Button variant="outline" onClick={() => runJob("test-notify")} disabled={busy}>
+                      {startingKind === "test-notify" ? "启动中..." : "测试通知"}
                     </Button>
                   }
                 />

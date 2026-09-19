@@ -12,6 +12,7 @@ import {
   listHoldings,
   listRecoverableJobs,
   updateJob,
+  updateJobPayload,
 } from "./db";
 import { nowIso } from "./time";
 import { interpretReportWithFallback, pickChatModel, extractStandpoints } from "./llm";
@@ -253,6 +254,20 @@ function mergeOverrides(
   return result;
 }
 
+/** 后台解析手动输入代码的名称并回写 payload；失败只影响列表展示，不影响任务执行。 */
+async function persistSymbolNames(jobId: number, payload: Record<string, unknown>): Promise<void> {
+  try {
+    const outcome = await runBridge("resolve-names", { symbols: payload.symbols }, { timeoutMs: 20_000 });
+    const data = outcome.data;
+    if (!outcome.ok || !data || typeof data !== "object" || !("names" in data)) return;
+    const names = data.names;
+    if (!names || typeof names !== "object") return;
+    await updateJobPayload(jobId, { ...payload, symbol_names: names });
+  } catch {
+    /* 名称解析失败时保留原始 payload，列表展示回退到代码本身 */
+  }
+}
+
 /** Create a job row and run the bridge command in the background. Returns the job id immediately. */
 export async function startJob(kind: JobKind, payload: Record<string, unknown>): Promise<number> {
   if (PORTFOLIO_KINDS.includes(kind)) {
@@ -260,27 +275,13 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
     payload.holdings = await listHoldings();
     payload.total_capital = await getTotalCapital();
   }
-  if (kind === "analyze" && Array.isArray(payload.symbols) && payload.symbols.length > 0) {
-    // 手动输入的代码往往不在股票池/持仓，最近任务列表会缺失名称；创建时用全市场列表解析一次。
-    // 解析失败不阻塞任务创建，列表展示回退到代码本身。
-    try {
-      const outcome = await runBridge(
-        "resolve-names",
-        { symbols: payload.symbols },
-        { timeoutMs: 20_000 }
-      );
-      if (outcome.ok && outcome.data && typeof outcome.data === "object") {
-        const result = outcome.data;
-        if ("names" in result && typeof result.names === "object" && result.names !== null) {
-          payload.symbol_names = result.names;
-        }
-      }
-    } catch {
-      /* 名称解析失败时继续创建任务 */
-    }
-  }
   const jobId = await createJob(kind, payload);
   await updateJob(jobId, { status: "running", started_at: nowIso() });
+  if (kind === "analyze" && Array.isArray(payload.symbols) && payload.symbols.length > 0) {
+    // 手动输入的代码往往不在股票池/持仓，最近任务列表会缺失名称；解析放在后台并回写 payload，
+    // 否则每次点击都要等一个 Python 子进程（约 2s 起）才拿到 202，用户会以为没反应而连点。
+    void persistSymbolNames(jobId, payload);
+  }
   await addOperationLog({
     job_id: jobId,
     level: "info",

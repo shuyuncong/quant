@@ -518,6 +518,15 @@ export async function updateJob(
   );
 }
 
+/** 覆盖任务 payload（用于任务启动后补写解析结果，如手动输入代码的名称映射）。 */
+export async function updateJobPayload(id: number, payload: unknown, db?: DbClient): Promise<void> {
+  const client = await resolveDb(db);
+  await client.query("UPDATE quant.jobs SET payload = $1 WHERE id = $2", [
+    JSON.stringify(payload),
+    id,
+  ]);
+}
+
 export async function getJob(id: number, db?: DbClient): Promise<JobRow | null> {
   const client = await resolveDb(db);
   const result = await client.query("SELECT * FROM quant.jobs WHERE id = $1", [id]);

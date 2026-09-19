@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getTotalCapital: vi.fn(),
   createJob: vi.fn(),
   updateJob: vi.fn(),
+  updateJobPayload: vi.fn(),
   addOperationLog: vi.fn(),
   buildOverrides: vi.fn(),
 }));
@@ -22,6 +23,7 @@ vi.mock("@/lib/db", () => ({
   listHoldings: mocks.listHoldings,
   listRecoverableJobs: vi.fn(),
   updateJob: mocks.updateJob,
+  updateJobPayload: mocks.updateJobPayload,
 }));
 vi.mock("@/lib/paths", () => ({
   signalSystemDir: "D:/signal",
@@ -41,11 +43,9 @@ describe("startJob name resolution for manually entered symbols", () => {
     vi.resetAllMocks();
     mocks.listHoldings.mockResolvedValue([]);
     mocks.getTotalCapital.mockResolvedValue(0);
-    mocks.createJob.mockImplementation(async (_kind: unknown, payload: unknown) => {
-      capturedPayload = payload as Record<string, unknown>;
-      return 42;
-    });
+    mocks.createJob.mockResolvedValue(42);
     mocks.updateJob.mockResolvedValue(undefined);
+    mocks.updateJobPayload.mockResolvedValue(undefined);
     mocks.addOperationLog.mockResolvedValue(undefined);
     mocks.buildOverrides.mockResolvedValue({});
     // 解析名称成功后,实际的 analyze 运行也走 runBridge;这里模拟任务本身成功
@@ -57,35 +57,60 @@ describe("startJob name resolution for manually entered symbols", () => {
     });
   });
 
-  let capturedPayload: Record<string, unknown> | null = null;
+  it("returns before name resolution and writes the names back afterwards", async () => {
+    const resolution = Promise.withResolvers<{ ok: boolean; data?: unknown; code: number }>();
+    const payloadWrite = Promise.withResolvers<[number, Record<string, unknown>]>();
+    mocks.runBridge.mockImplementation((command: string) =>
+      command === "resolve-names" ? resolution.promise : bridgeOk({})
+    );
+    mocks.updateJobPayload.mockImplementation(async (id: number, payload: Record<string, unknown>) => {
+      payloadWrite.resolve([id, payload]);
+    });
 
-  it("persists resolved names into the job payload", async () => {
     await startJob("analyze", { symbols: ["600036"] });
+    // 名称解析还在飞，任务行已经建好并进入 running，启动接口不必等 Python 子进程
+    expect(mocks.createJob).toHaveBeenCalledWith(
+      "analyze",
+      expect.objectContaining({ symbols: ["600036"] })
+    );
+    expect(mocks.updateJob).toHaveBeenCalledWith(42, expect.objectContaining({ status: "running" }));
+    expect(mocks.updateJobPayload).not.toHaveBeenCalled();
+
+    resolution.resolve({ ok: true, data: { names: { "600036.SH": "招商银行" } }, code: 0 });
+    const [jobId, payload] = await payloadWrite.promise;
+    expect(jobId).toBe(42);
+    expect(payload).toMatchObject({ symbols: ["600036"], symbol_names: { "600036.SH": "招商银行" } });
     expect(mocks.runBridge).toHaveBeenCalledWith(
       "resolve-names",
       { symbols: ["600036"] },
       { timeoutMs: 20_000 }
     );
-    expect(capturedPayload?.symbol_names).toEqual({ "600036.SH": "招商银行" });
     // 运行任务仍使用原始载荷的数据,不把解析结果塞给引擎
     const runCall = mocks.runBridge.mock.calls.find(([command]) => command === "analyze");
     expect(runCall?.[1]).toMatchObject({ symbols: ["600036"] });
   });
 
   it("skips resolution when symbols are absent (pool-driven analyze)", async () => {
-    await startJob("analyze", {});
+    await expect(startJob("analyze", {})).resolves.toBe(42);
     expect(mocks.runBridge).not.toHaveBeenCalledWith(
-      expect.stringContaining("resolve-names"),
+      "resolve-names",
       expect.anything(),
       expect.anything()
     );
-    expect(capturedPayload?.symbol_names).toBeUndefined();
+    expect(mocks.updateJobPayload).not.toHaveBeenCalled();
   });
 
   it("keeps the job running when name resolution fails", async () => {
-    mocks.runBridge.mockRejectedValueOnce(new Error("bridge down"));
-    await startJob("analyze", { symbols: ["600036"] });
-    expect(capturedPayload?.symbol_names).toBeUndefined();
-    expect(mocks.createJob).toHaveBeenCalled();
+    mocks.runBridge.mockImplementation((command: string) =>
+      command === "resolve-names" ? Promise.reject(new Error("bridge down")) : bridgeOk({})
+    );
+
+    await expect(startJob("analyze", { symbols: ["600036"] })).resolves.toBe(42);
+    expect(mocks.updateJobPayload).not.toHaveBeenCalled();
+    expect(mocks.runBridge).toHaveBeenCalledWith(
+      "analyze",
+      expect.objectContaining({ symbols: ["600036"] }),
+      expect.anything()
+    );
   });
 });
