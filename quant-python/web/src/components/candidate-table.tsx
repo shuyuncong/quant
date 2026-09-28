@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type CandidateVariant = "macd" | "yearline";
+export type CandidateVariant = "macd" | "macd-observed" | "yearline";
 
 export interface MacdCandidateRow {
   symbol: string;
@@ -31,6 +31,9 @@ export interface MacdCandidateRow {
   golden_cross_zone_label?: string;
   confirmation_items?: string[];
   chan_signals?: unknown[];
+  execution_mode?: string;
+  regime?: string | null;
+  observe_reason?: string;
 }
 
 export interface YearlineCandidateRow {
@@ -74,8 +77,9 @@ export function CandidateTable({
   rows,
   emptyText = "暂无候选",
 }: CandidateTableProps) {
-  if (variant === "macd") {
+  if (variant === "macd" || variant === "macd-observed") {
     const macdRows = rows as MacdCandidateRow[];
+    const observed = variant === "macd-observed";
     return (
       <Table>
         <TableHeader>
@@ -83,8 +87,8 @@ export function CandidateTable({
             <TableHead>代码</TableHead>
             <TableHead>名称</TableHead>
             <TableHead>位置</TableHead>
-            <TableHead>策略分</TableHead>
-            <TableHead>确认条件</TableHead>
+            {observed ? <TableHead>状态</TableHead> : <TableHead>策略分</TableHead>}
+            {!observed && <TableHead>确认条件</TableHead>}
             <TableHead>确认时间</TableHead>
             <TableHead>零轴距离</TableHead>
           </TableRow>
@@ -107,12 +111,22 @@ export function CandidateTable({
                   {item.golden_cross_zone_label || "未识别"}
                 </Badge>
               </TableCell>
-              <TableCell>{item.strategy_score ?? item.score}</TableCell>
-              <TableCell className="max-w-64 text-xs">
-                {item.confirmation_items?.length
-                  ? item.confirmation_items.join("、")
-                  : "暂无额外确认"}
-              </TableCell>
+              {observed ? (
+                <TableCell>
+                  <Badge variant="outline">
+                    观察{item.regime ? ` · ${item.regime}` : ""}
+                  </Badge>
+                </TableCell>
+              ) : (
+                <TableCell>{item.strategy_score ?? item.score}</TableCell>
+              )}
+              {!observed && (
+                <TableCell className="max-w-64 text-xs">
+                  {item.confirmation_items?.length
+                    ? item.confirmation_items.join("、")
+                    : "暂无额外确认"}
+                </TableCell>
+              )}
               <TableCell className="text-xs text-muted-foreground">
                 {item.confirmed_at || "-"}
               </TableCell>
@@ -123,7 +137,7 @@ export function CandidateTable({
           ))}
           {macdRows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
+              <TableCell colSpan={observed ? 6 : 7} className="text-center text-muted-foreground">
                 {emptyText}
               </TableCell>
             </TableRow>

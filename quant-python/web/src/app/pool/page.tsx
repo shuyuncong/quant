@@ -106,6 +106,15 @@ interface PoolData {
   expiredCount: number;
 }
 
+interface ObservedData {
+  candidates: MacdCandidateRow[];
+  observedCount: number;
+  scannedAt?: string | null;
+  universeMode?: string | null;
+  completedRound?: boolean;
+  reportFile?: string | null;
+}
+
 const POOL_LABEL: Record<PoolType, string> = {
   macd_zero_axis: "日线零轴金叉",
   yearline_pullback: "年线趋势",
@@ -120,6 +129,10 @@ export default function PoolPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [poolType, setPoolType] = useState<PoolType>("macd_zero_axis");
   const [poolData, setPoolData] = useState<Partial<Record<PoolType, PoolData>>>({});
+  const [observedData, setObservedData] = useState<ObservedData>({
+    candidates: [],
+    observedCount: 0,
+  });
   const [expiredOpen, setExpiredOpen] = useState(false);
   const [scanning, setScanning] = useState<string | null>(null);
 
@@ -146,6 +159,27 @@ export default function PoolPage() {
     }
   }, []);
 
+  const loadObserved = useCallback(async () => {
+    const response = await fetch("/api/candidates/observed").catch(() => null);
+    if (!response?.ok) return;
+    const data = (await response.json()) as {
+      candidates?: MacdCandidateRow[];
+      observed_count?: number;
+      scanned_at?: string | null;
+      universe_mode?: string | null;
+      completed_round?: boolean;
+      report_file?: string | null;
+    };
+    setObservedData({
+      candidates: data.candidates ?? [],
+      observedCount: data.observed_count ?? 0,
+      scannedAt: data.scanned_at,
+      universeMode: data.universe_mode,
+      completedRound: data.completed_round,
+      reportFile: data.report_file,
+    });
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const [poolResponse, pendingResponse] = await Promise.all([
@@ -159,11 +193,12 @@ export default function PoolPage() {
       await Promise.all([
         loadPool("macd_zero_axis"),
         loadPool("yearline_pullback"),
+        loadObserved(),
       ]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载股票池失败");
     }
-  }, [loadPool]);
+  }, [loadObserved, loadPool]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -521,6 +556,28 @@ export default function PoolPage() {
                 rows={poolData.macd_zero_axis?.candidates ?? []}
                 emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
               />
+              <div className="mt-6 rounded-lg border border-amber-200/70 bg-amber-50/60 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">观察候选（0 轴上方 / 0 轴附近）</h3>
+                      <Badge variant="outline">仅展示</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      共 {observedData.observedCount} 只；不进入正式候选池、盘中监控或下单链路。
+                      {observedData.scannedAt ? ` 最近扫描：${observedData.scannedAt}` : " 暂无扫描报告"}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => void loadObserved()}>
+                    <RefreshCw className="size-3.5" /> 刷新观察候选
+                  </Button>
+                </div>
+                <CandidateTable
+                  variant="macd-observed"
+                  rows={observedData.candidates}
+                  emptyText="暂无 0 轴上方或附近的观察候选"
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="yearline_pullback">

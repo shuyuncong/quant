@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import glob
 import json
 import os
 import re
@@ -377,6 +378,81 @@ def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
     )
 
 
+def _cmd_observed_candidates(config_path: str, payload: dict[str, Any]) -> int:
+    """Return latest above/near-zero observation-only rows for display."""
+    monitor = _make_monitor(config_path, payload.get("overrides"))
+    reports: list[tuple[dict[str, Any], str]] = []
+    for report_path in glob.glob(os.path.join(str(monitor.output_dir), "scan_*.json")):
+        if os.path.basename(report_path).startswith("scan_yearline_"):
+            continue
+        try:
+            with open(report_path, "r", encoding="utf-8") as handle:
+                report = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(report, dict) and isinstance(report.get("observed_candidates"), list):
+            reports.append((report, report_path))
+
+    def report_time(item: tuple[dict[str, Any], str]) -> tuple[str, float]:
+        report, report_path = item
+        try:
+            mtime = os.path.getmtime(report_path)
+        except OSError:
+            mtime = 0.0
+        return (str(report.get("scanned_at") or ""), mtime)
+
+    # A completed all-market round is the daily pool snapshot users expect. A
+    # partial all-market round is the fallback when no completed snapshot exists;
+    # watchlist reports are only the final fallback.
+    completed_all_a = [
+        item
+        for item in reports
+        if item[0].get("universe_mode") == "all_a" and item[0].get("completed_round") is True
+    ]
+    all_a = [item for item in reports if item[0].get("universe_mode") == "all_a"]
+    selected = max(completed_all_a or all_a or reports, key=report_time, default=None)
+    if selected is not None:
+        report, report_path = selected
+        observed = [
+            item
+            for item in report["observed_candidates"]
+            if isinstance(item, dict)
+            and str(item.get("golden_cross_zone") or "") in {"above", "near"}
+        ]
+        observed.sort(
+            key=lambda item: (
+                0 if item.get("golden_cross_zone") == "above" else 1,
+                str(item.get("symbol") or ""),
+            )
+        )
+        return _emit(
+            {
+                "pool_type": "macd_observed",
+                "candidates": observed,
+                "observed_count": len(observed),
+                "scanned_at": report.get("scanned_at"),
+                "universe_mode": report.get("universe_mode"),
+                "completed_round": report.get("completed_round", False),
+                "report_file": os.path.basename(report_path),
+                "execution_mode": "observe_only",
+                "research_only": True,
+            }
+        )
+    return _emit(
+        {
+            "pool_type": "macd_observed",
+            "candidates": [],
+            "observed_count": 0,
+            "scanned_at": None,
+            "universe_mode": None,
+            "completed_round": False,
+            "report_file": None,
+            "execution_mode": "observe_only",
+            "research_only": True,
+        }
+    )
+
+
 def _cmd_calendar(config_path: str, payload: dict[str, Any]) -> int:
     try:
         monitor = _make_monitor(config_path, payload.get("overrides"))
@@ -407,6 +483,7 @@ COMMANDS = {
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
+    "observed-candidates": lambda p, o: _cmd_observed_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),
 }
 

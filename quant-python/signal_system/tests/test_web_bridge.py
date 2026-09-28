@@ -159,6 +159,58 @@ class ResolveNamesTests(unittest.TestCase):
         self.assertEqual(json.loads(buffer.getvalue()), {"ok": True, "data": {"names": {}}})
 
 
+class ObservedCandidatesTests(unittest.TestCase):
+    def test_prefers_completed_all_market_report_and_excludes_below_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = {
+                "scan_watchlist.json": {
+                    "scanned_at": "2026-09-28T18:00:00+08:00",
+                    "universe_mode": "watchlist",
+                    "completed_round": True,
+                    "observed_candidates": [
+                        {"symbol": "000001", "golden_cross_zone": "above"}
+                    ],
+                },
+                "scan_all_a_partial.json": {
+                    "scanned_at": "2026-09-28T17:00:00+08:00",
+                    "universe_mode": "all_a",
+                    "completed_round": False,
+                    "observed_candidates": [
+                        {"symbol": "000002", "golden_cross_zone": "near"},
+                        {"symbol": "000003", "golden_cross_zone": "below"},
+                    ],
+                },
+                "scan_all_a_complete.json": {
+                    "scanned_at": "2026-09-28T16:00:00+08:00",
+                    "universe_mode": "all_a",
+                    "completed_round": True,
+                    "observed_candidates": [
+                        {"symbol": "000004", "golden_cross_zone": "near"},
+                        {"symbol": "000005", "golden_cross_zone": "below"},
+                        {"symbol": "000006", "golden_cross_zone": "above"},
+                    ],
+                },
+            }
+            for name, report in reports.items():
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+
+            monitor = mock.MagicMock()
+            monitor.output_dir = tmp
+            buffer = io.StringIO()
+            with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+                with contextlib.redirect_stdout(buffer):
+                    result = web_bridge._cmd_observed_candidates(
+                        web_bridge._default_config_path(), {}
+                    )
+
+            self.assertEqual(result, 0)
+            data = json.loads(buffer.getvalue())["data"]
+            self.assertEqual(data["report_file"], "scan_all_a_complete.json")
+            self.assertEqual([item["symbol"] for item in data["candidates"]], ["000006", "000004"])
+            self.assertEqual(data["observed_count"], 2)
+
+
 class SummaryNotificationTests(unittest.TestCase):
     def test_notify_summary_requires_content(self):
         result = web_bridge._cmd_notify_summary(web_bridge._default_config_path(), {})
