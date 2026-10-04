@@ -11,6 +11,11 @@ from typing import Any, Iterable
 import uuid
 
 from models import SignalEvent
+from trading.positions import (
+    POSITION_TABLE_DDL,
+    TRADE_GATE_REJECTION_DDL,
+    TRADE_LEDGER_TABLE_DDL,
+)
 from utils.time_utils import now_shanghai
 
 
@@ -98,6 +103,12 @@ class SignalStore:
                     state_value TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                {POSITION_TABLE_DDL}
+
+                {TRADE_LEDGER_TABLE_DDL}
+
+                {TRADE_GATE_REJECTION_DDL}
                 """
             )
             columns = {

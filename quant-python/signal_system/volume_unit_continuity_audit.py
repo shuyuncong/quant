@@ -42,6 +42,8 @@ SPLITS = ("train", "val", "test")
 CANONICAL_INPUT_DIR = Path(r"D:\tmp\candidates_fullpool_canonical")
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
 MARKET_DATA_PATH = BASE_DIR / "data" / "market_data.py"
+# 2026-10-04 重新登记：config.yaml 新增 trading_limits (持仓台账/交易闸门)；
+# 该段只在信号侧做校验与记账，不下单、不改成交量与因子口径，旧值 debfffd0…
 # 2026-10-04 重新登记：config.yaml 新增 backtest.exit_rules (v1b 卖出规则)；
 # 成交量/因子口径未变，且该规则经 apply_to_signal_types 限定只作用于
 # 零轴+底背离研究池，不改写既有策略回测口径，旧值 9350923241…
@@ -49,7 +51,7 @@ MARKET_DATA_PATH = BASE_DIR / "data" / "market_data.py"
 # 成交量/因子/回测口径未变，旧值 9aec5db0…
 # 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 EXPECTED_CONFIG_SHA256 = (
-    "debfffd0aae15f7834f219dca8a2e83b44466d4ca1b0bf46c79769a892f5765f"
+    "39771129042fb826389b49c111ed81340867a1e9aced522ac7e5cf516d7e400f"
 )
 # 2026-09-17 重新登记：新增主源故障降级链（腾讯→东财→新浪），新浪成交量(股)折算为手；旧值 07cc9e23…
 EXPECTED_MARKET_DATA_SHA256 = (

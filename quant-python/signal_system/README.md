@@ -194,6 +194,56 @@ v1b 的收益来源发生了结构性变化（`div_exit_engine.json`）：
 完整的 12 方案对照（含 MA20 放宽、移动止盈梯度、规则堆叠反例）与结论见
 [`docs/exit-rules-study.md`](docs/exit-rules-study.md)。
 
+### 持仓台账与交易闸门
+
+**本系统不下单**：它只扫描、通知，持仓由使用者按券商实际成交录入。为让
+`position.max_stocks`、`position.max_position_per_stock`、`risk.max_single_day_drawdown_pct`
+真正生效，并限制每日交易次数，信号侧加了闸门（`trading/positions.py`）。
+
+```yaml
+trading_limits:
+  enabled: true
+  account_equity: 100000          # 券商实际权益; 留空则依赖权益的规则自动跳过
+  max_new_positions_per_day: 2    # 每日最多开新仓数
+  max_trades_per_day: 5           # 每日最多成交笔数 (买+卖)
+  max_trades_per_symbol_per_day_per_side: 1   # 每只股票每日每方向最多一次
+  max_new_position_pct: 0.25      # 单笔开仓占权益上限
+  enforce_max_stocks: true
+  enforce_single_position_cap: true
+  enforce_single_day_drawdown: true
+```
+
+闸门规则（任一不满足即拦截信号）：
+
+| 规则 | 依据 | 说明 |
+|---|---|---|
+| `per_symbol_per_day` | `max_trades_per_symbol_per_day_per_side` | 同股同日同向最多一次；**买卖各自计数** |
+| `max_trades_per_day` | `max_trades_per_day` | 当日买+卖总笔数 |
+| `max_new_positions_per_day` | `max_new_positions_per_day` | 只算开新仓；对已持仓加仓不算新仓 |
+| `max_stocks` | `position.max_stocks` | 当前持仓只数 |
+| `max_position_per_stock` | `position.max_position_per_stock` | 加仓后市值占权益比例 |
+| `single_day_drawdown` | `risk.max_single_day_drawdown_pct` | 当日首次调用建立基准，之后逐次比较 |
+
+要点：
+
+- **被拦下的信号不会静默消失**：写入 `trade_gate_rejection` 表，并在 analysis 报告的
+  `trade_gate_rejections` / `trade_gate_rejection_count` 里可见。
+- **卖出不受回撤/仓位规则限制**：下跌日恰恰是最需要卖出的日子，卖出只受"同日同股同向一次"约束。
+- **权益未知时不误判**：`account_equity` 留空则跳过所有依赖权益的规则，只保留笔数与持仓只数规则。
+
+台账维护（`web_bridge.py positions`）：
+
+```powershell
+# 查看持仓、当日成交与拦截记录
+echo '{"action":"list"}' | python web_bridge.py positions
+# 回填一笔成交（自动更新持仓数量与成本）
+echo '{"action":"trade","symbol":"600036.SH","side":"buy","quantity":1000,"price":35.2}' | python web_bridge.py positions
+# 直接维护持仓
+echo '{"action":"upsert","symbol":"600036.SH","quantity":1000,"avg_cost":35.2,"name":"招商银行"}' | python web_bridge.py positions
+# 试探某笔拟成交是否放行
+echo '{"action":"check","symbol":"000001.SZ","side":"buy","quantity":2000,"price":11.0}' | python web_bridge.py positions
+```
+
 ### 常驻监控
 
 ```powershell

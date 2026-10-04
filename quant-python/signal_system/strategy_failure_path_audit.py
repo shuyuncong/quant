@@ -67,6 +67,8 @@ FORMAL_OUTPUT_DIR = Path(r"D:\tmp\strategy_failure_path_audit_final")
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
 INDEX_PATH = BASE_DIR / "cache" / "index_000001_sh.pkl"
 
+# 2026-10-04 重新登记：config.yaml 新增 trading_limits (持仓台账/交易闸门)；
+# 该段只在信号侧做校验与记账，不下单、不改成交量与因子口径，旧值 debfffd0…
 # 2026-10-04 重新登记：config.yaml 新增 backtest.exit_rules (v1b 卖出规则)；
 # 成交量/因子口径未变，且该规则经 apply_to_signal_types 限定只作用于
 # 零轴+底背离研究池，不改写既有策略回测口径，旧值 9350923241…
@@ -74,7 +76,7 @@ INDEX_PATH = BASE_DIR / "cache" / "index_000001_sh.pkl"
 # 成交量/因子/回测口径未变，旧值 9aec5db0…
 # 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "debfffd0aae15f7834f219dca8a2e83b44466d4ca1b0bf46c79769a892f5765f"
+    "39771129042fb826389b49c111ed81340867a1e9aced522ac7e5cf516d7e400f"
 )
 PREREGISTERED_INDEX_SHA256 = (
     "e59364d0cfe2d848daec0d18d749f9b3fa20fe04ef520b8655ee3793020c6cc8"

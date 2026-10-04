@@ -18,6 +18,7 @@ from data.market_data import MarketDataClient, normalize_symbol
 from models import SignalEvent
 from notification.signal_notifier import SignalNotifier
 from storage.signal_store import SignalStore
+from trading.positions import TradeGate, resolve_trading_limits
 from strategy.multi_timeframe import DEFAULT_ORDER, MultiTimeframeAnalyzer
 from strategy.macd import calculate_macd
 from strategy.yearline import (
@@ -144,6 +145,16 @@ class SignalMonitor:
         self.push_candidate_pool = bool(notification.get("push_candidate_pool", True))
         self.push_ai_analysis = bool(notification.get("push_ai_analysis", True))
         self._name_map: dict[str, str] | None = None
+        # 持仓台账 + 交易闸门: 把 max_stocks / 单只上限 / 单日回撤 / 每日交易次数
+        # 落到信号侧。account_equity 由调用方传入 (券商实际权益), 未配置时
+        # 依赖权益的规则自动跳过, 只留不依赖权益的笔数/持仓只数规则。
+        self.trade_gate = TradeGate(self.store, config)
+        self.trading_limits = resolve_trading_limits(config)
+        equity = (config.get("trading_limits") or {}).get("account_equity")
+        try:
+            self.account_equity = float(equity) if equity else None
+        except (TypeError, ValueError):
+            self.account_equity = None
 
     def _evaluate_live_fundamental(
         self,
@@ -417,6 +428,7 @@ class SignalMonitor:
         results: list[dict[str, Any]] = []
         new_event_count = 0
         stale_event_count = 0
+        gate_rejections: list[dict[str, Any]] = []
         market_context = self._market_entry_context()
         market_regime = market_context.get("regime")
         if market_regime not in {"bull", "range", "bear"}:
@@ -447,6 +459,19 @@ class SignalMonitor:
                         resolve_min_confirmations(self.config),
                     )
                 if notify and self.push_trade_signal:
+                    if self.trading_limits.get("enabled", True) and event_objects:
+                        event_objects, gate_blocked = self.trade_gate.filter_events(
+                            event_objects, account_equity=self.account_equity
+                        )
+                        for item in gate_blocked:
+                            logger.info(
+                                "交易闸门拦下 %s %s: %s (%s)",
+                                item["symbol"],
+                                item["side"],
+                                item["rule"],
+                                item["detail"],
+                            )
+                        gate_rejections.extend(gate_blocked)
                     for event in event_objects:
                         if not self._event_is_current(event):
                             stale_event_count += 1
@@ -466,6 +491,8 @@ class SignalMonitor:
             "symbols": len(symbols),
             "new_events": new_event_count,
             "stale_events_skipped": stale_event_count,
+            "trade_gate_rejections": gate_rejections,
+            "trade_gate_rejection_count": len(gate_rejections),
             "delivery": delivery,
             "market_context": market_context,
             "results": results,

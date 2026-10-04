@@ -220,6 +220,21 @@ t_trading:
   negative_t_step_pct: 0.05
   range_t_step_pct: 0.05
 
+# 交易闸门: 把 position.max_stocks / position.max_position_per_stock /
+# risk.max_single_day_drawdown_pct 真正落到信号侧, 并限制每日交易次数。
+# 本系统不下单: 持仓由 trading/positions.py 的台账人工录入, 闸门只做校验与记账,
+# 被拦下的信号会写入 trade_gate_rejection 并出现在 analysis 报告里。
+trading_limits:
+  enabled: true
+  account_equity: 100000          # 券商实际权益; 留空则依赖权益的规则自动跳过
+  max_new_positions_per_day: 2    # 每日最多开新仓数
+  max_trades_per_day: 5           # 每日最多成交笔数 (买+卖)
+  max_trades_per_symbol_per_day_per_side: 1   # 每只股票每日每方向最多一次
+  max_new_position_pct: 0.25      # 单笔开仓占权益上限
+  enforce_max_stocks: true        # 生效 position.max_stocks
+  enforce_single_position_cap: true           # 生效 position.max_position_per_stock
+  enforce_single_day_drawdown: true           # 生效 risk.max_single_day_drawdown_pct
+
 backtest:
   initial_cash: 100000
   # Historical fundamentals are opt-in and require announcement-dated data.

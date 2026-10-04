@@ -33,7 +33,7 @@ INPUT_VERSION = "long_history_yearline_trend_experiment.v1"
 PRIMARY_CONFIG_GIT_REVISION = "e2787288051ab1ec6bcdfba40c04fa7e59295863"
 CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
 PRIMARY_CONFIG_SHA256 = "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
-VERIFY_CONFIG_SHA256 = "debfffd0aae15f7834f219dca8a2e83b44466d4ca1b0bf46c79769a892f5765f"
+VERIFY_CONFIG_SHA256 = "39771129042fb826389b49c111ed81340867a1e9aced522ac7e5cf516d7e400f"
 FROZEN_EXPERIMENT_SHA256 = "033818294f9504fba61c6223a671fa99224fa89827990b74d43c26d3f4375b67"
 FROZEN_BACKTEST_ENGINE_SHA256 = "562278a0a551e7ed3ef77cb21e49a6e85369cc9dd8df8843d83872d5c3969e2b"
 ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
@@ -47,6 +47,10 @@ ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
     # apply_to_signal_types=["macd_divergence_bottom"] 限定作用范围，
     # yearline_pullback 信号仍走 fixed 止盈 + 持仓超时，口径未变。
     "backtest.exit_rules": ("<MISSING>", "<PRESENT>"),
+    # 2026-10-04: 新增 trading_limits (持仓台账/交易闸门)。只在信号侧校验与记账,
+    # 不参与 yearline_pullback 的回测执行口径。
+    "trading_limits": ("<MISSING>", "<PRESENT>"),
+    "trading_limits.account_equity": ("<MISSING>", "<PRESENT>"),
 }
 ROUTE = "yearline_pullback"
 PROFILES = ("fixed_sl8", "dynamic_sl5_sl8")

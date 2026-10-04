@@ -41,6 +41,7 @@ if QUANT_ROOT not in sys.path:
 from models import RISK_NOTICE, SignalEvent  # noqa: E402
 from monitor.service import SignalMonitor  # noqa: E402
 from data.symbols import normalize_ts_code  # noqa: E402
+from data.market_data import normalize_symbol  # noqa: E402
 from strategy.macd_divergence import resolve_divergence_config  # noqa: E402
 from utils.helpers import load_config  # noqa: E402
 from utils.time_utils import now_shanghai  # noqa: E402
@@ -388,6 +389,82 @@ def _latest_divergence_scan(monitor: SignalMonitor) -> dict[str, Any]:
     }
 
 
+def _cmd_positions(config_path: str, payload: dict[str, Any]) -> int:
+    """持仓台账: action=list/upsert/remove/trade/check/status。"""
+    config = load_config(config_path)
+    if config is None:
+        return _emit_error(f"配置文件加载失败: {config_path}", 1)
+    monitor = _make_monitor(config_path, config)
+    gate = monitor.trade_gate
+    action = str(payload.get("action") or "list").strip().lower()
+    if action == "list":
+        return _emit(
+            {
+                "positions": gate.list_positions(),
+                "trades_today": gate.trades_today(),
+                "rejections_today": gate.rejections_today(),
+                "limits": gate.limits,
+                "account_equity": monitor.account_equity,
+            }
+        )
+    if action == "upsert":
+        symbol = normalize_symbol(str(payload.get("symbol") or ""))
+        if not symbol:
+            return _emit_error("upsert 需要 symbol", 2)
+        try:
+            result = gate.upsert_position(
+                symbol,
+                int(payload.get("quantity") or 0),
+                float(payload.get("avg_cost") or 0.0),
+                name=str(payload.get("name") or ""),
+                opened_on=payload.get("opened_on"),
+            )
+        except ValueError as exc:
+            return _emit_error(str(exc), 2)
+        return _emit(result)
+    if action == "remove":
+        symbol = normalize_symbol(str(payload.get("symbol") or ""))
+        if not symbol:
+            return _emit_error("remove 需要 symbol", 2)
+        return _emit(gate.remove_position(symbol))
+    if action == "trade":
+        symbol = normalize_symbol(str(payload.get("symbol") or ""))
+        if not symbol:
+            return _emit_error("trade 需要 symbol", 2)
+        try:
+            result = gate.record_trade(
+                symbol,
+                str(payload.get("side") or ""),
+                int(payload.get("quantity") or 0),
+                float(payload.get("price") or 0.0),
+                source=str(payload.get("source") or "manual"),
+                note=str(payload.get("note") or ""),
+                trade_day=payload.get("trade_day"),
+            )
+        except ValueError as exc:
+            return _emit_error(str(exc), 2)
+        return _emit(result)
+    if action == "check":
+        symbol = normalize_symbol(str(payload.get("symbol") or ""))
+        if not symbol:
+            return _emit_error("check 需要 symbol", 2)
+        try:
+            quantity = int(payload.get("quantity") or 0)
+            price = float(payload.get("price") or 0.0)
+        except (TypeError, ValueError):
+            return _emit_error("quantity / price 必须是数字", 2)
+        return _emit(
+            gate.check(
+                symbol,
+                str(payload.get("side") or "buy"),
+                account_equity=monitor.account_equity,
+                quantity=quantity,
+                price=price,
+            )
+        )
+    return _emit_error(f"不支持的 positions action: {action}", 2)
+
+
 def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
     """返回指标股票池（候选股，含 TTL 与容量）及失效/过期池。
 
@@ -534,6 +611,7 @@ COMMANDS = {
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
+    "positions": lambda p, o: _cmd_positions(p, o),
     "observed-candidates": lambda p, o: _cmd_observed_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),
 }
