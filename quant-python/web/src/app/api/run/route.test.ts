@@ -73,6 +73,27 @@ describe("POST /api/run", () => {
     });
   });
 
+  it("accepts scan_kind=macd_divergence for the new research pool", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "scan",
+          scan_kind: "macd_divergence",
+          universe_mode: "watchlist",
+          notify: false,
+        }),
+      })
+    );
+    expect(response.status).toBe(202);
+    expect(startJobMock).toHaveBeenCalledWith("scan", {
+      scan_kind: "macd_divergence",
+      notify: false,
+      overrides: { scan: { universe_mode: "watchlist" } },
+    });
+  });
+
   it("defaults scan_kind to macd_zero_axis for old scan requests", async () => {
     const response = await POST(
       new Request("http://localhost/api/run", {

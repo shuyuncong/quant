@@ -133,6 +133,21 @@ signal_strategy:
       120m: 6
       1d: 8
 
+# MACD 底背离 + 零轴金叉 + 放量 + 年线以上 —— 独立研究展示池。
+# 与 production MACD 池/年线池完全解耦: 不进监控、不投票、不下单、不推送。
+macd_divergence:
+  enabled: true
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+  zero_axis_tolerance: 0.005     # 0轴"附近"阈值(按收盘价归一化); 金叉不得位于0轴下方
+  volume_window: 20              # 前N日均量窗口(不含当日)
+  min_volume_ratio: 1.5          # 放量下限: 当日量/前20日均量; 不设上限
+  long_ma_period: 250            # 年线
+  long_ma_slope_window: 20       # 年线上行判定窗口
+  min_macd_segment_bars: 2       # 底背离比较区间的最小柱数, 过滤噪声段
+
 selector:
   # selector only keeps structure-specific tuning.
   # fundamental and turnover thresholds inherit from strategy.fundamental / strategy.volume.

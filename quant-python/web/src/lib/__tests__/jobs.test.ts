@@ -31,4 +31,18 @@ describe("shouldAutoInterpret", () => {
       shouldAutoInterpret("daily-scan", { pool_type: "yearline_pullback", completed_round: true, candidate_count: 3 })
     ).toBe(false);
   });
+
+  it("never auto-interprets the macd_divergence research scan", () => {
+    expect(
+      shouldAutoInterpret("scan", { pool_type: "macd_divergence", candidate_count: 3 })
+    ).toBe(false);
+    expect(
+      shouldAutoInterpret("daily-scan", {
+        pool_type: "macd_divergence",
+        completed_round: true,
+        candidate_count: 3,
+      })
+    ).toBe(false);
+    expect(shouldAutoInterpret("scan", { pool_type: "macd_zero_axis" })).toBe(true);
+  });
 });

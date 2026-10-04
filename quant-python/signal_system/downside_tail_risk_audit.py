@@ -53,8 +53,11 @@ PREREGISTERED_BOOTSTRAP_REPS = 2000
 CANONICAL_INPUT_DIR = Path(r"D:\tmp\candidates_fullpool_canonical")
 FORMAL_OUTPUT_DIR = Path(r"D:\tmp\downside_tail60_risk_candidate_final")
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
+# 2026-10-04 重新登记：config.yaml 新增 macd_divergence 研究池配置段；
+# 成交量/因子/回测口径未变，旧值 9aec5db0…
+# 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
+    "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
 )
 PREREGISTERED_CANONICAL_SHA256 = {
     "train": "28a2defd6f7f09904295cb270cc311bf989add84b4cd0c8dc947d4e59a4fb40f",
@@ -79,9 +82,10 @@ DEPENDENCY_PATHS = {
     "strategy_market_gate": BASE_DIR / "strategy" / "market_gate.py",
     "utils_helpers": BASE_DIR / "utils" / "helpers.py",
 }
+# 2026-09-17 重新登记 backtest_winrate（日线获取统一走降级链，分派等价）旧值 586e21d8…
 DEPENDENCY_EXPECTED_SHA256 = {
     "attribution_audit": "fdb13ef7d20bdf024a14f6dffe17d47c14ec73ddcfd72044bca527eb34154f4d",
-    "backtest_winrate": "586e21d8050a4397f2664b41676c2c5c140754f161c1937e27a2fd7e875800d1",
+    "backtest_winrate": "eaada196c504cb9b0fd8cccb392c838a88780607672f1291544090e42e9d4fd3",
     "candidate_integrity": "fb7e197a7bb11963b5f6b2042965f946b48bef4ab89789ca1d7c5ad4cfb4e53f",
     "macd_divergence_audit": "ae17dd4906b52fc07058156ab229c3fe264dbde83183c482e5a6fb6ac919ca1e",
     "strategy_chan": "af70eab3207c168254f70e8674fd1ce6293e0b7937a8a2fb8a842640b306d058",

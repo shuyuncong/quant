@@ -39,6 +39,18 @@ describe("GET /api/candidates", () => {
     );
   });
 
+  it("passes pool_type=macd_divergence through to the bridge", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/candidates?pool_type=macd_divergence")
+    );
+    expect(response.status).toBe(200);
+    expect(runBridgeMock).toHaveBeenCalledWith(
+      "candidates",
+      { pool_type: "macd_divergence" },
+      expect.anything()
+    );
+  });
+
   it("passes pool_type=all through to the bridge", async () => {
     const response = await GET(
       new Request("http://localhost/api/candidates?pool_type=all")

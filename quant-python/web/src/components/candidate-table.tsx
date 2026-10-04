@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type CandidateVariant = "macd" | "macd-observed" | "yearline";
+export type CandidateVariant = "macd" | "macd-observed" | "yearline" | "macd-divergence";
 
 export interface MacdCandidateRow {
   symbol: string;
@@ -56,9 +56,37 @@ export interface YearlineCandidateRow {
   research_only?: boolean;
 }
 
+export interface DivergenceCandidateRow {
+  symbol: string;
+  name: string;
+  score: number;
+  signal_type?: string;
+  signal_date?: string;
+  entry_reference?: string;
+  close?: number;
+  zero_axis_zone?: "above" | "near";
+  zero_axis_zone_label?: string;
+  dif?: number;
+  dea?: number;
+  hist?: number;
+  ma_long?: number;
+  ma_long_slope_pct?: number;
+  close_vs_ma_long_pct?: number;
+  volume_ratio?: number;
+  volume_ratio_threshold?: number;
+  divergence_area_ratio?: number;
+  divergence_price_new_low_pct?: number;
+  divergence_prior_low?: number;
+  divergence_latest_low?: number;
+  conditions?: string[];
+  research_only?: boolean;
+}
+
 interface CandidateTableProps {
   variant: CandidateVariant;
-  rows: Array<MacdCandidateRow | YearlineCandidateRow>;
+  rows: Array<
+    MacdCandidateRow | YearlineCandidateRow | DivergenceCandidateRow
+  >;
   emptyText?: string;
 }
 
@@ -71,7 +99,7 @@ function signedPct(value: number | undefined): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-/** 指标股票池候选表格: 按 variant 渲染 MACD 或年线字段, 两个池共用一个组件。 */
+/** 指标股票池候选表格: 按 variant 渲染 MACD / 观察 / 年线 / 零轴底背离字段, 各池共用一个组件。 */
 export function CandidateTable({
   variant,
   rows,
@@ -138,6 +166,86 @@ export function CandidateTable({
           {macdRows.length === 0 && (
             <TableRow>
               <TableCell colSpan={observed ? 6 : 7} className="text-center text-muted-foreground">
+                {emptyText}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  if (variant === "macd-divergence") {
+    const divergenceRows = rows as DivergenceCandidateRow[];
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>代码</TableHead>
+            <TableHead>名称</TableHead>
+            <TableHead>信号日期</TableHead>
+            <TableHead>金叉位置</TableHead>
+            <TableHead>背离面积比</TableHead>
+            <TableHead>量比</TableHead>
+            <TableHead>年线偏离</TableHead>
+            <TableHead>命中条件</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {divergenceRows.map((item) => (
+            <TableRow key={item.symbol}>
+              <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
+              <TableCell>{item.name || "-"}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {item.signal_date || "-"}
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant={item.zero_axis_zone === "above" ? "default" : "secondary"}
+                >
+                  {item.zero_axis_zone_label || "0轴金叉"}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-xs">
+                <TooltipProvider delay={300}>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <span className="inline-flex items-center gap-1">
+                        {fmt(item.divergence_area_ratio, 2)}
+                        <Badge variant="outline">研究</Badge>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-72">
+                      <p className="font-medium">底背离：MACD 负柱面积收缩</p>
+                      <p className="mt-0.5 text-background/70">
+                        最近两段已完成负柱区间比较：后一段创新低
+                        {item.divergence_price_new_low_pct != null
+                          ? `（${item.divergence_price_new_low_pct.toFixed(2)}%）`
+                          : ""}
+                        ，面积比 = 后段 / 前段（越小背离越强）。
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </TableCell>
+              <TableCell className="text-xs">
+                {fmt(item.volume_ratio)}x
+                {item.volume_ratio_threshold != null && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    ≥{fmt(item.volume_ratio_threshold, 1)}
+                  </span>
+                )}
+              </TableCell>
+              <TableCell className="text-xs">{signedPct(item.close_vs_ma_long_pct)}</TableCell>
+              <TableCell className="max-w-64 text-xs">
+                {item.conditions?.length ? item.conditions.join("、") : "-"}
+              </TableCell>
+            </TableRow>
+          ))}
+          {divergenceRows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
                 {emptyText}
               </TableCell>
             </TableRow>

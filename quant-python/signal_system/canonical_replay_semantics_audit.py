@@ -55,11 +55,15 @@ PROFILE_DRIVER_NAMES = {
 CANONICAL_INPUT_DIR = Path(r"D:\tmp\candidates_fullpool_canonical").resolve()
 DEFAULT_OUTPUT_DIR = Path(r"D:\tmp\canonical_replay_semantics_audit")
 DEFAULT_CONFIG = (BASE_DIR / "config" / "config.yaml").resolve()
+# 2026-10-04 重新登记：config.yaml 新增 macd_divergence 研究池配置段；
+# 成交量/因子/回测口径未变，旧值 9aec5db0…
+# 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
+    "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
 )
+# 2026-09-17 重新登记：日线获取统一走降级链，分派等价；旧值 586e21d8…
 PREREGISTERED_BACKTEST_SHA256 = (
-    "586e21d8050a4397f2664b41676c2c5c140754f161c1937e27a2fd7e875800d1"
+    "eaada196c504cb9b0fd8cccb392c838a88780607672f1291544090e42e9d4fd3"
 )
 PREREGISTERED_ATTRIBUTION_SHA256 = (
     "fdb13ef7d20bdf024a14f6dffe17d47c14ec73ddcfd72044bca527eb34154f4d"

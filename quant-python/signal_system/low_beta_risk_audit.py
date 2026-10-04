@@ -48,8 +48,11 @@ SPLITS = ("train", "val", "test")
 PREREGISTERED_LABEL = "low-beta60-risk-candidate-audit"
 PREREGISTERED_SEED = 20260831
 PREREGISTERED_BOOTSTRAP_REPS = 2000
+# 2026-10-04 重新登记：config.yaml 新增 macd_divergence 研究池配置段；
+# 成交量/因子/回测口径未变，旧值 9aec5db0…
+# 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
+    "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
 )
 PREREGISTERED_INDEX_SHA256 = (
     "e59364d0cfe2d848daec0d18d749f9b3fa20fe04ef520b8655ee3793020c6cc8"

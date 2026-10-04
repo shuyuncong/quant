@@ -44,9 +44,9 @@ export async function POST(request: Request) {
     }
     if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
     const scanKind = String(body.scan_kind ?? "macd_zero_axis");
-    if (!["macd_zero_axis", "yearline_pullback"].includes(scanKind)) {
+    if (!["macd_zero_axis", "yearline_pullback", "macd_divergence"].includes(scanKind)) {
       return NextResponse.json(
-        { error: "scan 的 scan_kind 仅支持 macd_zero_axis / yearline_pullback" },
+        { error: "scan 的 scan_kind 仅支持 macd_zero_axis / yearline_pullback / macd_divergence" },
         { status: 422 }
       );
     }

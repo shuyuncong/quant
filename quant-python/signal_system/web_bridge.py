@@ -41,6 +41,7 @@ if QUANT_ROOT not in sys.path:
 from models import RISK_NOTICE, SignalEvent  # noqa: E402
 from monitor.service import SignalMonitor  # noqa: E402
 from data.symbols import normalize_ts_code  # noqa: E402
+from strategy.macd_divergence import resolve_divergence_config  # noqa: E402
 from utils.helpers import load_config  # noqa: E402
 from utils.time_utils import now_shanghai  # noqa: E402
 
@@ -256,6 +257,8 @@ def _cmd_scan(config_path: str, payload: dict[str, Any]) -> int:
     monitor = _make_monitor(config_path, payload.get("overrides"))
     if scan_kind == "yearline_pullback":
         report = monitor.scan_yearline(notify=notify)
+    elif scan_kind == "macd_divergence":
+        report = monitor.scan_macd_divergence(notify=notify)
     elif scan_kind == "macd_zero_axis":
         report = monitor.scan_zero_axis(notify=notify)
     else:
@@ -346,36 +349,84 @@ def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
     )
 
 
+def _latest_divergence_scan(monitor: SignalMonitor) -> dict[str, Any]:
+    """Return the newest scan_macd_divergence report, or {} when none exists.
+
+    The strict four-condition AND makes an empty pool normal, so the UI needs
+    the funnel to explain *which* condition filtered symbols out.
+    """
+    reports: list[tuple[dict[str, Any], str, float]] = []
+    pattern = os.path.join(str(monitor.output_dir), "scan_macd_divergence_*.json")
+    for report_path in glob.glob(pattern):
+        try:
+            with open(report_path, "r", encoding="utf-8") as handle:
+                report = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(report, dict):
+            continue
+        try:
+            mtime = os.path.getmtime(report_path)
+        except OSError:
+            mtime = 0.0
+        reports.append((report, report_path, mtime))
+    if not reports:
+        return {}
+    report, report_path, _ = max(
+        reports,
+        key=lambda item: (str(item[0].get("scanned_at") or ""), item[2]),
+    )
+    return {
+        "scanned_at": report.get("scanned_at"),
+        "universe_mode": report.get("universe_mode"),
+        "coverage": report.get("coverage"),
+        "completed_round": report.get("completed_round"),
+        "candidate_count": report.get("candidate_count"),
+        "condition_funnel": report.get("condition_funnel"),
+        "volume_ratio_distribution": report.get("volume_ratio_distribution"),
+        "report_file": os.path.basename(report_path),
+    }
+
+
 def _cmd_candidates(config_path: str, payload: dict[str, Any]) -> int:
     """返回指标股票池（候选股，含 TTL 与容量）及失效/过期池。
 
-    pool_type 取值: macd_zero_axis(默认, 旧行为) | yearline_pullback | all。
-    TTL/容量/过期记录均按 pool_type 独立处理。
+    pool_type 取值: macd_zero_axis(默认, 旧行为) | yearline_pullback |
+    macd_divergence | all。TTL/容量/过期记录均按 pool_type 独立处理。
     """
     monitor = _make_monitor(config_path, payload.get("overrides"))
     raw_pool_type = payload.get("pool_type") or "macd_zero_axis"
     pool_type = str(raw_pool_type).strip()
-    if pool_type not in ("macd_zero_axis", "yearline_pullback", "all"):
+    if pool_type not in (
+        "macd_zero_axis",
+        "yearline_pullback",
+        "macd_divergence",
+        "all",
+    ):
         return _emit_error(f"不支持的 pool_type: {pool_type}", 2)
     store_pool_type = None if pool_type == "all" else pool_type
     candidates = monitor.store.active_candidates(
         limit=monitor.candidate_limit, pool_type=store_pool_type
     )
     limit = max(1, min(int(payload.get("expired_limit", 100)), 500))
-    return _emit(
-        {
-            "pool_type": pool_type,
-            "candidates": candidates,
-            "ttl_business_days": monitor.candidate_ttl,
-            "capacity": monitor.candidate_limit,
-            "expired_candidates": monitor.store.list_expired_candidates(
-                limit=limit, pool_type=store_pool_type
-            ),
-            "expired_count": monitor.store.expired_candidate_count(
-                pool_type=store_pool_type
-            ),
-        }
-    )
+    response: dict[str, Any] = {
+        "pool_type": pool_type,
+        "candidates": candidates,
+        "ttl_business_days": monitor.candidate_ttl,
+        "capacity": monitor.candidate_limit,
+        "expired_candidates": monitor.store.list_expired_candidates(
+            limit=limit, pool_type=store_pool_type
+        ),
+        "expired_count": monitor.store.expired_candidate_count(
+            pool_type=store_pool_type
+        ),
+    }
+    if pool_type == "macd_divergence":
+        # 页面展示阈值口径; 只暴露本池自己的配置段, 与其它池无关。
+        response["config"] = resolve_divergence_config(monitor.config)
+        # 四条件 AND 下空池是常态, 附带最近一次扫描的漏斗用于解释原因。
+        response["latest_scan"] = _latest_divergence_scan(monitor)
+    return _emit(response)
 
 
 def _cmd_observed_candidates(config_path: str, payload: dict[str, Any]) -> int:
@@ -383,7 +434,7 @@ def _cmd_observed_candidates(config_path: str, payload: dict[str, Any]) -> int:
     monitor = _make_monitor(config_path, payload.get("overrides"))
     reports: list[tuple[dict[str, Any], str]] = []
     for report_path in glob.glob(os.path.join(str(monitor.output_dir), "scan_*.json")):
-        if os.path.basename(report_path).startswith("scan_yearline_"):
+        if os.path.basename(report_path).startswith(("scan_yearline_", "scan_macd_divergence_")):
             continue
         try:
             with open(report_path, "r", encoding="utf-8") as handle:

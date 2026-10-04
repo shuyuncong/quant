@@ -33,12 +33,16 @@ INPUT_VERSION = "long_history_yearline_trend_experiment.v1"
 PRIMARY_CONFIG_GIT_REVISION = "e2787288051ab1ec6bcdfba40c04fa7e59295863"
 CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
 PRIMARY_CONFIG_SHA256 = "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
-VERIFY_CONFIG_SHA256 = "9aec5db0f80b307c205898e2c2ed3196f68f73f20f6da00b5298eea844dbf745"
+VERIFY_CONFIG_SHA256 = "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
 FROZEN_EXPERIMENT_SHA256 = "033818294f9504fba61c6223a671fa99224fa89827990b74d43c26d3f4375b67"
 FROZEN_BACKTEST_ENGINE_SHA256 = "562278a0a551e7ed3ef77cb21e49a6e85369cc9dd8df8843d83872d5c3969e2b"
 ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
     "monitor.daily_scan_time": ("04:00", "17:00"),
     "runtime.schedule.daily_scan_time": ("04:00", "17:00"),
+    # 2026-10-04: 新增 macd_divergence 研究池配置段。该段只被
+    # strategy/macd_divergence.py 与 SignalMonitor.scan_macd_divergence 读取，
+    # 不影响本审计的 yearline_pullback 回测执行口径。
+    "macd_divergence": ("<MISSING>", "<PRESENT>"),
 }
 ROUTE = "yearline_pullback"
 PROFILES = ("fixed_sl8", "dynamic_sl5_sl8")

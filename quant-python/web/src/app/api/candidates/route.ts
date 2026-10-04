@@ -5,7 +5,7 @@ export interface CandidateRow {
   symbol: string;
   name: string;
   score: number;
-  pool_type?: "macd_zero_axis" | "yearline_pullback" | "all";
+  pool_type?: "macd_zero_axis" | "yearline_pullback" | "macd_divergence" | "all";
   strategy_score?: number;
   confirmed_at?: string;
   dif?: number;
@@ -17,13 +17,18 @@ export interface CandidateRow {
   chan_signals?: unknown[];
 }
 
-const POOL_TYPES = new Set(["macd_zero_axis", "yearline_pullback", "all"]);
+const POOL_TYPES: Record<string, true> = {
+  macd_zero_axis: true,
+  yearline_pullback: true,
+  macd_divergence: true,
+  all: true,
+};
 
 export async function GET(request: Request) {
   const poolType = new URL(request.url).searchParams.get("pool_type") || "macd_zero_axis";
-  if (!POOL_TYPES.has(poolType)) {
+  if (!(poolType in POOL_TYPES)) {
     return NextResponse.json(
-      { error: "pool_type 仅支持 macd_zero_axis / yearline_pullback / all" },
+      { error: "pool_type 仅支持 macd_zero_axis / yearline_pullback / macd_divergence / all" },
       { status: 422 }
     );
   }

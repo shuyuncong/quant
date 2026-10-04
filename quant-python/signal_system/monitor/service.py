@@ -25,6 +25,13 @@ from strategy.yearline import (
     last_bar_pullback_candidate,
     prepare_yearline_bars,
 )
+from strategy.macd_divergence import (
+    POOL_TYPE_DIVERGENCE,
+    add_divergence_indicators,
+    evaluate_conditions,
+    last_bar_divergence_candidate,
+    resolve_divergence_config,
+)
 from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
@@ -112,6 +119,7 @@ class SignalMonitor:
         self.output_dir = Path(runtime.get("output_dir", "./output"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._yearline_market: MarketDataClient | None = None
+        self._divergence_market: MarketDataClient | None = None
         monitor = config.get("monitor", {})
         self.timeframes = list(monitor.get("timeframes", DEFAULT_ORDER))
         self.watchlist = [normalize_symbol(item) for item in monitor.get("watchlist", [])]
@@ -1263,6 +1271,302 @@ class SignalMonitor:
     def _load_yearline_pool_cache(self) -> dict[str, dict[str, Any]]:
         """读取全市场分批扫描累积的年线候选缓存 (key: symbol)。"""
         raw = self.store.get_state("yearline_pool_cache", "[]") or "[]"
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError:
+            entries = []
+        if not isinstance(entries, list):
+            return {}
+        return {
+            normalize_symbol(str(item.get("symbol", ""))): item
+            for item in entries
+            if isinstance(item, dict) and item.get("symbol")
+        }
+
+    def _divergence_market_client(self) -> MarketDataClient:
+        """懒构建本池专用的日线客户端, 与生产 none 口径互不影响。
+
+        采用前复权(qfq)口径: 年线/底背离比较跨越一年以上, 未复权价格会在
+        除权日制造假的新低与假的面积收缩。缓存目录沿用现有 cache/。
+        """
+        if self._divergence_market is None:
+            client_config = copy.deepcopy(self.config)
+            market_data = client_config.setdefault("market_data", {})
+            market_data["adjust"] = "qfq"
+            market_data["cache_dir"] = str(self.market.cache_dir)
+            self._divergence_market = MarketDataClient(client_config)
+        return self._divergence_market
+
+    def scan_macd_divergence(self, notify: bool = True) -> dict[str, Any]:
+        """MACD 底背离 + 零轴金叉 + 放量 + 年线以上候选扫描 —— 独立研究展示池。
+
+        与生产 MACD 池/年线池完全隔离:
+        - 独立 pool_type='macd_divergence', 独立 TTL/容量, 互不截断;
+        - 独立配置段 macd_divergence, 不读 entry_filters / signal_strategy.macd /
+          backtest.chan_zero_axis, 也不受执行策略与市场闸门影响;
+        - 不推送通知, 不进入监控与下单链路;
+        - all_a 模式与其它池一样分批轮询, 整轮完成后才 sync, 未完成只 upsert。
+        """
+        settings = resolve_divergence_config(self.config)
+        scan_config = self.config.get("scan", {})
+        universe_mode = str(
+            (self.config.get("macd_divergence") or {}).get("universe_mode")
+            or scan_config.get("universe_mode", "watchlist")
+        )
+        market = self._divergence_market_client()
+        expected_trade_date = market.latest_expected_trade_date()
+        expected_iso = pd.Timestamp(expected_trade_date).date().isoformat()
+
+        cursor = 0
+        success_seed: set[str] = set()
+        deferred_seed: dict[str, str] = {}
+        deferred_today: set[str] = set()
+        if universe_mode == "watchlist":
+            rows = [{"code": item, "name": ""} for item in self.watchlist]
+            total = len(rows)
+            batch = rows
+        else:
+            stock_list = market.get_stock_list()
+            rows = stock_list[["code", "name"]].to_dict("records")
+            total = len(rows)
+            universe_symbols = {normalize_symbol(str(row["code"])) for row in rows}
+            saved_scan_day = self.store.get_state("macd_divergence_scan_day")
+            if saved_scan_day != expected_iso:
+                self.store.set_state("macd_divergence_scan_day", expected_iso)
+                self.store.set_state("macd_divergence_bootstrap_success", "[]")
+                self.store.set_state("macd_divergence_bootstrap_deferred", "{}")
+                self.store.set_state("macd_divergence_pool_cache", "[]")
+            saved_success = (
+                self.store.get_state("macd_divergence_bootstrap_success", "[]") or "[]"
+            )
+            try:
+                success_seed = set(json.loads(saved_success))
+            except json.JSONDecodeError:
+                success_seed = set()
+            success_seed.intersection_update(universe_symbols)
+            saved_deferred = (
+                self.store.get_state("macd_divergence_bootstrap_deferred", "{}") or "{}"
+            )
+            try:
+                loaded_deferred = json.loads(saved_deferred)
+                if isinstance(loaded_deferred, dict):
+                    deferred_seed = {
+                        normalize_symbol(str(symbol)): str(day)
+                        for symbol, day in loaded_deferred.items()
+                        if normalize_symbol(str(symbol)) in universe_symbols
+                    }
+            except json.JSONDecodeError:
+                deferred_seed = {}
+            deferred_today = {
+                symbol
+                for symbol, checked_date in deferred_seed.items()
+                if checked_date == expected_iso
+            }
+            deferred_today.difference_update(success_seed)
+            remaining = [
+                row
+                for row in rows
+                if normalize_symbol(str(row["code"]))
+                not in success_seed | deferred_today
+            ]
+            cursor = len(success_seed) + len(deferred_today)
+            batch = remaining[: self.max_scan_symbols]
+
+        candidates: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
+        successful_symbols: set[str] = set()
+        stale_symbols: set[str] = set()
+        retryable_symbols: set[str] = set()
+        # 漏斗统计: 解释"为什么候选很少"。四条件是 AND, 缺一不可。
+        funnel: Counter = Counter()
+        volume_ratios: list[float] = []
+        names = self._resolve_names(
+            [normalize_symbol(str(row["code"])) for row in batch]
+        )
+        for row in batch:
+            symbol = normalize_symbol(str(row["code"]))
+            name = str(row.get("name") or "") or names.get(symbol, "")
+            try:
+                raw_daily = market.get_bars(symbol, "1d", limit=400)
+                if raw_daily is None or raw_daily.empty:
+                    raise ValueError("macd_divergence_daily_empty")
+                columns = {str(col) for col in raw_daily.columns}
+                if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(
+                    columns
+                ):
+                    raise ValueError(
+                        "macd_divergence_daily_missing_columns:"
+                        + ",".join(
+                            sorted(
+                                {"datetime", "open", "high", "low", "close", "volume"}
+                                - columns
+                            )
+                        )
+                    )
+                latest_date = pd.Timestamp(raw_daily["datetime"].iloc[-1]).date()
+                if latest_date < pd.Timestamp(expected_trade_date).date():
+                    raise ValueError(
+                        "macd_divergence_daily_stale:"
+                        f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
+                    )
+                evaluated = add_divergence_indicators(raw_daily, settings)
+                candidate = last_bar_divergence_candidate(
+                    symbol, name, raw_daily, settings, frame=evaluated
+                )
+                successful_symbols.add(symbol)
+                if len(evaluated) >= 1:
+                    gates = evaluate_conditions(evaluated, len(evaluated) - 1, settings)
+                    if gates["available"]:
+                        funnel["evaluated"] += 1
+                        if gates["volume_ratio"] is not None:
+                            volume_ratios.append(float(gates["volume_ratio"]))
+                        for key in (
+                            "golden_cross",
+                            "zero_axis_ok",
+                            "volume_ok",
+                            "above_yearline",
+                            "divergence_ok",
+                            "all",
+                        ):
+                            if gates[key]:
+                                funnel[key] += 1
+                if candidate is not None:
+                    candidates.append(candidate)
+            except Exception as exc:
+                message = str(exc)
+                if message.startswith("macd_divergence_daily_stale:"):
+                    stale_symbols.add(symbol)
+                else:
+                    retryable_symbols.add(symbol)
+                errors.append({"symbol": symbol, "name": name, "error": message[:300]})
+
+        if universe_mode == "watchlist":
+            completed_round = len(successful_symbols) == total
+            coverage = 1.0 if total == 0 else len(successful_symbols) / total
+        else:
+            for symbol in stale_symbols:
+                deferred_seed[symbol] = expected_iso
+            for symbol in successful_symbols:
+                deferred_seed.pop(symbol, None)
+            self.store.set_state(
+                "macd_divergence_bootstrap_deferred",
+                json.dumps(deferred_seed, ensure_ascii=False, sort_keys=True),
+            )
+            success_seed.update(successful_symbols)
+            self.store.set_state(
+                "macd_divergence_bootstrap_success",
+                json.dumps(sorted(success_seed), ensure_ascii=False),
+            )
+            ineligible = deferred_today | stale_symbols
+            eligible_total = max(0, total - len(ineligible))
+            coverage = 1.0 if eligible_total == 0 else len(success_seed) / eligible_total
+            completed_round = len(success_seed) >= eligible_total
+            cached = {
+                symbol: candidate
+                for symbol, candidate in self._load_divergence_pool_cache().items()
+                if symbol in universe_symbols
+            }
+            for candidate in candidates:
+                cached[normalize_symbol(str(candidate["symbol"]))] = candidate
+            self.store.set_state(
+                "macd_divergence_pool_cache",
+                json.dumps(list(cached.values()), ensure_ascii=False, default=str),
+            )
+            if cached:
+                candidates = list(cached.values())
+
+        if universe_mode == "all_a" and completed_round:
+            self.store.sync_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+                pool_type=POOL_TYPE_DIVERGENCE,
+            )
+            self.store.set_state("macd_divergence_bootstrap_success", "[]")
+            self.store.set_state("macd_divergence_bootstrap_deferred", "{}")
+            self.store.set_state("macd_divergence_pool_cache", "[]")
+        else:
+            self.store.upsert_candidates(
+                candidates,
+                ttl_business_days=self.candidate_ttl,
+                capacity=self.candidate_limit,
+                pool_type=POOL_TYPE_DIVERGENCE,
+            )
+
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda item: (
+                -int(item.get("score", 0) or 0),
+                str(item.get("signal_date", "")),
+                str(item.get("symbol", "")),
+            ),
+        )
+        # 研究池与生产通知 outbox 隔离。
+        delivery = {"delivered": 0, "failed": 0}
+        evaluated_count = int(funnel.get("evaluated", 0))
+        volume_stats: dict[str, Any] = {"count": len(volume_ratios)}
+        if volume_ratios:
+            series = pd.Series(volume_ratios)
+            volume_stats.update(
+                {
+                    "median": round(float(series.median()), 3),
+                    "p90": round(float(series.quantile(0.90)), 3),
+                    "max": round(float(series.max()), 3),
+                    "above_threshold": int(
+                        (series >= float(settings["min_volume_ratio"])).sum()
+                    ),
+                }
+            )
+        condition_rate = {
+            key: {
+                "count": int(funnel.get(key, 0)),
+                "rate": (
+                    round(int(funnel.get(key, 0)) / evaluated_count, 4)
+                    if evaluated_count
+                    else 0.0
+                ),
+            }
+            for key in (
+                "golden_cross",
+                "zero_axis_ok",
+                "volume_ok",
+                "above_yearline",
+                "divergence_ok",
+                "all",
+            )
+        }
+        report = {
+            "mode": "scan",
+            "pool_type": POOL_TYPE_DIVERGENCE,
+            "scanned_at": now_shanghai().isoformat(timespec="seconds"),
+            "universe_mode": universe_mode,
+            "batch_start": cursor,
+            "batch_size": len(batch),
+            "universe_size": total,
+            "coverage": coverage,
+            "completed_round": completed_round,
+            "retryable_error_count": len(retryable_symbols),
+            "stale_symbol_count": len(stale_symbols),
+            "research_only": True,
+            "entry_reference": "next_day_open",
+            "config": settings,
+            "candidate_count": len(candidates),
+            "candidates": sorted_candidates,
+            # 漏斗解释: 四个条件同时成立才入池, 命中率天然很低。
+            "condition_funnel": {
+                "evaluated_symbols": evaluated_count,
+                "conditions": condition_rate,
+            },
+            "volume_ratio_distribution": volume_stats,
+            "errors": errors,
+            "delivery": delivery,
+        }
+        report["output_file"] = str(self._save_report("scan_macd_divergence", report))
+        return report
+
+    def _load_divergence_pool_cache(self) -> dict[str, dict[str, Any]]:
+        """读取全市场分批扫描累积的底背离候选缓存 (key: symbol)。"""
+        raw = self.store.get_state("macd_divergence_pool_cache", "[]") or "[]"
         try:
             entries = json.loads(raw)
         except json.JSONDecodeError:

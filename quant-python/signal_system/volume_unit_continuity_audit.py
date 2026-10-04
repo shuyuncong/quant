@@ -42,11 +42,15 @@ SPLITS = ("train", "val", "test")
 CANONICAL_INPUT_DIR = Path(r"D:\tmp\candidates_fullpool_canonical")
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
 MARKET_DATA_PATH = BASE_DIR / "data" / "market_data.py"
+# 2026-10-04 重新登记：config.yaml 新增 macd_divergence 研究池配置段；
+# 成交量/因子/回测口径未变，旧值 9aec5db0…
+# 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 EXPECTED_CONFIG_SHA256 = (
-    "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
+    "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
 )
+# 2026-09-17 重新登记：新增主源故障降级链（腾讯→东财→新浪），新浪成交量(股)折算为手；旧值 07cc9e23…
 EXPECTED_MARKET_DATA_SHA256 = (
-    "07cc9e23d1686811a6ef188ae44233b07e4ff293f3572479ba168982a7ab4f82"
+    "488f91c457c60d56c611e0a01532e70d723c80f381cdede769ea3ca33de9093d"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"

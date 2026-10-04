@@ -211,6 +211,96 @@ class ObservedCandidatesTests(unittest.TestCase):
             self.assertEqual(data["observed_count"], 2)
 
 
+class DivergenceCandidatesTests(unittest.TestCase):
+    def test_rejects_unknown_pool_type(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            result = web_bridge._cmd_candidates(
+                web_bridge._default_config_path(), {"pool_type": "no-such-pool"}
+            )
+        self.assertEqual(result, 2)
+        self.assertFalse(json.loads(buffer.getvalue())["ok"])
+
+    def test_divergence_pool_returns_config_and_latest_funnel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = {
+                "scan_macd_divergence_20261004_010000.json": {
+                    "scanned_at": "2026-10-04T01:00:00+08:00",
+                    "universe_mode": "watchlist",
+                    "coverage": 1.0,
+                    "completed_round": True,
+                    "candidate_count": 1,
+                    "condition_funnel": {
+                        "evaluated_symbols": 60,
+                        "conditions": {"all": {"count": 1, "rate": 0.0167}},
+                    },
+                    "volume_ratio_distribution": {"count": 60, "median": 0.665},
+                },
+                "scan_macd_divergence_20261003_010000.json": {
+                    "scanned_at": "2026-10-03T01:00:00+08:00",
+                    "candidate_count": 0,
+                },
+            }
+            for name, report in reports.items():
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as handle:
+                    json.dump(report, handle)
+
+            monitor = mock.MagicMock()
+            monitor.output_dir = tmp
+            monitor.candidate_limit = 100
+            monitor.candidate_ttl = 5
+            monitor.config = {"macd_divergence": {"enabled": True, "min_volume_ratio": 1.5}}
+            monitor.store.active_candidates.return_value = [{"symbol": "000002"}]
+            monitor.store.list_expired_candidates.return_value = []
+            monitor.store.expired_candidate_count.return_value = 0
+
+            buffer = io.StringIO()
+            with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+                with contextlib.redirect_stdout(buffer):
+                    result = web_bridge._cmd_candidates(
+                        web_bridge._default_config_path(),
+                        {"pool_type": "macd_divergence"},
+                    )
+
+            self.assertEqual(result, 0)
+            data = json.loads(buffer.getvalue())["data"]
+            self.assertEqual(data["pool_type"], "macd_divergence")
+            self.assertEqual(data["config"]["min_volume_ratio"], 1.5)
+            # Newest report by scanned_at wins.
+            self.assertEqual(
+                data["latest_scan"]["report_file"],
+                "scan_macd_divergence_20261004_010000.json",
+            )
+            self.assertEqual(
+                data["latest_scan"]["condition_funnel"]["evaluated_symbols"], 60
+            )
+            # The store must be queried with this pool only.
+            monitor.store.active_candidates.assert_called_with(
+                limit=100, pool_type="macd_divergence"
+            )
+
+    def test_other_pools_do_not_get_divergence_fields(self):
+        monitor = mock.MagicMock()
+        monitor.output_dir = tempfile.mkdtemp()
+        monitor.candidate_limit = 100
+        monitor.candidate_ttl = 5
+        monitor.store.active_candidates.return_value = []
+        monitor.store.list_expired_candidates.return_value = []
+        monitor.store.expired_candidate_count.return_value = 0
+        buffer = io.StringIO()
+        with mock.patch.object(web_bridge, "_make_monitor", return_value=monitor):
+            with contextlib.redirect_stdout(buffer):
+                web_bridge._cmd_candidates(
+                    web_bridge._default_config_path(), {"pool_type": "macd_zero_axis"}
+                )
+        data = json.loads(buffer.getvalue())["data"]
+        self.assertNotIn("config", data)
+        self.assertNotIn("latest_scan", data)
+        monitor.store.active_candidates.assert_called_with(
+            limit=100, pool_type="macd_zero_axis"
+        )
+
+
 class SummaryNotificationTests(unittest.TestCase):
     def test_notify_summary_requires_content(self):
         result = web_bridge._cmd_notify_summary(web_bridge._default_config_path(), {})

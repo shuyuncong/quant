@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   CandidateTable,
+  type DivergenceCandidateRow,
   type MacdCandidateRow,
   type YearlineCandidateRow,
 } from "@/components/candidate-table";
@@ -96,14 +97,38 @@ const EMPTY_DIALOG: ImportDialogState = {
   imageUrl: "",
 };
 
-type PoolType = "macd_zero_axis" | "yearline_pullback";
+type PoolType = "macd_zero_axis" | "yearline_pullback" | "macd_divergence";
 
 interface PoolData {
-  candidates: Array<MacdCandidateRow | YearlineCandidateRow>;
+  candidates: Array<
+    MacdCandidateRow | YearlineCandidateRow | DivergenceCandidateRow
+  >;
   ttl_business_days?: number;
   capacity?: number;
+  config?: { min_volume_ratio?: number } | null;
+  latestScan?: LatestScan | null;
   expired: ExpiredCandidateRow[];
   expiredCount: number;
+}
+
+interface LatestScan {
+  scanned_at?: string | null;
+  universe_mode?: string | null;
+  coverage?: number | null;
+  completed_round?: boolean | null;
+  candidate_count?: number | null;
+  condition_funnel?: {
+    evaluated_symbols?: number;
+    conditions?: Record<string, { count: number; rate: number }>;
+  } | null;
+  volume_ratio_distribution?: {
+    count?: number;
+    median?: number;
+    p90?: number;
+    max?: number;
+    above_threshold?: number;
+  } | null;
+  report_file?: string | null;
 }
 
 interface ObservedData {
@@ -118,6 +143,7 @@ interface ObservedData {
 const POOL_LABEL: Record<PoolType, string> = {
   macd_zero_axis: "日线零轴金叉",
   yearline_pullback: "年线趋势",
+  macd_divergence: "零轴+底背离",
 };
 
 export default function PoolPage() {
@@ -140,9 +166,13 @@ export default function PoolPage() {
     const response = await fetch(`/api/candidates?pool_type=${type}`).catch(() => null);
     if (response?.ok) {
       const data = (await response.json()) as {
-        candidates?: Array<MacdCandidateRow | YearlineCandidateRow>;
+        candidates?: Array<
+          MacdCandidateRow | YearlineCandidateRow | DivergenceCandidateRow
+        >;
         ttl_business_days?: number;
         capacity?: number;
+        config?: { min_volume_ratio?: number } | null;
+        latest_scan?: LatestScan | null;
         expired_candidates?: ExpiredCandidateRow[];
         expired_count?: number;
       };
@@ -152,6 +182,8 @@ export default function PoolPage() {
           candidates: data.candidates ?? [],
           ttl_business_days: data.ttl_business_days,
           capacity: data.capacity,
+          config: data.config ?? null,
+          latestScan: data.latest_scan ?? null,
           expired: data.expired_candidates ?? [],
           expiredCount: data.expired_count ?? 0,
         },
@@ -193,6 +225,7 @@ export default function PoolPage() {
       await Promise.all([
         loadPool("macd_zero_axis"),
         loadPool("yearline_pullback"),
+        loadPool("macd_divergence"),
         loadObserved(),
       ]);
     } catch (error) {
@@ -488,6 +521,7 @@ export default function PoolPage() {
             </div>
             <TabsList>
               <TabsTrigger value="macd_zero_axis">日线零轴金叉</TabsTrigger>
+              <TabsTrigger value="macd_divergence">零轴+底背离</TabsTrigger>
               <TabsTrigger value="yearline_pullback">年线趋势</TabsTrigger>
             </TabsList>
           </CardHeader>
@@ -577,6 +611,75 @@ export default function PoolPage() {
                   rows={observedData.candidates}
                   emptyText="暂无 0 轴上方或附近的观察候选"
                 />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="macd_divergence">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-md text-xs text-muted-foreground">
+                  四个条件同时成立才入池：0轴上方或附近的 MACD 金叉、日线底背离（最近两段已完成
+                  负柱区间价格创新低且面积收缩）、放量（当日量 ≥ 前 20 日均量 ×{" "}
+                  {(poolData.macd_divergence?.config?.min_volume_ratio ?? 1.5).toString()}）、
+                  收盘在年线上方且年线上行。信号收盘确认，入场参考次日开盘（仅记录）；
+                  独立研究池，不进入监控、投票与下单链路，也不推送通知。保留{" "}
+                  {poolData.macd_divergence?.ttl_business_days ?? 5} 个交易日，最多{" "}
+                  {poolData.macd_divergence?.capacity ?? 100} 只。
+                </p>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void loadPool("macd_divergence")}>
+                    <RefreshCw className="size-3.5" /> 刷新
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
+                    失效/过期（{poolData.macd_divergence?.expiredCount ?? 0}）
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={scanning !== null}
+                    onClick={() => void runScan("watchlist", "macd_divergence")}
+                  >
+                    <Filter className="size-3.5" /> 筛选自选池
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={scanning !== null}
+                    onClick={() => void runScan("all_a", "macd_divergence")}
+                  >
+                    <Filter className="size-3.5" /> 全市场筛选
+                  </Button>
+                </div>
+              </div>
+              <CandidateTable
+                variant="macd-divergence"
+                rows={poolData.macd_divergence?.candidates ?? []}
+                emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+              />
+              <div className="mt-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">最近一次筛选漏斗</span>
+                {(() => {
+                  const scan = poolData.macd_divergence?.latestScan;
+                  const funnel = scan?.condition_funnel;
+                  if (!scan || !funnel?.conditions) {
+                    return " ：暂无扫描报告，先点「筛选自选池」或「全市场筛选」。";
+                  }
+                  const c = funnel.conditions;
+                  const pct = (key: string) =>
+                    `${((c[key]?.rate ?? 0) * 100).toFixed(1)}%`;
+                  const vol = scan.volume_ratio_distribution;
+                  return (
+                    <>
+                      ：评估 {funnel.evaluated_symbols ?? 0} 只，命中{" "}
+                      {c.all?.count ?? 0} 只 —— 金叉 {pct("golden_cross")}（
+                      {c.golden_cross?.count ?? 0}）→ 0轴达标 {pct("zero_axis_ok")} →
+                      放量 {pct("volume_ok")} → 年线上方 {pct("above_yearline")} →
+                      底背离 {pct("divergence_ok")}。量比中位数{" "}
+                      {vol?.median != null ? vol.median.toFixed(2) : "-"}x、
+                      达阈值 {vol?.above_threshold ?? 0}/{vol?.count ?? 0} 只。
+                      四条件为「且」关系，命中率天然很低。
+                      {scan.scanned_at ? ` 扫描于 ${scan.scanned_at}。` : ""}
+                    </>
+                  );
+                })()}
               </div>
             </TabsContent>
 

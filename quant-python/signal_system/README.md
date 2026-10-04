@@ -7,6 +7,7 @@
 ## 核心能力
 
 - 默认直接读取腾讯日线/分钟线，并用新浪/东方财富获取全市场列表与收盘快照，无额外行情 SDK；另保留 AkShare、东方财富 K 线和 Tushare 适配。
+- 行情源故障自动降级：K 线 腾讯→东方财富→新浪，列表/快照 东方财富→新浪，指数 东方财富→腾讯，交易日历 腾讯↔新浪；末级新浪 K 线走 AkShare 的新浪接口，单接口抖动不再中断整轮扫描。
 - 1m、5m、15m、30m、60m、120m、1d 多周期分析。
 - 当日 1 分钟分时摘要：涨跌幅、成交量、成交额和 VWAP；没有成交额时明确标为典型价格近似值。
 - 工程化缠论：包含处理、严格分型、笔、中枢、一/二/三类买卖点、MACD 面积背驰。
@@ -24,7 +25,7 @@ cd D:\development\github\quant\quant-python\signal_system
 python -m pip install -r requirements.txt
 ```
 
-核心算法不再依赖 TA-Lib 和 SciPy。默认 `provider: auto` 使用腾讯公开 K 线接口，股票列表/快照在东方财富不可用时自动降级新浪财经。如果要改用 AkShare 或 Tushare，再安装对应可选依赖：
+核心算法不再依赖 TA-Lib 和 SciPy。默认 `provider: auto` 使用腾讯公开 K 线接口，主源故障时按 `market_data.fallback_providers`（缺省 东方财富→新浪）自动切换，显式空列表可关闭降级；股票列表/快照在东方财富不可用时自动降级新浪财经，K 线末级新浪源需要 `requirements-akshare.txt`。如果要改用 AkShare 或 Tushare，再安装对应可选依赖：
 
 ```powershell
 python -m pip install -r requirements-akshare.txt
@@ -73,8 +74,6 @@ python main.py analyze --symbols 000001.SZ 600036.SH --no-notify
 
 ### 扫描 MACD 金叉并按 0 轴位置分级
 
-默认只扫描自选股：
-
 ```powershell
 python main.py scan --no-notify
 ```
@@ -91,6 +90,53 @@ python main.py scan
 ```
 
 首次全市场运行要逐只回填日线历史，默认每轮最多 500 只，并在结果中返回 `coverage`。程序持久化成功股票集合，但每轮仍会重新验证本地历史是否存在、至少 120 根且更新到最近应有交易日；股票列表提供上市日期时会提前排除上市不足 `market_data.min_listing_trade_days` 的股票，降级数据源缺少上市日期时则根据实际历史长度暂缓并在后续交易日复查。只有全部符合条件的活跃股票成功后才标记回填完成；历史保存在 `cache/daily_history/`。之后使用全市场收盘快照做日线增量，零价或非法 OHLC（包括新浪常见的零值停牌表示）不会写成新鲜日线。免费数据源不适合在一分钟内对数千只股票抓七个周期，因此全市场只做日线低频筛选，分钟级监控只处理自选股与候选池。
+
+### 独立研究池：零轴金叉 + 底背离 + 放量 + 年线以上
+
+`macd_divergence` 池与生产 MACD 池、年线池完全解耦：独立配置段、独立
+`pool_type`、独立 TTL/容量、不进入监控与下单链路、不推送通知。四个条件**同时**
+成立才入池（全部只读信号日收盘及以前数据）：
+
+1. **零轴金叉**：`DIF > DEA` 且前一日 `DIF <= DEA`，且金叉不位于 0 轴下方。
+2. **日线底背离**：最近两段*已完成*的负 MACD 柱区间中，后一段价格创新低且绝对面积收缩。
+   未完成的当前区间不参与比较，避免部分区间偏置。
+3. **放量**：当日量 ≥ 前 20 日均量 × `min_volume_ratio`（默认 1.5）。与生产池的
+   “温和放量 [1.0, 2.0]” 不同：这里只设下限，不设上限。
+4. **年线以上**：收盘 > MA250 且 MA250 上行（对比 20 个交易日前）。
+
+信号收盘确认，入场参考为下一交易日开盘（仅记录字段，不下单）。数据口径为**前复权**：
+背离与年线比较跨越一年以上，未复权价格会在除权日制造假新低。
+
+```yaml
+macd_divergence:
+  enabled: true
+  universe_mode: "watchlist"     # 可选；缺省继承 scan.universe_mode
+  macd: { fast: 12, slow: 26, signal: 9 }
+  zero_axis_tolerance: 0.005     # 0轴“附近”阈值（按收盘价归一化）
+  volume_window: 20
+  min_volume_ratio: 1.5          # 放量下限，不设上限
+  long_ma_period: 250
+  long_ma_slope_window: 20
+  min_macd_segment_bars: 2       # 过滤单根柱噪声区间
+```
+
+四条件是「且」关系，命中率天然很低。扫描报告因此附带 `condition_funnel`
+（各条件独立的通过数与比例）与 `volume_ratio_distribution`（量比中位数/分位数/
+达阈值只数），网页端候选池的「零轴+底背离」页签会把它们显示成一行漏斗，用来解释
+“为什么候选很少”。库内扫描用前复权口径，与生产实时口径互不影响。
+
+回测（独立脚本，不改生产配置，复用 `backtest_winrate` 的成交/风控语义）：
+
+```powershell
+# 四条件 AND（默认放量 ≥1.5）+ 放量/背离消融 + 生产信号对照
+python backtest_macd_divergence.py --limit 0 --start 2023-05-01 `
+  --arms v1,vol:1.0,vol:1.2,no_div,baseline --out divergence_backtest.json
+```
+
+`--arms` 可选 `v1`（默认阈值）、`vol:<倍数>`（替换放量下限）、`no_div`（去掉底背离
+要求）、`baseline`（生产 `macd_golden_cross_pullback_confirmed_*` 信号）。两条臂都
+不加市场闸门与股票池过滤，差异只来自信号本身；成交语义（次日开盘买入、T+1、涨跌停、
+佣金/印花税/滑点、固定 8% 止损 / 30% 止盈、最长 40 根 K 线）与既有回测一致。
 
 ### 常驻监控
 
