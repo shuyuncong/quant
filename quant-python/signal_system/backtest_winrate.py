@@ -391,14 +391,7 @@ def _default_adjusted_fetcher(
         market_data["cache_dir"] = str(BASE_DIR / "cache")
         clients[adjustment] = MarketDataClient(client_config)
     client = clients[adjustment]
-    if client.provider == "tushare":
-        frame = client._fetch_tushare_daily(symbol, limit)
-    elif client.provider == "akshare":
-        frame = client._fetch_akshare(symbol, "1d", limit)
-    elif client.provider == "eastmoney":
-        frame = client._fetch_eastmoney(symbol, "1d", limit)
-    else:
-        frame = client._fetch_tencent(symbol, "1d", limit)
+    frame = client._fetch_bars_with_fallback(symbol, "1d", limit)
     return frame.tail(limit).reset_index(drop=True)
 
 

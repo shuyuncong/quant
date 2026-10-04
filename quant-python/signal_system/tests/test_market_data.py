@@ -35,6 +35,22 @@ class MarketDataTests(unittest.TestCase):
             )
         return pd.DataFrame(rows)
 
+    def _daily_frame(self, periods: int = 40, source: str = "stub") -> pd.DataFrame:
+        frame = pd.DataFrame(
+            {
+                "datetime": pd.bdate_range("2025-01-02", periods=periods),
+                "open": 10.0,
+                "high": 10.5,
+                "low": 9.5,
+                "close": 10.2,
+                "volume": 1000.0,
+                "amount": 100000.0,
+                "is_closed": True,
+            }
+        )
+        frame.attrs.update({"source": source, "timeframe": "1d", "adjust": "none"})
+        return frame
+
     def test_120_minute_bars_do_not_cross_lunch(self):
         frame = self._minute_frame()
         result = resample_session_bars(frame, 120, source_minutes=1)
@@ -346,6 +362,126 @@ class MarketDataTests(unittest.TestCase):
             self.assertGreaterEqual(len(result["15m"]), 40)
             self.assertEqual(["1m", "15m", "1m"], [call.args[1] for call in client.get_bars.call_args_list])
             self.assertEqual([300, 300, 600], [call.kwargs["limit"] for call in client.get_bars.call_args_list])
+
+    def test_bars_degrade_through_backup_sources_in_order(self):
+        """腾讯 K 线故障时按 东方财富 → 新浪 顺序接管，单源故障不再中断扫描。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "auto"}}
+            )
+            client._throttle = lambda: None
+            calls = []
+
+            def unavailable(name):
+                def fetch(*_args, **_kwargs):
+                    calls.append(name)
+                    raise ConnectionError(f"{name} down")
+
+                return fetch
+
+            client._fetch_tencent = unavailable("tencent")
+            client._fetch_eastmoney = unavailable("eastmoney")
+            client._fetch_sina = lambda *_args, **_kwargs: self._daily_frame(source="sina")
+
+            frame = client.get_bars("000001.SZ", "1d", limit=30)
+
+            self.assertEqual(["tencent", "eastmoney"], calls)
+            self.assertEqual("sina", frame.attrs["source"])
+            self.assertEqual(30, len(frame))
+
+    def test_bars_raise_when_every_source_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            client._fetch_eastmoney = MagicMock(side_effect=ConnectionError("eastmoney down"))
+            client._fetch_sina = MagicMock(side_effect=ConnectionError("sina down"))
+
+            with self.assertRaises(RuntimeError) as raised:
+                client.get_bars("000001.SZ", "1d", limit=30)
+
+            message = str(raised.exception)
+            for source in ("tencent", "eastmoney", "sina"):
+                self.assertIn(source, message)
+
+    def test_bars_return_empty_frame_when_all_sources_report_no_data(self):
+        """全源无数据（新股、退市等）不算故障：保持空 DataFrame 语义而不抛异常。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._fetch_tencent = MagicMock(return_value=self._daily_frame(periods=0))
+            client._fetch_eastmoney = MagicMock(return_value=self._daily_frame(periods=0))
+            client._fetch_sina = MagicMock(return_value=self._daily_frame(periods=0))
+
+            frame = client.get_bars("000001.SZ", "1d", limit=30)
+
+            self.assertTrue(frame.empty)
+            self.assertEqual(1, client._fetch_tencent.call_count)
+
+    def test_sina_source_normalizes_share_volume_to_lots(self):
+        """新浪成交量单位是股，腾讯/东财是手：降级到新浪时必须折算，否则量能失真 100 倍。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            ak = MagicMock()
+            ak.stock_zh_a_daily.return_value = pd.DataFrame(
+                {
+                    "date": pd.bdate_range("2025-01-02", periods=3),
+                    "open": [10.0, 10.1, 10.2],
+                    "high": [10.5, 10.6, 10.7],
+                    "low": [9.5, 9.6, 9.7],
+                    "close": [10.2, 10.3, 10.4],
+                    "volume": [5_000_000.0, 6_000_000.0, 7_000_000.0],
+                    "amount": [51_000_000.0, 61_800_000.0, 72_800_000.0],
+                }
+            )
+            client._get_akshare = lambda: ak
+
+            frame = client._fetch_sina("600036.SH", "1d", limit=3)
+
+            self.assertEqual("sina", frame.attrs["source"])
+            self.assertEqual([50_000.0, 60_000.0, 70_000.0], list(frame["volume"]))
+            self.assertEqual("sh600036", ak.stock_zh_a_daily.call_args.kwargs["symbol"])
+
+    def test_bar_fallback_providers_config_replaces_default_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {
+                    "market_data": {
+                        "cache_dir": directory,
+                        "provider": "auto",
+                        "fallback_providers": ["akshare"],
+                    }
+                }
+            )
+            client._throttle = lambda: None
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            client._fetch_eastmoney = MagicMock(return_value=self._daily_frame(source="eastmoney"))
+            client._fetch_akshare = MagicMock(return_value=self._daily_frame(source="akshare"))
+
+            frame = client.get_bars("000001.SZ", "1d", limit=30)
+
+            self.assertEqual("akshare", frame.attrs["source"])
+            self.assertEqual(0, client._fetch_eastmoney.call_count)
+
+    def test_trade_calendar_falls_back_to_sina_when_tencent_unavailable(self):
+        """腾讯日历源故障时新浪日历接管，避免退化成工作日近似。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "auto"}}
+            )
+            client._throttle = lambda: None
+            client._http_json = MagicMock(side_effect=ConnectionError("tencent down"))
+            ak = MagicMock()
+            ak.tool_trade_date_hist_sina.return_value = pd.DataFrame(
+                {"trade_date": pd.to_datetime(["2026-09-16", "2026-09-17"])}
+            )
+            client._get_akshare = lambda: ak
+
+            dates = client.get_trade_dates()
+
+            self.assertIn(date(2026, 9, 16), dates)
+            self.assertEqual(1, ak.tool_trade_date_hist_sina.call_count)
 
     def test_index_bars_falls_back_to_tencent_when_eastmoney_unavailable(self):
         """东财 push2his 端点故障时（Remote end closed），腾讯 ifzq 备用源接管，

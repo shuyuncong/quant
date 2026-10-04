@@ -33,6 +33,17 @@ STANDARD_COLUMNS = [
     "is_closed",
 ]
 
+# 单源故障不能让整轮扫描缺数据：主源不可用时按此顺序尝试备用源。
+# market_data.fallback_providers 可覆盖；显式空列表表示关闭降级。
+BAR_SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "tencent": ("eastmoney", "sina"),
+    "eastmoney": ("tencent", "sina"),
+    "sina": ("tencent", "eastmoney"),
+    "akshare": ("sina", "tencent", "eastmoney"),
+    "tushare": ("tencent", "eastmoney", "sina"),
+}
+CALENDAR_SOURCES = ("tencent", "sina")
+
 
 def normalize_symbol(symbol: str) -> str:
     return str(symbol).strip().upper().split(".")[0].zfill(6)
@@ -209,6 +220,8 @@ class MarketDataClient:
         data_config = config.get("market_data", config.get("data_source", {}))
         stock_pool_config = config.get("stock_pool", {})
         self.provider = str(data_config.get("provider", "auto")).lower()
+        self.bar_providers = self._resolve_bar_providers(data_config)
+        self.calendar_providers = self._resolve_calendar_providers(data_config)
         self.adjust = str(data_config.get("adjust", "none")).strip().lower() or "none"
         self.min_listing_trade_days = int(
             stock_pool_config.get(
@@ -231,6 +244,35 @@ class MarketDataClient:
         self._last_request = 0.0
         self._akshare = None
         self._tushare = None
+
+    def _resolve_bar_providers(self, data_config: dict[str, Any]) -> tuple[str, ...]:
+        """Build the ordered K-line source chain (primary first, deduplicated)."""
+        primary = "tencent" if self.provider in ("", "auto", "tencent") else self.provider
+        if primary not in BAR_SOURCE_FALLBACKS:
+            logger.warning("未知行情源 %s，按腾讯源处理", self.provider)
+            primary = "tencent"
+        configured = data_config.get("fallback_providers")
+        fallbacks: list[str] = []
+        if configured is None:
+            fallbacks.extend(BAR_SOURCE_FALLBACKS.get(primary, ()))
+        else:
+            for item in configured:
+                name = str(item).strip().lower()
+                if not name:
+                    continue
+                if name in BAR_SOURCE_FALLBACKS:
+                    fallbacks.append(name)
+                else:
+                    logger.warning("忽略未知备用行情源: %s", name)
+        return tuple(dict.fromkeys([primary, *fallbacks]))
+
+    def _resolve_calendar_providers(self, data_config: dict[str, Any]) -> tuple[str, ...]:
+        """Calendar sources follow the provider, with the other one as backup."""
+        primary = "sina" if self.provider in ("akshare", "sina") else "tencent"
+        backup = "sina" if primary == "tencent" else "tencent"
+        if "fallback_providers" in data_config and not data_config.get("fallback_providers"):
+            return (primary,)
+        return (primary, backup)
 
     @staticmethod
     def _http_json(url: str, params: dict[str, Any]) -> Any:
@@ -954,6 +996,8 @@ class MarketDataClient:
         ak = self._get_akshare()
         code = normalize_symbol(symbol)
         end = now_shanghai()
+        # AkShare 用空字符串表示不复权，直接传 "none" 会被它拒绝。
+        adjust = "" if self.adjust in ("", "none") else self.adjust
         self._throttle()
         if timeframe == "1d":
             start = (end - timedelta(days=max(limit * 2, 400))).strftime("%Y%m%d")
@@ -962,7 +1006,7 @@ class MarketDataClient:
                 period="daily",
                 start_date=start,
                 end_date=end.strftime("%Y%m%d"),
-                adjust=self.adjust,
+                adjust=adjust,
             )
         else:
             period = str(TIMEFRAME_MINUTES[timeframe])
@@ -972,7 +1016,7 @@ class MarketDataClient:
                 start_date=(end - timedelta(days=lookback_days)).strftime("%Y-%m-%d %H:%M:%S"),
                 end_date=end.strftime("%Y-%m-%d %H:%M:%S"),
                 period=period,
-                adjust=self.adjust,
+                adjust=adjust,
             )
         return standardize_bars(
             raw,
@@ -1084,6 +1128,45 @@ class MarketDataClient:
             minute_timestamp="end",
         )
 
+    def _fetch_sina(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+        """Sina-backed bars, reached through AkShare's Sina endpoints.
+
+        Used as the last-resort fallback: Tencent and Eastmoney both serve their
+        own quotes, while these endpoints decode Sina's own feed, so they survive
+        an outage of either.  Sina reports volume in shares while Tencent and
+        Eastmoney report lots, so volume is converted to keep one unit across
+        the chain.
+        """
+        ak = self._get_akshare()
+        code = tencent_symbol(symbol)
+        adjust = "" if self.adjust in ("", "none") else self.adjust
+        self._throttle()
+        if timeframe == "1d":
+            end = now_shanghai()
+            start = end - timedelta(days=max(limit * 2, 400))
+            raw = ak.stock_zh_a_daily(
+                symbol=code,
+                start_date=start.strftime("%Y%m%d"),
+                end_date=end.strftime("%Y%m%d"),
+                adjust=adjust,
+            )
+        else:
+            raw = ak.stock_zh_a_minute(
+                symbol=code,
+                period=str(TIMEFRAME_MINUTES[timeframe]),
+                adjust=adjust,
+            )
+        frame = standardize_bars(
+            raw,
+            timeframe=timeframe,
+            source="sina",
+            adjust=self.adjust,
+            minute_timestamp=self.minute_timestamp,
+        )
+        if not frame.empty and self.volume_unit_shares > 0:
+            frame["volume"] = frame["volume"] / self.volume_unit_shares
+        return frame
+
     def _fetch_tushare_daily(self, symbol: str, limit: int) -> pd.DataFrame:
         pro = self._get_tushare()
         end = now_shanghai()
@@ -1098,6 +1181,66 @@ class MarketDataClient:
         if self.adjust not in ("", "none"):
             raise RuntimeError("Tushare 当前适配未合并复权因子，禁止与 qfq 周期混用")
         return frame
+
+    def _fetch_bars_from(
+        self,
+        source: str,
+        symbol: str,
+        timeframe: str,
+        limit: int,
+    ) -> pd.DataFrame:
+        if source == "tushare":
+            if timeframe != "1d":
+                raise ValueError("Tushare 源仅提供日线")
+            return self._fetch_tushare_daily(symbol, limit)
+        if source == "akshare":
+            return self._fetch_akshare(symbol, timeframe, limit)
+        if source == "eastmoney":
+            return self._fetch_eastmoney(symbol, timeframe, limit)
+        if source == "sina":
+            return self._fetch_sina(symbol, timeframe, limit)
+        return self._fetch_tencent(symbol, timeframe, limit)
+
+    def _fetch_bars_with_fallback(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int,
+    ) -> pd.DataFrame:
+        """Fetch bars from the first responding source of `self.bar_providers`.
+
+        A single provider outage must not blank out a scan, so every failure is
+        logged and the next source takes over.  An empty frame means "no data"
+        rather than an outage: when all sources are empty the caller still gets
+        the empty frame, and only an all-failure chain raises.
+        """
+        failures: list[str] = []
+        empty: pd.DataFrame | None = None
+        for index, source in enumerate(self.bar_providers):
+            try:
+                frame = self._fetch_bars_from(source, symbol, timeframe, limit)
+            except Exception as exc:  # noqa: BLE001 - 单源故障必须继续尝试备用源
+                failures.append(f"{source}: {exc}")
+                logger.warning("行情源 %s 获取 %s %s 失败: %s", source, symbol, timeframe, exc)
+                continue
+            if frame is None or frame.empty:
+                failures.append(f"{source}: 无数据")
+                if empty is None and frame is not None:
+                    empty = frame
+                continue
+            if index:
+                logger.warning(
+                    "行情源降级 %s %s → %s（跳过 %s）",
+                    symbol,
+                    timeframe,
+                    source,
+                    "; ".join(failures),
+                )
+            return frame
+        if empty is not None:
+            logger.warning("行情源全部无数据: %s %s", symbol, timeframe)
+            return empty
+        raise RuntimeError(f"行情获取失败 {symbol} {timeframe}: " + "; ".join(failures))
 
     def get_bars(self, symbol: str, timeframe: str, limit: int = 300) -> pd.DataFrame:
         if timeframe not in {*TIMEFRAME_MINUTES, "1d"}:
@@ -1119,14 +1262,7 @@ class MarketDataClient:
         if cached is not None:
             return cached.tail(limit).reset_index(drop=True)
 
-        if timeframe == "1d" and self.provider == "tushare":
-            frame = self._fetch_tushare_daily(symbol, limit)
-        elif self.provider == "akshare":
-            frame = self._fetch_akshare(symbol, timeframe, limit)
-        elif self.provider == "eastmoney":
-            frame = self._fetch_eastmoney(symbol, timeframe, limit)
-        else:
-            frame = self._fetch_tencent(symbol, timeframe, limit)
+        frame = self._fetch_bars_with_fallback(symbol, timeframe, limit)
         frame = frame[frame["is_closed"]].tail(limit).reset_index(drop=True)
         if frame.attrs.get("adjust") != self.adjust and self.adjust:
             raise RuntimeError(f"{symbol} {timeframe} 复权口径不一致")
@@ -1228,29 +1364,37 @@ class MarketDataClient:
             return self._with_today_if_stale(
                 set(pd.to_datetime(cached["trade_date"]).dt.date)
             )
-        try:
-            self._throttle()
-            if self.provider == "akshare":
-                raw = self._get_akshare().tool_trade_date_hist_sina()
-                column = "trade_date" if "trade_date" in raw.columns else raw.columns[0]
-                result = pd.DataFrame({"trade_date": pd.to_datetime(raw[column])})
-            else:
-                payload = self._http_json(
-                    "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
-                    {"param": "sh000001,day,,,1500,qfq"},
-                )
-                data = (payload.get("data") or {}).get("sh000001") or {}
-                items = data.get("qfqday") or data.get("day") or []
-                result = pd.DataFrame(
-                    {"trade_date": pd.to_datetime([item[0] for item in items if item])}
-                )
+        failures: list[str] = []
+        for source in self.calendar_providers:
+            try:
+                result = self._fetch_trade_calendar(source)
+            except Exception as exc:  # noqa: BLE001 - 单源故障必须继续尝试备用源
+                failures.append(f"{source}: {exc}")
+                logger.warning("交易日历 %s 源失败: %s", source, exc)
+                continue
+            if result is None or result.empty:
+                failures.append(f"{source}: 无数据")
+                continue
             self._save_cache("trade_calendar", result)
-            return self._with_today_if_stale(
-                set(result["trade_date"].dt.date)
-            )
-        except Exception as exc:
-            logger.warning("交易日历获取失败，降级到工作日: %s", exc)
-            return set()
+            return self._with_today_if_stale(set(result["trade_date"].dt.date))
+        logger.warning("交易日历获取失败，降级到工作日: %s", "; ".join(failures))
+        return set()
+
+    def _fetch_trade_calendar(self, source: str) -> pd.DataFrame:
+        self._throttle()
+        if source == "sina":
+            raw = self._get_akshare().tool_trade_date_hist_sina()
+            column = "trade_date" if "trade_date" in raw.columns else raw.columns[0]
+            return pd.DataFrame({"trade_date": pd.to_datetime(raw[column])})
+        payload = self._http_json(
+            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+            {"param": "sh000001,day,,,1500,qfq"},
+        )
+        data = (payload.get("data") or {}).get("sh000001") or {}
+        items = data.get("qfqday") or data.get("day") or []
+        return pd.DataFrame(
+            {"trade_date": pd.to_datetime([item[0] for item in items if item])}
+        )
 
     @staticmethod
     def _with_today_if_stale(dates: set[date]) -> set[date]:
