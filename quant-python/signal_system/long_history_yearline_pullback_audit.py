@@ -33,7 +33,7 @@ INPUT_VERSION = "long_history_yearline_trend_experiment.v1"
 PRIMARY_CONFIG_GIT_REVISION = "e2787288051ab1ec6bcdfba40c04fa7e59295863"
 CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
 PRIMARY_CONFIG_SHA256 = "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
-VERIFY_CONFIG_SHA256 = "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
+VERIFY_CONFIG_SHA256 = "debfffd0aae15f7834f219dca8a2e83b44466d4ca1b0bf46c79769a892f5765f"
 FROZEN_EXPERIMENT_SHA256 = "033818294f9504fba61c6223a671fa99224fa89827990b74d43c26d3f4375b67"
 FROZEN_BACKTEST_ENGINE_SHA256 = "562278a0a551e7ed3ef77cb21e49a6e85369cc9dd8df8843d83872d5c3969e2b"
 ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
@@ -43,6 +43,10 @@ ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
     # strategy/macd_divergence.py 与 SignalMonitor.scan_macd_divergence 读取，
     # 不影响本审计的 yearline_pullback 回测执行口径。
     "macd_divergence": ("<MISSING>", "<PRESENT>"),
+    # 2026-10-04: 新增 backtest.exit_rules (v1b 卖出规则)。该规则经
+    # apply_to_signal_types=["macd_divergence_bottom"] 限定作用范围，
+    # yearline_pullback 信号仍走 fixed 止盈 + 持仓超时，口径未变。
+    "backtest.exit_rules": ("<MISSING>", "<PRESENT>"),
 }
 ROUTE = "yearline_pullback"
 PROFILES = ("fixed_sl8", "dynamic_sl5_sl8")

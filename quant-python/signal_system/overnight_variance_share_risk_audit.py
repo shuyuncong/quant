@@ -55,11 +55,14 @@ FORMAL_OUTPUT_DIR = Path(
     r"D:\tmp\overnight_variance_share60_risk_candidate_final"
 )
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
+# 2026-10-04 重新登记：config.yaml 新增 backtest.exit_rules (v1b 卖出规则)；
+# 成交量/因子口径未变，且该规则经 apply_to_signal_types 限定只作用于
+# 零轴+底背离研究池，不改写既有策略回测口径，旧值 9350923241…
 # 2026-10-04 重新登记：config.yaml 新增 macd_divergence 研究池配置段；
 # 成交量/因子/回测口径未变，旧值 9aec5db0…
 # 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "93509232416ea651efbd7b533cb53e6259a6cfeadb146a45399334a18605a9c2"
+    "debfffd0aae15f7834f219dca8a2e83b44466d4ca1b0bf46c79769a892f5765f"
 )
 PREREGISTERED_CANONICAL_SHA256 = {
     "train": "28a2defd6f7f09904295cb270cc311bf989add84b4cd0c8dc947d4e59a4fb40f",

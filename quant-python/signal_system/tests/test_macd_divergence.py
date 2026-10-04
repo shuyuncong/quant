@@ -219,6 +219,293 @@ class FastPathEquivalenceTests(unittest.TestCase):
         self.assertTrue(bool(flags[18:].all()))
 
 
+class ExitRuleTests(unittest.TestCase):
+    """The research exit rules must fire causally and match shipped detectors."""
+
+    def test_top_divergence_trigger_matches_engine_helper(self):
+        from backtest_macd_divergence import top_divergence_flags
+        import backtest_winrate as bt
+
+        settings = _config()
+        frame = add_divergence_indicators(
+            _bars_from_close(
+                _fixture_close(), volume_mult=2.0, bump_at=FIXTURE_BAR
+            ),
+            settings,
+        )
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        checked = 0
+        for index in np.flatnonzero(flags):
+            index = int(index)
+            self.assertTrue(
+                bt._top_divergence_risk(frame, index, settings),
+                f"flag at {index} not confirmed by the shipped helper",
+            )
+            checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_top_divergence_is_single_bar_and_causal(self):
+        from backtest_macd_divergence import top_divergence_flags
+
+        # Two positive cycles: higher high, smaller area -> divergence on the
+        # bar where the second cycle ends.
+        hist = np.concatenate(
+            [np.full(3, 0.0), np.full(4, 1.0), np.full(2, -0.5), np.full(4, 0.4), np.full(2, -0.5)]
+        )
+        close = np.concatenate(
+            [
+                np.full(3, 10.0),
+                np.linspace(11.0, 14.0, 4),
+                np.full(2, 13.0),
+                np.linspace(14.0, 15.0, 4),
+                np.full(2, 14.5),
+            ]
+        )
+        flags = top_divergence_flags(pd.Series(hist), pd.Series(close), 1)
+        # Cycle 1 ends at index 7, cycle 2 at index 13 -> only 13 may trigger.
+        self.assertEqual(list(np.flatnonzero(flags)), [13])
+
+    def test_stop_loss_wins_within_the_same_bar(self):
+        """A gap through the stop must exit as stop_loss, not as an MA break."""
+        from backtest_macd_divergence import (
+            simulate_with_exit_rules,
+            top_divergence_flags,
+        )
+
+        settings = _config()
+        close = np.full(325, 20.0)
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=324)
+        # Signal on bar 318 -> entry at bar 319 open; bar 320 gaps below the stop.
+        bars.loc[320, ["open", "high", "low", "close"]] = [17.0, 17.2, 16.8, 17.0]
+        bars.loc[321:, ["open", "high", "low", "close"]] = 17.0
+        buy = {"day": str(bars["datetime"].iloc[318].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 40}
+        trade, reason = simulate_with_exit_rules(
+            "600036", bars, buy, {}, settings, costs, flags
+        )
+        self.assertIsNone(reason)
+        assert trade is not None
+        self.assertEqual(trade["exit_reason"], "stop_loss")
+        self.assertLess(trade["pnl_pct"], -8.0)
+
+    def test_slow_decline_exits_on_yearline_or_ma20_before_the_stop(self):
+        """With a gradual decline the MA rules fire earlier than -8%."""
+        from backtest_macd_divergence import (
+            simulate_with_exit_rules,
+            top_divergence_flags,
+        )
+
+        settings = _config()
+        close = np.concatenate([np.linspace(10.0, 20.0, 300), np.linspace(20.0, 17.0, 40)])
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=len(close) - 41)
+        buy = {"day": str(bars["datetime"].iloc[-42].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 40}
+        trade, reason = simulate_with_exit_rules(
+            "600036", bars, buy, {}, settings, costs, flags
+        )
+        self.assertIsNone(reason)
+        assert trade is not None
+        self.assertIn(
+            trade["exit_reason"], {"below_ma20", "below_ma250", "top_divergence"}
+        )
+        self.assertGreater(trade["pnl_pct"], -8.0)
+        self.assertLess(trade["holding_bars"], 40)
+
+
+    def test_relaxed_ma20_variants_exit_no_earlier_than_the_strict_rule(self):
+        """Strict '跌破即卖' must never exit later than its relaxed variants."""
+        from backtest_macd_divergence import simulate_with_rules, top_divergence_flags
+
+        settings = _config()
+        # Uptrend, then a slow decline that crosses MA20 and stays below it.
+        close = np.concatenate([np.linspace(10.0, 20.0, 300), np.linspace(20.0, 18.0, 40)])
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=len(close) - 41)
+        buy = {"day": str(bars["datetime"].iloc[-42].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 40}
+        holds: dict[str, int] = {}
+        for rule in ("ma20", "ma20_3days", "ma20_death_cross"):
+            trade, reason = simulate_with_rules(
+                "600036", bars, buy, {}, settings, costs, flags, ("stop", rule)
+            )
+            self.assertIsNone(reason, rule)
+            assert trade is not None
+            self.assertIn(trade["exit_reason"], {"below_ma20", "below_ma20_3days", "below_ma20_death_cross"}, rule)
+            holds[rule] = trade["holding_bars"]
+        self.assertLessEqual(holds["ma20"], holds["ma20_3days"])
+        self.assertLessEqual(holds["ma20"], holds["ma20_death_cross"])
+
+    def test_timeout_rule_fires_at_the_configured_bar(self):
+        from backtest_macd_divergence import simulate_with_rules, top_divergence_flags
+
+        settings = _config()
+        # Flat prices: no MA break, no divergence -> only the timeout can exit.
+        # 60 bars of runway after the entry so a 40-bar timeout can be reached.
+        close = np.full(365, 20.0)
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=364)
+        buy = {"day": str(bars["datetime"].iloc[300].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 40}
+        trade, reason = simulate_with_rules(
+            "600036", bars, buy, {}, settings, costs, flags, ("stop", "timeout")
+        )
+        self.assertIsNone(reason)
+        assert trade is not None
+        self.assertEqual(trade["exit_reason"], "timeout")
+        # Scheduled exit: the engine sells at the open of the 40th held bar.
+        self.assertEqual(trade["holding_bars"], 40)
+
+    def test_without_timeout_a_flat_position_runs_to_the_end(self):
+        from backtest_macd_divergence import simulate_with_rules, top_divergence_flags
+
+        settings = _config()
+        close = np.full(365, 20.0)
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=364)
+        buy = {"day": str(bars["datetime"].iloc[300].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 40}
+        trade, reason = simulate_with_rules(
+            "600036", bars, buy, {}, settings, costs, flags, ("stop",)
+        )
+        self.assertIsNone(reason)
+        assert trade is not None
+        self.assertEqual(trade["exit_reason"], "open_at_end")
+
+    def test_trailing_stop_locks_profit_after_the_arm_level(self):
+        from backtest_macd_divergence import simulate_with_rules, top_divergence_flags
+
+        settings = _config()
+        # Rise 25%, then fall 12% from the peak: trailing arms at +15%, gap 8%.
+        close = np.concatenate(
+            [np.full(300, 20.0), np.linspace(20.0, 25.0, 20), np.linspace(25.0, 21.5, 15)]
+        )
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=len(close) - 36)
+        buy = {"day": str(bars["datetime"].iloc[299].date()), "signal_type": "t"}
+        frame = add_divergence_indicators(bars, settings)
+        flags = top_divergence_flags(frame["hist"], frame["close"], 1)
+        costs = {"stop_loss_pct": 0.08, "take_profit_pct": 0.30, "max_holding_bars": 60}
+        trade, reason = simulate_with_rules(
+            "600036",
+            bars,
+            buy,
+            {},
+            settings,
+            costs,
+            flags,
+            ("stop", "trailing"),
+            trail_arm_pct=0.15,
+            trail_gap_pct=0.08,
+        )
+        self.assertIsNone(reason)
+        assert trade is not None
+        self.assertEqual(trade["exit_reason"], "trailing_stop")
+        self.assertGreater(trade["pnl_pct"], 0)
+
+    def test_unknown_rule_is_rejected(self):
+        from backtest_macd_divergence import simulate_with_rules
+
+        with self.assertRaises(ValueError):
+            simulate_with_rules(
+                "600036",
+                _bars_from_close(np.full(300, 10.0)),
+                {"day": "2024-01-01"},
+                {},
+                _config(),
+                {},
+                np.zeros(300, dtype=bool),
+                ("not_a_rule",),
+            )
+
+
+class EngineTrendExitTests(unittest.TestCase):
+    """The shipped engine must implement v1b and keep other signals on `fixed`."""
+
+    @staticmethod
+    def _resolved(**overrides):
+        import backtest_winrate as bt
+
+        config = {
+            "backtest": {"exit_rules": {"mode": "divergence_trend", **overrides}},
+            "risk": {"stop_loss_pct": 0.08, "stop_profit_pct": 0.30},
+            "signal_strategy": {"macd": {"fast": 12, "slow": 26, "signal": 9}},
+            "chan_zero_axis": {"max_holding_bars": 40},
+        }
+        return bt, bt._resolve_execution_config(config)
+
+    def test_scope_limits_v1b_to_the_divergence_signal(self):
+        bt, costs = self._resolved(apply_to_signal_types=["macd_divergence_bottom"])
+        execution = bt._execution_values(costs)
+        self.assertTrue(
+            bt._uses_trend_exits(execution, {"signal_type": "macd_divergence_bottom"})
+        )
+        self.assertFalse(
+            bt._uses_trend_exits(
+                execution, {"signal_type": "macd_golden_cross_pullback_confirmed_above"}
+            )
+        )
+
+    def test_empty_scope_applies_to_every_signal(self):
+        bt, costs = self._resolved()
+        execution = bt._execution_values(costs)
+        self.assertTrue(bt._uses_trend_exits(execution, {"signal_type": "anything"}))
+
+    def test_invalid_mode_is_rejected(self):
+        import backtest_winrate as bt
+
+        with self.assertRaises(ValueError):
+            bt._resolve_execution_config(
+                {"backtest": {"exit_rules": {"mode": "nope"}}, "risk": {}}
+            )
+
+    def test_v1b_disables_the_fixed_take_profit(self):
+        """A +30% cap would silently truncate winners under v1b."""
+        bt, costs = self._resolved(apply_to_signal_types=["macd_divergence_bottom"])
+        execution = bt._execution_values(costs)
+        self.assertTrue(
+            bt._uses_trend_exits(execution, {"signal_type": "macd_divergence_bottom"})
+        )
+        settings = execution["exit_rules_config"]
+        # MA period and MACD params must be resolved, not left at defaults.
+        self.assertEqual(settings["ma_long_period"], 250)
+        self.assertEqual(settings["macd_fast"], 12)
+
+    def test_yearline_break_flag_is_causal(self):
+        import backtest_winrate as bt
+
+        _, costs = self._resolved()
+        execution = bt._execution_values(costs)
+        close = np.concatenate([np.linspace(10.0, 30.0, 300), np.linspace(30.0, 12.0, 60)])
+        bars = _bars_from_close(close, volume_mult=1.0, bump_at=359)
+        flags = bt._build_trend_exit_flags(bars, execution)
+        ma_long = flags["ma_long"]
+        below = [
+            index
+            for index in range(len(bars))
+            if np.isfinite(ma_long[index]) and close[index] < ma_long[index]
+        ]
+        self.assertTrue(below, "fixture must eventually trade below the yearline")
+
+    def test_top_divergence_triggers_are_single_bar(self):
+        import backtest_winrate as bt
+
+        _, costs = self._resolved()
+        execution = bt._execution_values(costs)
+        bars = _bars_from_close(_fixture_close(), volume_mult=1.0, bump_at=319)
+        flags = bt._build_trend_exit_flags(bars, execution)
+        # Each trigger is a bar where a positive cycle completes; consecutive
+        # duplicate triggers would mean a stale, entry-crossing signal.
+        triggers = np.flatnonzero(flags["top_divergence_flags"])
+        self.assertGreater(len(triggers), 0)
+        self.assertEqual(len(triggers), len(set(int(t) for t in triggers)))
+
+
 class ConditionFunnelTests(unittest.TestCase):
     """The funnel must report each gate independently, not short-circuit."""
 

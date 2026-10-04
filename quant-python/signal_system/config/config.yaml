@@ -251,6 +251,20 @@ backtest:
     min_confirmations: 0
     cross_window_bars: 5
     max_holding_bars: 40
+  # 卖出规则集 (2026-10-04 定, 依据 div_exit_variants.json 的 12 方案对照):
+  #   fixed           = 固定止盈(risk.stop_profit_pct) + 持仓超时 (旧行为)
+  #   divergence_trend = v1b: 止损 -8% + 日线MACD顶背离 + 跌破年线 + 持仓超时
+  # v1b 在 5007 只 / 2023-05 起样本上: 单笔 +2.77%/PF1.54 (旧版 +1.43%/PF1.26),
+  # 组合区间 +38%~+84% (旧版 +47%~+93%); 详见 README「卖出规则」一节。
+  # apply_to_signal_types 限定作用范围: 只有零轴+底背离研究池的入场信号用 v1b,
+  # 生产 MACD/年线等策略保持 fixed, 避免静默改写它们的历史回测口径。
+  exit_rules:
+    mode: "divergence_trend"
+    top_divergence: true
+    below_yearline: true
+    ma_long_period: 250
+    apply_to_signal_types:
+      - "macd_divergence_bottom"
 
 manual_overrides:
   regime_override: "auto"

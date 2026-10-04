@@ -24,6 +24,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -895,6 +896,66 @@ def _weekly_strong(
     return bool(float(dif.iloc[-1]) > 0 and float(dif.iloc[-1]) > float(dea.iloc[-1]))
 
 
+def _uses_trend_exits(execution: dict[str, Any], buy: dict) -> bool:
+    """True when this signal runs under the divergence_trend (v1b) rule set."""
+    if execution.get("exit_mode") != "divergence_trend":
+        return False
+    scope = execution.get("exit_rules_scope") or []
+    if not scope:
+        return True
+    return str(buy.get("signal_type") or "") in {str(item) for item in scope}
+
+
+def _build_trend_exit_flags(
+    closed: pd.DataFrame,
+    execution: dict[str, Any],
+) -> dict[str, Any]:
+    """Causal exit flags for the divergence_trend (v1b) rule set.
+
+    - below_yearline: close < MA(ma_long_period), the production yearline.
+    - top_divergence_flags: raised only on the bar where a positive MACD cycle
+      completes with a higher price high and a smaller positive area than the
+      prior cycle. A divergence formed before entry therefore cannot trigger an
+      exit, and nothing reads beyond the evaluated bar.
+    """
+    settings = execution.get("exit_rules_config", {}) or {}
+    period = max(int(settings.get("ma_long_period", 250)), 2)
+    closes = pd.to_numeric(closed["close"], errors="coerce")
+    fast = int(settings.get("macd_fast", 12))
+    slow = int(settings.get("macd_slow", 26))
+    signal = int(settings.get("macd_signal", 9))
+    macd = calculate_macd(closes, fast=fast, slow=slow, signal=signal)
+    histogram = macd["hist"].fillna(0.0).to_numpy(dtype=float)
+    close_values = closes.to_numpy(dtype=float)
+    flags = np.zeros(len(histogram), dtype=bool)
+    if len(histogram) >= 3:
+        positive = np.isfinite(histogram) & (histogram > 0)
+        changes = np.flatnonzero(np.diff(positive.astype(np.int8)) != 0) + 1
+        bounds = np.concatenate(([0], changes, [len(positive)]))
+        cycles: list[tuple[int, float, float]] = []
+        for run_start, run_stop in zip(bounds[:-1], bounds[1:]):
+            if not positive[run_start]:
+                continue
+            segment_hist = histogram[run_start:run_stop]
+            segment_close = close_values[run_start:run_stop]
+            area = float(segment_hist.sum())
+            if area <= 0 or not np.isfinite(segment_close).any():
+                continue
+            cycles.append((run_stop, area, float(np.nanmax(segment_close))))
+        for position in range(1, len(cycles)):
+            trigger, area, high = cycles[position]
+            _, prior_area, prior_high = cycles[position - 1]
+            if trigger >= len(flags):
+                break
+            flags[trigger] = bool(high > prior_high and area < prior_area)
+    return {
+        "ma_long": closes.rolling(period, min_periods=period).mean().to_numpy(dtype=float),
+        "top_divergence_flags": flags,
+        "below_yearline": bool(settings.get("below_yearline", True)),
+        "top_divergence": bool(settings.get("top_divergence", True)),
+    }
+
+
 def _top_divergence_risk(
     enriched: pd.DataFrame,
     confirmation_index: int,
@@ -1294,6 +1355,9 @@ def _execution_values(costs: dict[str, Any]) -> dict[str, Any]:
         ),
         "intrabar_conflict": str(costs.get("intrabar_conflict", "stop_first")),
         "max_holding_bars": max_holding_bars,
+        "exit_mode": str(costs.get("exit_mode", "fixed")),
+        "exit_rules_scope": list(costs.get("exit_rules_scope") or []),
+        "exit_rules_config": dict(costs.get("exit_rules_config") or {}),
         "timeout_exit_mode": timeout_exit_mode,
         "timeout_ma_period": max(
             int(chan_zero_axis.get("timeout_ma_period", 20)), 2
@@ -1499,7 +1563,10 @@ def simulate_single_trade(
         if execution["stop_loss_pct"] is not None and execution["stop_loss_pct"] > 0
         else None
     )
-    take_price = (
+    # divergence_trend (v1b) has no fixed take-profit by design: the backtest
+    # that selected it traded only 止损/顶背离/跌破年线/持仓超时, so a +30% cap
+    # here would silently change the strategy and truncate the winners.
+    take_price = None if _uses_trend_exits(execution, buy) else (
         entry_price * (1 + execution["take_profit_pct"])
         if execution["take_profit_pct"] is not None and execution["take_profit_pct"] > 0
         else None
@@ -1514,6 +1581,11 @@ def simulate_single_trade(
     protection_reason: str | None = None
     pending_exit: tuple[str, int] | None = None
     price_limit_deferred_bars = 0
+    # v1b trend exits: yearline break + MACD area top divergence. Every flag is
+    # a function of bars up to and including the bar being evaluated.
+    trend_exits = None
+    if _uses_trend_exits(execution, buy):
+        trend_exits = _build_trend_exit_flags(closed, execution)
     for index in range(entry_idx, len(closed)):
         if index > entry_idx and pending_exit is not None:
             reason, trigger_idx = pending_exit
@@ -1646,6 +1718,21 @@ def simulate_single_trade(
                     index, exit_session, execution, market_context,
                     price_limit_deferred_bars
                 ), None
+        if trend_exits is not None and pending_exit is None and index > entry_idx:
+            close_now = float(closed.iloc[index]["close"])
+            ma_long_now = float(trend_exits["ma_long"][index])
+            if (
+                trend_exits["below_yearline"]
+                and np.isfinite(ma_long_now)
+                and close_now < ma_long_now
+            ):
+                pending_exit = ("below_yearline", index)
+            elif (
+                trend_exits["top_divergence"]
+                and index < len(trend_exits["top_divergence_flags"])
+                and bool(trend_exits["top_divergence_flags"][index])
+            ):
+                pending_exit = ("top_divergence", index)
         if pending_exit is None and index in sells_by_index and index >= entry_idx:
             pending_exit = (sells_by_index[index], index)
         if (
@@ -2605,6 +2692,35 @@ def _resolve_execution_config(config: dict[str, Any]) -> dict[str, Any]:
     risk = config.get("risk", {})
     result["stop_loss_pct"] = float(risk.get("stop_loss_pct", 0.08))
     result["take_profit_pct"] = float(risk.get("stop_profit_pct", 0.30))
+    # 卖出规则集: "fixed" = 固定止盈 + 持仓超时 (旧行为);
+    # "divergence_trend" = v1b (止损 -8% + 日线MACD顶背离 + 跌破年线 + 持仓超时)。
+    exit_rules = result.get("exit_rules") or {}
+    mode = str(exit_rules.get("mode", "fixed")).strip().lower()
+    if mode not in {"fixed", "divergence_trend"}:
+        raise ValueError(
+            "backtest.exit_rules.mode must be 'fixed' or 'divergence_trend', "
+            f"got {mode!r}"
+        )
+    result["exit_mode"] = mode
+    # 作用范围: 空列表 = 全部信号; 否则仅列出的 signal_type 使用该卖出规则,
+    # 其余信号保持 fixed, 避免静默改写其它策略的历史回测口径。
+    scope = exit_rules.get("apply_to_signal_types") or []
+    if not isinstance(scope, (list, tuple)):
+        raise ValueError(
+            "backtest.exit_rules.apply_to_signal_types must be a list, "
+            f"got {type(scope).__name__}"
+        )
+    result["exit_rules_scope"] = [str(item) for item in scope]
+    strategy_macd = (config.get("signal_strategy", {}) or {}).get("macd", {}) or {}
+    result["exit_rules_config"] = {
+        "top_divergence": bool(exit_rules.get("top_divergence", True)),
+        "below_yearline": bool(exit_rules.get("below_yearline", True)),
+        "ma_long_period": max(int(exit_rules.get("ma_long_period", 250)), 2),
+        "ma_long_slope_bars": max(int(exit_rules.get("ma_long_slope_bars", 5)), 1),
+        "macd_fast": max(int(strategy_macd.get("fast", 12)), 2),
+        "macd_slow": max(int(strategy_macd.get("slow", 26)), 3),
+        "macd_signal": max(int(strategy_macd.get("signal", 9)), 2),
+    }
     result.setdefault("intrabar_conflict", "stop_first")
     protection = dict(result.get("profit_protection", {}) or {})
     protection.setdefault("mode", "none")
