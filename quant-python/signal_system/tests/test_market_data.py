@@ -582,8 +582,10 @@ class TradeCalendarTodayTests(unittest.TestCase):
 
             return X()
 
-        with patch("data.market_data.now_shanghai", new=fake_now):
-            return today
+        clock = patch("data.market_data.now_shanghai", new=fake_now)
+        clock.start()
+        self.addCleanup(clock.stop)
+        return today
 
     def test_weekday_missing_today_is_added(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -633,6 +635,28 @@ class TradeCalendarTodayTests(unittest.TestCase):
             client._save_cache("trade_calendar", frame)
             result = client.get_trade_dates()
             self.assertIn(date(2026, 9, 17), result)
+
+
+class StrictCalendarTests(unittest.TestCase):
+    _client = TradeCalendarTodayTests._client
+    _set_today = TradeCalendarTodayTests._set_today
+
+    def test_strict_calendar_does_not_invent_a_holiday_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            self._set_today("2026-10-05")
+            frame = pd.DataFrame({"trade_date": pd.to_datetime(["2026-09-30", "2026-10-09"])})
+            client._save_cache("trade_calendar", frame)
+            self.assertNotIn(date(2026, 10, 5), client.get_trade_dates(strict=True))
+
+    def test_strict_calendar_refreshes_stale_history_without_weekday_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._client(directory)
+            self._set_today("2026-10-05")
+            frame = pd.DataFrame({"trade_date": pd.to_datetime(["2026-09-30"])})
+            client._save_cache("trade_calendar", frame)
+            with patch.object(client, "_fetch_trade_calendar", return_value=frame):
+                self.assertNotIn(date(2026, 10, 5), client.get_trade_dates(strict=True))
 
 
 if __name__ == "__main__":

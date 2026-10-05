@@ -1,249 +1,34 @@
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { CalendarClock, Play, Save } from "lucide-react";
-
-interface ScheduleData {
-  rows: Array<{
-    id: number;
-    kind: "daily_scan" | "monitor_cycle";
-    time: string;
-    interval_seconds: number;
-    fixed_times: string[];
-    trading_days_only: boolean;
-    enabled: boolean;
-  }>;
-  calendar: { is_trading_day: boolean; is_trading_session: boolean; now: string };
-  next_runs: Record<string, string | null>;
-}
-
+import { AnalysisScopePicker } from "@/components/analysis-scope-picker";
+import { DEFAULT_ANALYSIS_SCOPE } from "@/lib/analysis-types";
+import type { ScheduleRow } from "@/lib/types";
+interface ScheduleData { rows: ScheduleRow[]; calendar: { is_trading_day: boolean; is_trading_session: boolean }; next_runs: Record<string,string|null> }
+const definitions = [
+  { kind: "daily_scan", title: "每日三策略筛选", description: "指定时刻筛选全市场并更新三个指标池，同日只触发一次。" },
+  { kind: "monitor_cycle", title: "盘中间隔分析", description: "交易时段每隔 N 分钟分析所选范围，每只股票生成五页签报告。" },
+  { kind: "monitor_fixed", title: "固定时点分析", description: "独立于盘中间隔，可设置多个时点；超过五分钟的延迟会记录为错过。" },
+] as const;
 export default function SchedulePage() {
-  const [data, setData] = useState<ScheduleData | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [running, setRunning] = useState(false);
-
-  const runNow = useCallback(async (kind: "daily-scan" | "monitor-once") => {
-    setRunning(true);
-    try {
-      const response = await fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, notify: true }),
-      });
-      const result = (await response.json().catch(() => ({}))) as { error?: string; jobId?: number };
-      if (!response.ok) throw new Error(result.error || "启动失败");
-      toast.success(`任务已启动 #${result.jobId ?? ""}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "启动失败");
-    } finally {
-      setRunning(false);
-    }
-  }, []);
-
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/schedule");
-      if (!response.ok) throw new Error("加载定时配置失败");
-      setData((await response.json()) as ScheduleData);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载定时配置失败");
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    const timer = setInterval(() => void load(), 30000);
-    return () => clearInterval(timer);
-  }, [load]);
-
-  const patchRow = (kind: string, patch: Partial<ScheduleData["rows"][number]>) => {
-    setData((prev) =>
-      prev ? { ...prev, rows: prev.rows.map((row) => (row.kind === kind ? { ...row, ...patch } : row)) } : prev
-    );
-  };
-
-  const toggleFixedTime = (time: string) => {
-    const current = data?.rows.find((row) => row.kind === "monitor_cycle")?.fixed_times ?? [];
-    const next = current.includes(time) ? current.filter((item) => item !== time) : [...current, time].sort();
-    patchRow("monitor_cycle", { fixed_times: next });
-  };
-
-  const save = async () => {
-    if (!data) return;
-    setSaving(true);
-    try {
-      const response = await fetch("/api/schedule", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: data.rows }),
-      });
-      const result = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(result.error || "保存失败");
-      toast.success("定时配置已保存并生效");
-      void load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存失败");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const daily = data?.rows.find((row) => row.kind === "daily_scan");
-  const monitor = data?.rows.find((row) => row.kind === "monitor_cycle");
-
-  return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">定时任务</h1>
-          <p className="text-sm text-muted-foreground">
-            由 Web 进程内调度器触发（每 15 秒检查一次），替代 CLI 的 monitor 常驻循环；请勿与 CLI monitor 同时开启。
-          </p>
-        </div>
-        <Button onClick={() => void save()} disabled={saving || !data}>
-          <Save className="size-4" /> {saving ? "保存中..." : "保存并生效"}
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>每日扫描</CardTitle>
-          <CardDescription>全市场扫描日线零轴金叉，更新指标股票池；指定时刻执行（同日只跑一次）。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={daily?.enabled ?? false}
-                  onCheckedChange={(value) => patchRow("daily_scan", { enabled: value })}
-                />
-                <Label>启用</Label>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>每日扫描时刻（HH:MM，Asia/Shanghai）</Label>
-                <Input type="time" className="w-32" value={daily?.time ?? "04:00"} onChange={(event) => patchRow("daily_scan", { time: event.target.value })} />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={daily?.trading_days_only ?? true}
-                  onCheckedChange={(value) => patchRow("daily_scan", { trading_days_only: value })}
-                />
-                <Label>仅交易日</Label>
-              </div>
-            </div>
-            <Button variant="secondary" onClick={() => void runNow("daily-scan")} disabled={running}>
-              <Play className="size-4" /> 立即执行一次
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>盘中监控</CardTitle>
-          <CardDescription>交易时段（9:30-11:30、13:00-15:00）运行监控循环；默认按固定时点执行，也可改为每 N 分钟。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={monitor?.enabled ?? false}
-                  onCheckedChange={(value) => patchRow("monitor_cycle", { enabled: value })}
-                />
-                <Label>启用</Label>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>每 N 分钟执行（备选，固定时点优先）</Label>
-                <Input
-                  type="number"
-                  min={10}
-                  className="w-32"
-                  value={monitor ? Math.round(monitor.interval_seconds / 60) : 60}
-                  onChange={(event) =>
-                    patchRow("monitor_cycle", {
-                      interval_seconds: Math.max(10, Number(event.target.value) || 0) * 60,
-                    })
-                  }
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={monitor?.trading_days_only ?? true}
-                  onCheckedChange={(value) => patchRow("monitor_cycle", { trading_days_only: value })}
-                />
-                <Label>仅交易日</Label>
-              </div>
-            </div>
-            <Button variant="secondary" onClick={() => void runNow("monitor-once")} disabled={running}>
-              <Play className="size-4" /> 立即执行一次
-            </Button>
-          </div>
-          <div className="flex flex-col gap-2 border-t pt-3">
-            <Label>固定时点（可选）</Label>
-            <div className="flex items-center gap-2">
-              {["10:30", "13:30", "14:30"].map((time) => (
-                <Button
-                  key={time}
-                  type="button"
-                  size="sm"
-                  variant={(monitor?.fixed_times ?? []).includes(time) ? "default" : "outline"}
-                  onClick={() => toggleFixedTime(time)}
-                >
-                  {time}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              勾选后盘中检测改为按这些固定时点各执行一次（不再按间隔执行）；全部取消勾选则恢复为间隔执行。
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>运行状态</CardTitle>
-          <CardDescription>基于桥接 calendar 判断，交易日历以数据源为准，失败时回退周一至周五。</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-sm">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="text-muted-foreground">当前：</span>
-            <Badge variant={data?.calendar.is_trading_day ? "default" : "outline"}>
-              {data?.calendar.is_trading_day ? "交易日" : "非交易日"}
-            </Badge>
-            <Badge variant={data?.calendar.is_trading_session ? "default" : "secondary"}>
-              {data?.calendar.is_trading_session ? "交易时段内" : "非交易时段"}
-            </Badge>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-muted-foreground">下次运行（估算）：</span>
-            <div className="flex gap-6">
-              <span>每日扫描：<code className="font-mono text-xs">{data?.next_runs.daily_scan ?? "已停用"}</code></span>
-              <span>盘中监控：<code className="font-mono text-xs">{data?.next_runs.monitor_cycle ?? "已停用"}</code></span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CalendarClock className="size-4" />
-            最近一次任务与结果请到“结果”页查看；服务重启后调度器自动恢复（同日每日扫描不会重复触发）。
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  const [data,setData]=useState<ScheduleData|null>(null);
+  const [saving,setSaving]=useState(false);
+  const [running,setRunning]=useState<string|null>(null);
+  const [fixedText,setFixedText]=useState("");
+  const load=async()=>{ const response=await fetch("/api/schedule"); if(!response.ok) throw new Error("加载定时任务失败"); const value=await response.json() as ScheduleData; setData(value); setFixedText(value.rows.find(row=>row.kind==="monitor_fixed")?.fixed_times.join(", ") ?? "15:20"); };
+  useEffect(()=>{ const timer=setTimeout(()=>void load().catch(error=>toast.error(String(error))),0); return()=>clearTimeout(timer); },[]);
+  const patch=(kind:string,patch:Partial<ScheduleRow>)=>setData(current=>current?{...current,rows:current.rows.map(row=>row.kind===kind?{...row,...patch}:row)}:current);
+  const save=async()=>{ if(!data)return; setSaving(true); try { const rows=data.rows.map(row=>row.kind==="monitor_fixed"?{...row,fixed_times:fixedText.split(/[,，;；\s]+/).filter(Boolean)}:row); const response=await fetch("/api/schedule",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({rows})}); const result=await response.json(); if(!response.ok)throw new Error(result.error); setData(result); toast.success("定时设置已保存"); }catch(error){toast.error(String(error));}finally{setSaving(false);} };
+  const run=async(row:ScheduleRow)=>{setRunning(row.kind);try {const response=await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:row.kind==="daily_scan"?"daily-scan":"monitor-once",scope:row.scope,notify:true})});const result=await response.json();if(!response.ok)throw new Error(result.error);toast.success(`任务 #${result.jobId} 已启动`);}catch(error){toast.error(String(error));}finally{setRunning(null);} };
+  return <div className="max-w-5xl space-y-4"><div className="flex items-center justify-between"><div><h1 className="text-xl font-semibold">定时任务</h1><p className="mt-1 text-sm text-muted-foreground">所有时刻均为北京时间 · {data?.calendar.is_trading_day?"今天是交易日":"以交易日历为准"}</p></div><Button onClick={()=>void save()} disabled={saving||!data}>{saving?"保存中…":"保存设置"}</Button></div>
+    {definitions.map(definition=>{const row=data?.rows.find(row=>row.kind===definition.kind);return <section key={definition.kind} className="space-y-4 rounded-lg border bg-card p-4"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">{definition.title}</h2><p className="mt-1 text-sm text-muted-foreground">{definition.description}</p></div><div className="flex items-center gap-2"><Label htmlFor={`enable-${definition.kind}`}>启用</Label><Switch id={`enable-${definition.kind}`} disabled={!row||saving} checked={row?.enabled??false} onCheckedChange={enabled=>patch(definition.kind,{enabled})}/></div></div>
+    <div className="flex flex-wrap items-end gap-4">{definition.kind==="daily_scan"?<div><Label htmlFor="daily-time">执行时刻</Label><Input id="daily-time" type="time" className="w-36" value={row?.time??"15:20"} onChange={event=>patch(definition.kind,{time:event.target.value})}/></div>:definition.kind==="monitor_cycle"?<div><Label htmlFor="interval-minutes">间隔（分钟）</Label><Input id="interval-minutes" className="w-36" type="number" min="1" max="1440" value={(row?.interval_seconds??300)/60} onChange={event=>patch(definition.kind,{interval_seconds:Number(event.target.value)*60})}/></div>:<div className="min-w-72"><Label htmlFor="fixed-times">固定时点（逗号分隔）</Label><Input id="fixed-times" value={fixedText} onChange={event=>setFixedText(event.target.value)} placeholder="10:30, 14:30, 15:20"/></div>}
+    <label className="flex h-9 items-center gap-2 text-sm"><input type="checkbox" checked={row?.trading_days_only??true} onChange={event=>patch(definition.kind,{trading_days_only:event.target.checked})}/>仅交易日</label><Button variant="outline" disabled={!row||running!==null} onClick={()=>row&&void run(row)}>{running===definition.kind?"启动中…":"执行一次"}</Button></div>
+    {definition.kind!=="daily_scan"&&<AnalysisScopePicker value={row?.scope??DEFAULT_ANALYSIS_SCOPE} onChange={scope=>patch(definition.kind,{scope})}/>}
+    <p className="border-t pt-3 text-xs text-muted-foreground">下次预计：{data?.next_runs[definition.kind]??"未启用"} · 实际执行以交易日历和任务队列为准</p></section>;})}
+  </div>;
 }

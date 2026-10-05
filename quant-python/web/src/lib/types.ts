@@ -43,10 +43,11 @@ export interface PendingImport {
 
 export interface ScheduleRow {
   id: number;
-  kind: "daily_scan" | "monitor_cycle";
+  kind: "daily_scan" | "monitor_cycle" | "monitor_fixed";
   time: string;
   interval_seconds: number;
   fixed_times: string[];
+  scope?: import("./analysis-types").AnalysisScope;
   trading_days_only: boolean;
   enabled: boolean;
   updated_at: string;

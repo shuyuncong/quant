@@ -1,4 +1,5 @@
 "use client";
+import { ScanProgress } from "@/components/scan-progress";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -36,12 +37,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   CandidateTable,
   type DivergenceCandidateRow,
@@ -153,6 +148,7 @@ export default function PoolPage() {
   const [newName, setNewName] = useState("");
   const [dialog, setDialog] = useState<ImportDialogState>(EMPTY_DIALOG);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [scanStrategy, setScanStrategy] = useState<PoolType | "all">("all");
   const [poolType, setPoolType] = useState<PoolType>("macd_zero_axis");
   const [poolData, setPoolData] = useState<Partial<Record<PoolType, PoolData>>>({});
   const [observedData, setObservedData] = useState<ObservedData>({
@@ -272,7 +268,7 @@ export default function PoolPage() {
     }
   };
 
-  const runScan = async (mode: "watchlist" | "all_a", scanKind: PoolType) => {
+  const runScan = async (mode: "watchlist" | "all_a", scanKind: PoolType | "all") => {
     const key = `${scanKind}:${mode}`;
     setScanning(key);
     try {
@@ -288,11 +284,11 @@ export default function PoolPage() {
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string; jobId?: number };
       if (!response.ok) throw new Error(data.error || "启动筛选失败");
-      const label = POOL_LABEL[scanKind];
+      const label = scanKind === "all" ? "三策略" : POOL_LABEL[scanKind];
       toast.success(
         mode === "all_a" ? `全市场${label}筛选已启动，可在结果页查看进度` : `自选池${label}筛选已启动，可在结果页查看进度`
       );
-      setTimeout(() => void loadPool(scanKind), 8000);
+      setTimeout(() => { for (const type of Object.keys(POOL_LABEL) as PoolType[]) void loadPool(type); }, 8000);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "启动筛选失败");
     } finally {
@@ -526,10 +522,19 @@ export default function PoolPage() {
             </TabsList>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 flex flex-wrap items-center gap-3 border-b pb-3">
+              <label className="text-sm" htmlFor="scan-strategy">选择策略</label>
+              <select id="scan-strategy" className="h-9 rounded border bg-background px-3 text-sm" value={scanStrategy} onChange={event => setScanStrategy(event.target.value as PoolType | "all")}>
+                <option value="all">全部三策略</option>{(Object.entries(POOL_LABEL) as [PoolType,string][]).map(([id,name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+              <Button disabled={scanning !== null} onClick={() => void runScan("all_a", scanStrategy)}><Filter className="size-4" />{scanning ? "启动中…" : "全市场筛选"}</Button>
+              <span className="text-xs text-muted-foreground">筛选完成后更新对应指标池</span>
+            </div>
+            <ScanProgress onComplete={load} />
             <TabsContent value="macd_zero_axis">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <p className="max-w-md text-xs text-muted-foreground">
-                  全市场或自选池日线零轴金叉筛选结果，保留{" "}
+                  全市场日线零轴金叉筛选结果，保留{" "}
                   {poolData.macd_zero_axis?.ttl_business_days ?? 5} 个交易日，最多{" "}
                   {poolData.macd_zero_axis?.capacity ?? 100} 只。后续监控循环会对其做缠论买卖点分析。
                 </p>
@@ -540,49 +545,6 @@ export default function PoolPage() {
                   <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
                     失效/过期（{poolData.macd_zero_axis?.expiredCount ?? 0}）
                   </Button>
-                  <TooltipProvider delay={300}>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={scanning !== null}
-                            onClick={() => void runScan("watchlist", "macd_zero_axis")}
-                          >
-                            <Filter className="size-3.5" /> 筛选自选池
-                          </Button>
-                        }
-                      />
-                      <TooltipContent side="bottom">
-                        <p className="font-medium">筛选自选池</p>
-                        <p className="mt-0.5 text-background/70">
-                          只扫描自选池（config 的 monitor.watchlist）里的股票：逐只拉日线算 MACD，
-                          当日出现「零轴金叉」的按 0 轴位置打分写入候选池。只增不改、不淘汰，也不推送通知。
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            size="sm"
-                            disabled={scanning !== null}
-                            onClick={() => void runScan("all_a", "macd_zero_axis")}
-                          >
-                            <Filter className="size-3.5" /> 全市场筛选
-                          </Button>
-                        }
-                      />
-                      <TooltipContent side="bottom">
-                        <p className="font-medium">全市场筛选</p>
-                        <p className="mt-0.5 text-background/70">
-                          扫描全 A 股：首次运行分批回填日线历史（每轮最多 500 只），整轮扫完才把
-                          不再入选/过期的移入「失效/过期」池。通常要多跑几轮才覆盖完整，不推送通知。
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 </div>
               </div>
               <CandidateTable
@@ -631,21 +593,6 @@ export default function PoolPage() {
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
                     失效/过期（{poolData.macd_divergence?.expiredCount ?? 0}）
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={scanning !== null}
-                    onClick={() => void runScan("watchlist", "macd_divergence")}
-                  >
-                    <Filter className="size-3.5" /> 筛选自选池
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={scanning !== null}
-                    onClick={() => void runScan("all_a", "macd_divergence")}
-                  >
-                    <Filter className="size-3.5" /> 全市场筛选
                   </Button>
                 </div>
               </div>
@@ -698,21 +645,6 @@ export default function PoolPage() {
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setExpiredOpen(true)}>
                     失效/过期（{poolData.yearline_pullback?.expiredCount ?? 0}）
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={scanning !== null}
-                    onClick={() => void runScan("watchlist", "yearline_pullback")}
-                  >
-                    <Filter className="size-3.5" /> 筛选自选池
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={scanning !== null}
-                    onClick={() => void runScan("all_a", "yearline_pullback")}
-                  >
-                    <Filter className="size-3.5" /> 全市场筛选
                   </Button>
                 </div>
               </div>

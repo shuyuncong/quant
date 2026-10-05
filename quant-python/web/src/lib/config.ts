@@ -138,6 +138,13 @@ export async function clearSetting(key: string): Promise<void> {
   await deleteSetting(key);
 }
 
+/** Freeze only engine rules; connection details and credentials are never persisted in jobs. */
+export async function freezeEngineConfig(): Promise<Record<string, unknown>> {
+  const { config } = await getEffectiveConfig(true);
+  const keys = ["signal_strategy", "macd_divergence", "risk", "backtest", "position", "trading_limits", "stock_pool", "scan", "candidate_pool", "yearline", "monitor", "entry_filters", "market_regime", "regime"];
+  return Object.fromEntries(keys.filter(key => config[key] !== undefined).map(key => [key, structuredClone(config[key])]));
+}
+
 export async function getSettingValue(key: string): Promise<unknown> {
   return getSetting(key);
 }
@@ -154,6 +161,14 @@ interface FieldDef {
 }
 
 const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
+  "macd_divergence.enabled": { type: "boolean" },
+  "macd_divergence.min_volume_ratio": { type: "number", min: 0.1, max: 20 },
+  "macd_divergence.volume_window": { type: "number", min: 1, max: 250, integer: true },
+  "macd_divergence.long_ma_slope_window": { type: "number", min: 1, max: 250, integer: true },
+  "macd_divergence.min_macd_segment_bars": { type: "number", min: 1, max: 50, integer: true },
+  "risk.stop_loss_pct": { type: "number", min: 0.001, max: 0.99 },
+  "risk.stop_profit_pct": { type: "number", min: 0.001, max: 10 },
+  "backtest.chan_zero_axis.max_holding_bars": { type: "number", min: 1, max: 2000, integer: true },
   "signal_strategy.chan.min_bi_bars": { type: "number", min: 2 },
   "signal_strategy.chan.divergence_ratio": { type: "number", min: 0, max: 1 },
   "signal_strategy.chan.fresh_signal_bars": { type: "number", min: 1 },

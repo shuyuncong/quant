@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (!(kind in VALID_KINDS)) {
     return NextResponse.json({ error: "不支持的任务类型" }, { status: 422 });
   }
-  if (kind === "analyze") {
+  if (kind === "analyze" && body.symbols !== undefined) {
     const symbols = Array.isArray(body.symbols) ? (body.symbols as unknown[]).map(String) : [];
     if (symbols.length === 0) {
       return NextResponse.json({ error: "analyze 需要至少一个股票代码" }, { status: 422 });
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   const payload: Record<string, unknown> = {
     notify: body.notify !== false,
   };
+  if (body.scope !== undefined) payload.scope = body.scope;
   if (kind === "dispatch-outbox") {
     // 手动补投：把第 5 次失败终止的投递也重置回队列重试；调度器自动派送不重置。
     payload.requeue_failed = true;
@@ -43,8 +44,8 @@ export async function POST(request: Request) {
       );
     }
     if (universeMode) payload.overrides = { scan: { universe_mode: universeMode } };
-    const scanKind = String(body.scan_kind ?? "macd_zero_axis");
-    if (!["macd_zero_axis", "yearline_pullback", "macd_divergence"].includes(scanKind)) {
+    const scanKind = String(body.scan_kind ?? "all");
+    if (!["all", "macd_zero_axis", "yearline_pullback", "macd_divergence"].includes(scanKind)) {
       return NextResponse.json(
         { error: "scan 的 scan_kind 仅支持 macd_zero_axis / yearline_pullback / macd_divergence" },
         { status: 422 }
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
     payload.scan_kind = scanKind;
   }
   if (Array.isArray(body.symbols)) payload.symbols = (body.symbols as unknown[]).map(String);
-  const jobId = await startJob(kind, payload);
-  return NextResponse.json({ ok: true, jobId }, { status: 202 });
+  try {
+    const jobId = await startJob(kind, payload);
+    return NextResponse.json({ ok: true, jobId }, { status: 202 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "任务启动失败" }, { status: 422 });
+  }
 }

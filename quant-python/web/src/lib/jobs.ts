@@ -271,6 +271,14 @@ async function persistSymbolNames(jobId: number, payload: Record<string, unknown
 
 /** Create a job row and run the bridge command in the background. Returns the job id immediately. */
 export async function startJob(kind: JobKind, payload: Record<string, unknown>): Promise<number> {
+  if (["scan", "daily-scan"].includes(kind)) {
+    const { startScanBatch } = await import("./scan-service");
+    return startScanBatch(kind, payload);
+  }
+  if (["analyze", "monitor-once", "monitor-cycle"].includes(kind)) {
+    const { startAnalysisBatch } = await import("./analysis-service");
+    return startAnalysisBatch(kind, payload);
+  }
   if (PORTFOLIO_KINDS.includes(kind)) {
     // 报告任务统一携带用户持仓与账户总资金，供引擎报告和 AI 解读（含调度器触发的任务）参考。
     payload.holdings = await listHoldings();

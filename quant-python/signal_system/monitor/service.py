@@ -204,6 +204,9 @@ class SignalMonitor:
         )
         try:
             index_bars = self.market.get_index_bars(index_code, limit=300)
+            if getattr(self, "analysis_version", 1) == 2 and getattr(self, "analysis_cutoff", None):
+                from data.snapshot import closed_bars_as_of
+                index_bars = closed_bars_as_of(index_bars, "1d", self.analysis_cutoff)
             analysis = self.analyzer.analyze(index_code, "市场指数", {"1d": index_bars})
             daily_report = analysis.get("timeframes", {}).get("1d", {})
             indicators = daily_report.get("indicators", {})
@@ -442,6 +445,11 @@ class SignalMonitor:
                     self.timeframes,
                     limit=int(self.config.get("monitor", {}).get("bar_limit", 300)),
                 )
+                if getattr(self, "analysis_version", 1) == 2 and getattr(self, "analysis_cutoff", None):
+                    from data.snapshot import closed_bars_as_of
+                    # All consumers see the same cutoff, including the multi-timeframe LLM context.
+                    bars = {timeframe: closed_bars_as_of(frame, timeframe, self.analysis_cutoff)
+                            for timeframe, frame in bars.items()}
                 analysis = self.analyzer.analyze(
                     symbol,
                     names.get(symbol, ""),
@@ -450,6 +458,42 @@ class SignalMonitor:
                     regime=market_regime,
                 )
                 event_objects = analysis.pop("event_objects")
+                if getattr(self, "analysis_version", 1) == 2:
+                    from strategy.registry import evaluate_strategies
+                    holding = next((row for row in getattr(self, "portfolio_context", {}).get("holdings", []) if row.get("symbol") == symbol), None)
+                    analysis["strategies"] = evaluate_strategies(
+                        bars.get("1d", pd.DataFrame()), self.config, holding,
+                        as_of=getattr(self, "analysis_cutoff", None),
+                    )
+                    # Research pools use qfq history; keep the same input convention here.
+                    try:
+                        adjusted = self._yearline_market_client().get_bars(symbol, "1d", limit=300)
+                        cutoff = getattr(self, "analysis_cutoff", None)
+                        if cutoff and not adjusted.empty:
+                            from data.snapshot import closed_bars_as_of
+                            adjusted = closed_bars_as_of(adjusted, "1d", cutoff)
+                        adjusted_holding = dict(holding) if holding else None
+                        if adjusted_holding:
+                            adjusted_holding["cost_price"] = 0  # Unknown until a same-date conversion is available.
+                        raw_daily = bars.get("1d", pd.DataFrame())
+                        if adjusted_holding and not adjusted.empty and not raw_daily.empty:
+                            from strategy.yearline import prepare_yearline_bars
+                            raw_closed = prepare_yearline_bars(raw_daily)
+                            adjusted_closed = prepare_yearline_bars(adjusted)
+                            if not raw_closed.empty and not adjusted_closed.empty:
+                                comparable = raw_closed[raw_closed.datetime == adjusted_closed.datetime.iloc[-1]]
+                                if not comparable.empty and float(comparable.close.iloc[-1]) > 0:
+                                    ratio = float(adjusted_closed.close.iloc[-1]) / float(comparable.close.iloc[-1])
+                                    adjusted_holding["cost_price"] = float(holding.get("cost_price", 0)) * ratio
+                        research = evaluate_strategies(adjusted, self.config, adjusted_holding,
+                            as_of=cutoff, strategy_ids=["yearline_pullback", "macd_divergence"])
+                        for result in research:
+                            result["warnings"].append("使用前复权日线，与该指标池口径一致；持仓成本按同日复权比例换算后比较，无同日价格时成本条件为未知。")
+                        analysis["strategies"] = [analysis["strategies"][0], *research]
+                    except Exception as exc:
+                        for result in analysis["strategies"][1:]:
+                            result.update(status="error", buy=False, sell=None)
+                            result["warnings"].append(f"前复权行情不可用：{exc}")
                 if only_daily_above_cross:
                     # 日线监控推送两级 MACD 事件：金叉观察预警，以及评分达标的回落确认。
                     daily_report = analysis.get("timeframes", {}).get("1d", {})
@@ -498,6 +542,9 @@ class SignalMonitor:
             "results": results,
         }
         report.update(report_meta or {})
+        if getattr(self, "analysis_version", 1) == 2:
+            report["schema_version"] = 2
+            report["portfolio_context"] = getattr(self, "portfolio_context", {})
         report["output_file"] = str(self._save_report("analysis", report))
         return report
 
@@ -508,8 +555,11 @@ class SignalMonitor:
         report_path: str = "",
         confirmed_at: str | None = None,
         action_summary: str = "",
+        notification_kind: str = "ai_analysis",
     ) -> dict[str, Any]:
-        if not self.push_ai_analysis:
+        notification_kind = "candidate_pool" if notification_kind == "candidate_pool" else "ai_analysis"
+        enabled = self.push_candidate_pool if notification_kind == "candidate_pool" else self.push_ai_analysis
+        if not enabled:
             return {"enqueued": 0, "delivery": {"delivered": 0, "failed": 0}, "skipped": "disabled"}
         channels = self.notifier.active_channels()
         if not channels:
@@ -519,14 +569,14 @@ class SignalMonitor:
             symbol="SYSTEM",
             name=title.strip() or "AI自动解读",
             timeframe="report",
-            signal_type="ai_analysis",
+            signal_type=notification_kind,
             side="info",
             price=0.0,
             structure_time=timestamp,
             confirmed_at=timestamp,
             score=0,
             evidence={
-                "notification_kind": "ai_analysis",
+                "notification_kind": notification_kind,
                 "content": content.strip()[:12000],
                 "report_path": report_path,
                 "action_summary": action_summary,
@@ -1009,6 +1059,15 @@ class SignalMonitor:
             eligible_total = max(0, total - len(ineligible))
             coverage = 1.0 if eligible_total == 0 else len(successful_symbols) / eligible_total
             completed_round = len(successful_symbols) >= eligible_total
+        if universe_mode == "all_a" and not bootstrap_complete:
+            # The final publication must contain all successful batches, not just the last.
+            cached = json.loads(self.store.get_state("daily_pool_cache", "[]") or "[]")
+            universe_symbols = {normalize_symbol(row["code"]) for row in rows}
+            combined = {normalize_symbol(item["symbol"]): item for item in cached
+                        if normalize_symbol(item["symbol"]) in universe_symbols}
+            combined.update({normalize_symbol(item["symbol"]): item for item in candidates})
+            candidates = list(combined.values())
+            self.store.set_state("daily_pool_cache", json.dumps(candidates, ensure_ascii=False, default=str))
         if universe_mode == "all_a" and completed_round:
             # 全市场轮询完成：未再入选的股票移入失效/过期池
             self.store.sync_candidates(
@@ -1016,7 +1075,8 @@ class SignalMonitor:
                 ttl_business_days=self.candidate_ttl,
                 capacity=self.candidate_limit,
             )
-        else:
+            self.store.set_state("daily_pool_cache", "[]")
+        elif universe_mode == "watchlist":
             self.store.upsert_candidates(
                 candidates,
                 ttl_business_days=self.candidate_ttl,
@@ -1255,7 +1315,7 @@ class SignalMonitor:
                 self.store.set_state("yearline_bootstrap_success", "[]")
                 self.store.set_state("yearline_bootstrap_deferred", "{}")
                 self.store.set_state("yearline_pool_cache", "[]")
-        else:
+        elif universe_mode == "watchlist":
             self.store.upsert_candidates(
                 candidates,
                 ttl_business_days=self.candidate_ttl,
@@ -1512,7 +1572,7 @@ class SignalMonitor:
             self.store.set_state("macd_divergence_bootstrap_success", "[]")
             self.store.set_state("macd_divergence_bootstrap_deferred", "{}")
             self.store.set_state("macd_divergence_pool_cache", "[]")
-        else:
+        elif universe_mode == "watchlist":
             self.store.upsert_candidates(
                 candidates,
                 ttl_business_days=self.candidate_ttl,

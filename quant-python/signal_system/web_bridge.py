@@ -248,7 +248,17 @@ def _cmd_analyze(config_path: str, payload: dict[str, Any]) -> int:
         return _emit_error("analyze 需要 symbols", 2)
     notify = bool(payload.get("notify", True))
     monitor = _make_monitor(config_path, payload.get("overrides"))
-    report = monitor.analyze_symbols(symbols, notify=notify)
+    if payload.get("analysis_version") == 2:
+        from trading.snapshot_gate import SnapshotTradeGate
+        monitor.analysis_version = 2
+        monitor.portfolio_context = payload.get("portfolio_context") or {}
+        monitor.analysis_cutoff = payload.get("analysis_cutoff")
+        monitor.trade_gate = SnapshotTradeGate(monitor.store, monitor.config, monitor.portfolio_context)
+        if monitor.portfolio_context.get("total_capital"):
+            monitor.account_equity = float(monitor.portfolio_context["total_capital"])
+        if "1d" not in monitor.timeframes:
+            monitor.timeframes.append("1d")
+    report = monitor.analyze_symbols(symbols, notify=notify, only_daily_above_cross=bool(payload.get("only_daily_above_cross", False)))
     return _emit({"report": report})
 
 
@@ -256,6 +266,9 @@ def _cmd_scan(config_path: str, payload: dict[str, Any]) -> int:
     notify = bool(payload.get("notify", True))
     scan_kind = str(payload.get("scan_kind") or "macd_zero_axis").strip()
     monitor = _make_monitor(config_path, payload.get("overrides"))
+    if payload.get("scan_run_id"):
+        from monitor.scan_run import prepare_scan_run
+        prepare_scan_run(monitor, scan_kind, str(payload["scan_run_id"]))
     if scan_kind == "yearline_pullback":
         report = monitor.scan_yearline(notify=notify)
     elif scan_kind == "macd_divergence":
@@ -346,6 +359,7 @@ def _cmd_notify_summary(config_path: str, payload: dict[str, Any]) -> int:
             report_path=str(payload.get("report_path", "")),
             confirmed_at=str(payload.get("confirmed_at", "")) or None,
             action_summary=str(payload.get("action_summary", "")).strip(),
+            **({"notification_kind": str(payload["notification_kind"])} if "notification_kind" in payload else {}),
         )
     )
 
@@ -582,12 +596,20 @@ def _cmd_observed_candidates(config_path: str, payload: dict[str, Any]) -> int:
 
 
 def _cmd_calendar(config_path: str, payload: dict[str, Any]) -> int:
+    strict = payload.get("strict") is True
     try:
         monitor = _make_monitor(config_path, payload.get("overrides"))
-        is_trading_day = monitor.is_trading_day()
-        is_trading_session = monitor.is_trading_session()
+        if strict:
+            current = now_shanghai()
+            dates = monitor.market.get_trade_dates(strict=True)
+            is_trading_day = current.date() in dates
+            hhmm = current.strftime("%H:%M")
+            is_trading_session = is_trading_day and ("09:30" <= hhmm <= "11:30" or "13:00" <= hhmm <= "15:00")
+        else:
+            is_trading_day = monitor.is_trading_day()
+            is_trading_session = monitor.is_trading_session()
     except Exception:
-        is_trading_day = now_shanghai().weekday() < 5
+        is_trading_day = False if strict else now_shanghai().weekday() < 5
         is_trading_session = False
     return _emit(
         {
@@ -615,6 +637,16 @@ COMMANDS = {
     "observed-candidates": lambda p, o: _cmd_observed_candidates(p, o),
     "calendar": lambda p, o: _cmd_calendar(p, o),
 }
+
+
+def _cmd_research_backtest(config_path: str, payload: dict[str, Any]) -> int:
+    from research_backtest import assert_local_research, run_local_backtest
+    assert_local_research()
+    config = _load_effective_config(config_path, payload.get("overrides"))
+    return _emit({"report": run_local_backtest(config, payload["options"])})
+
+
+COMMANDS["research-backtest"] = _cmd_research_backtest
 
 
 def build_parser() -> argparse.ArgumentParser:

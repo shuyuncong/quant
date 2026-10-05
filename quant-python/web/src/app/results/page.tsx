@@ -47,6 +47,9 @@ import { SymbolCombobox } from "@/components/symbol-combobox";
 import { StockReportLoader } from "@/components/stock-analysis-report";
 import { type DataBar, type DataTimeframe, type DataResult, type DataSource } from "@/lib/stock-report";
 import "./report.css";
+import { AnalysisRecords } from "@/components/analysis-records";
+import { AnalysisScopePicker } from "@/components/analysis-scope-picker";
+import { DEFAULT_ANALYSIS_SCOPE } from "@/lib/analysis-types";
 
 interface NoteRow {
   id: number;
@@ -319,6 +322,7 @@ function DataSourceView({ source }: { source: DataSource }) {
 }
 
 export default function ResultsPage() {
+  const [scope, setScope] = useState(DEFAULT_ANALYSIS_SCOPE);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [symbolsInput, setSymbolsInput] = useState("");
   const [notify, setNotify] = useState(true);
@@ -447,13 +451,13 @@ export default function ResultsPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>手动运行</CardTitle>
-          <CardDescription>立即触发一次分析/扫描/监控，完成后自动生成 AI 解读，在下方最近任务中查看。</CardDescription>
+          <CardTitle>个股分析</CardTitle>
+          <CardDescription>三策略分别计算买卖条件，AI 结合持仓与成交记录形成技术分析和综合结论。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex min-w-72 flex-1 flex-col gap-1.5">
-              <Label htmlFor="symbols">个股代码（可输入或从持仓下拉选择，逗号/空格分隔，留空使用自选股）</Label>
+              <Label htmlFor="symbols">个股代码（逗号或空格分隔，留空使用下方监控范围）</Label>
               <SymbolCombobox
                 id="symbols"
                 placeholder="600036.SH 000001.SZ"
@@ -466,6 +470,8 @@ export default function ResultsPage() {
               <Label htmlFor="notify">启用推送</Label>
             </div>
           </div>
+          <AnalysisScopePicker value={scope} onChange={setScope} />
+          <p className="text-xs text-muted-foreground">每只股票生成五个页签，通常调用 AI 两次；无新推送信号也会保留本轮分析记录。</p>
           <div className="flex flex-wrap gap-2">
             <TooltipProvider delay={300}>
               <Tooltip>
@@ -477,7 +483,7 @@ export default function ResultsPage() {
                           "analyze",
                           symbolsInput.trim()
                             ? { symbols: symbolsInput.split(/[\s,，;；]+/).filter(Boolean) }
-                            : {}
+                            : { scope }
                         )
                       }
                       disabled={busy}
@@ -502,23 +508,7 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="secondary" onClick={() => runJob("scan")} disabled={busy}>
-                      {startingKind === "scan" ? "启动中..." : "日线扫描"}
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">
-                  <p className="font-medium">日线扫描</p>
-                  <p className="mt-0.5 text-background/70">
-                    与股票池页的筛选同一引擎，范围按配置 scan.universe_mode（当前 all_a 全市场）。
-                    扫描结果写入候选池并输出报告；开启推送时扫完推一条汇总通知。
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button variant="secondary" onClick={() => runJob("monitor-once")} disabled={busy}>
+                    <Button variant="secondary" onClick={() => runJob("monitor-once", { scope })} disabled={busy}>
                       {startingKind === "monitor-once" ? "启动中..." : "监控一次"}
                     </Button>
                   }
@@ -526,24 +516,7 @@ export default function ResultsPage() {
                 <TooltipContent side="bottom">
                   <p className="font-medium">监控一次</p>
                   <p className="mt-0.5 text-background/70">
-                    对「持仓 + 自选池 + 候选池」执行一次盘中监控：从轮询游标处取一批（默认 20 只）
-                    做多周期分析。开启推送时只推「日线 0 轴上方金叉且买入分≥60」的新鲜信号。
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button variant="secondary" onClick={() => runJob("dispatch-outbox")} disabled={busy}>
-                      {startingKind === "dispatch-outbox" ? "启动中..." : "补投队列"}
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">
-                  <p className="font-medium">补投队列</p>
-                  <p className="mt-0.5 text-background/70">
-                    重试通知 outbox 里投递失败/未发出的消息（每次最多 100 条）。
-                    通知通道恢复后，用它把积压的推送补发出去。
+                    对上方选定范围完成一轮分析，每只股票生成一份五页签报告；重复股票自动合并。
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -567,11 +540,13 @@ export default function ResultsPage() {
         </CardContent>
       </Card>
 
+      <AnalysisRecords />
+
       <Card>
         <CardHeader>
           <CardTitle>最近任务</CardTitle>
           <CardDescription>
-            任务完成后自动调用模型生成 AI 解读，点「查看 AI 分析」直接阅读；未生成的可手动触发（每 5 秒自动刷新）。
+            新分析任务按股票生成五页签报告；历史报告继续保留。任务状态每 5 秒刷新。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -645,7 +620,7 @@ export default function ResultsPage() {
               {selectedJobView?.result_path ? " · " + fileName(selectedJobView.result_path) : ""}
             </DialogDescription>
           </DialogHeader>
-          <Tabs
+          {selectedJobView?.payload.analysis_version === 2 ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><AnalysisRecords key={selectedJobView.id} jobId={selectedJobView.id} /></div> : <Tabs
             key={`${selectedJobView?.id}:${selectedJobView?.status}:${selectedJobView?.result_path ?? ""}`}
             defaultValue="ai"
             className="flex min-h-0 flex-1 flex-col gap-0"
@@ -698,7 +673,7 @@ export default function ResultsPage() {
                 </div>
               )}
             </TabsContent>
-          </Tabs>
+          </Tabs>}
         </DialogContent>
       </Dialog>
 

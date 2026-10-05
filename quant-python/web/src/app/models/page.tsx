@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ModelPurposeSettings } from "@/components/model-purpose-settings";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,7 @@ export default function ModelsPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
+      <ModelPurposeSettings models={models} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">模型配置</h1>

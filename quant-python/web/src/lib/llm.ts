@@ -1,4 +1,4 @@
-import { getModel, listModels } from "./db";
+import { getModel, listModels, getSetting } from "./db";
 import type { ModelProfile } from "./types";
 import { normalizeSymbol } from "./symbols";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
@@ -55,9 +55,13 @@ export interface ChatWithFallbackResult {
  */
 export async function chatWithFallback(
   messages: ChatMessage[],
-  options: { timeoutMs?: number; stream?: boolean; visionOnly?: boolean } = {},
+  options: { timeoutMs?: number; stream?: boolean; visionOnly?: boolean; purpose?: "technical" | "synthesis" } = {},
 ): Promise<ChatWithFallbackResult> {
   const candidates = await enabledModels(options.visionOnly === true);
+  if (options.purpose) {
+    const preferred = Number(await getSetting(`models.purpose.${options.purpose}`));
+    candidates.sort((a, b) => Number(b.id === preferred) - Number(a.id === preferred));
+  }
   if (candidates.length === 0) {
     throw new Error(
       options.visionOnly

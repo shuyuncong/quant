@@ -17,6 +17,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
     const job = await getJob(jobId);
     if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+    if (JSON.parse(job.payload).analysis_version === 2) {
+      return NextResponse.json({ ok: true, analysis_version: 2, records_url: `/api/analyses?job_id=${jobId}`, message: "请在个股记录中查看五页签分析并重试失败阶段" });
+    }
     if (job.status !== "success" || !job.result_path) {
       return NextResponse.json(
         { error: "任务尚未成功，没有可解读的结果文件" },

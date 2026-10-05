@@ -19,11 +19,13 @@ const client = new Client({
   ssl,
   connectionTimeoutMillis: 15_000,
 });
-const tables = ["settings", "model_profiles", "stock_pool", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs", "holdings"];
-const serialTables = ["model_profiles", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs"];
+const tables = ["settings", "model_profiles", "stock_pool", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs", "holdings", "holding_events", "holding_trades", "stock_analyses", "schedule_runs"];
+const serialTables = ["model_profiles", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs", "holding_events", "holding_trades", "stock_analyses"];
 try {
   await client.connect();
   const version = await client.query("SHOW server_version");
+  const schemaVersion = await client.query("SELECT MAX(version) AS version FROM quant.schema_meta");
+  if (Number(schemaVersion.rows[0]?.version) !== 4) throw new Error("Schema version must be 4");
   const counts = {};
   for (const table of tables) {
     const result = await client.query(`SELECT count(*)::integer AS count FROM quant.${table}`);

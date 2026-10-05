@@ -2,7 +2,15 @@
 
 基于 Next.js 16（App Router / React 19 / TypeScript / Tailwind CSS 4 / shadcn-ui + Base UI）的本地控制台，复用 `quant-python/signal_system` 的现有分析引擎。
 
-## 功能
+## 本轮重构（2026-10-05）
+
+一级菜单为「个股分析 / 股票与持仓 / 策略回测 / 系统配置」。个股记录每页 5 条，提供综合结论、AI 技术分析和三策略判断；持仓支持逐笔加仓、减仓、清仓，记录含费用的加权成本及已实现盈亏。每日三策略扫描、盘中间隔分析、固定时点分析可独立配置。
+
+本地回测入口为 `/backtest`，只接受本机 `5432/quant` 数据库环境，使用本地前复权历史缓存。收益指标、成交假设和历史数据覆盖限制在报告中列出。
+
+数据库需要 **schema v4**，通过 `npm run db:setup` 升级并运行 `npm run db:verify`；本地与生产按现有双环境流程分别操作。详细改动、验证和边界见 [实施记录](../../docs/plans/2026-10-05-system-refactor-implementation.md)。
+
+## 原有能力与兼容入口
 
 - 结果：查看 analyze / scan / monitor 结果，支持详情与 AI 解读。
 - 策略配置：缠论 / MACD / 周期 / 评分阈值 / watchlist / 扫描模式。

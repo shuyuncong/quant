@@ -1358,12 +1358,14 @@ class MarketDataClient:
                     errors[timeframe] = f"直接获取失败: {direct_exc}; 1m重采样失败: {fallback_exc}"
         return result, errors
 
-    def get_trade_dates(self) -> set[date]:
+    def get_trade_dates(self, strict: bool = False) -> set[date]:
         cached = self._cached("trade_calendar", 24 * 3600)
         if cached is not None:
-            return self._with_today_if_stale(
-                set(pd.to_datetime(cached["trade_date"]).dt.date)
-            )
+            dates = set(pd.to_datetime(cached["trade_date"]).dt.date)
+            if not strict:
+                return self._with_today_if_stale(dates)
+            if dates and max(dates) >= now_shanghai().date():
+                return dates
         failures: list[str] = []
         for source in self.calendar_providers:
             try:
@@ -1376,7 +1378,8 @@ class MarketDataClient:
                 failures.append(f"{source}: 无数据")
                 continue
             self._save_cache("trade_calendar", result)
-            return self._with_today_if_stale(set(result["trade_date"].dt.date))
+            dates = set(result["trade_date"].dt.date)
+            return dates if strict else self._with_today_if_stale(dates)
         logger.warning("交易日历获取失败，降级到工作日: %s", "; ".join(failures))
         return set()
 

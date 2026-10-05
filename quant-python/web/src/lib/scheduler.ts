@@ -6,20 +6,17 @@ import {
   addOperationLog,
   failInterruptedJobs,
   getScheduleRows,
-  listJobs,
-  listJobsByKindSince,
   tryAcquireSchedulerLeadership,
 } from "./db";
 import type { ScheduleRow } from "./types";
 import type { PoolClient } from "pg";
-import { resumeInterpretationJobs, startJob } from "./jobs";
+import { resumeInterpretationJobs } from "./jobs";
 import { signalSystemDir } from "./paths";
 import { nowIso, shanghaiDate, shanghaiHhmm, shanghaiNow } from "./time";
 
 const TICK_MS = 15_000;
 const CALENDAR_TTL_MS = 60_000;
 const OUTBOX_TICK_MS = 30_000;
-const DAILY_BATCH_COOLDOWN_MS = 30_000;
 
 export interface CalendarInfo {
   is_trading_day: boolean;
@@ -53,7 +50,7 @@ export async function getCalendar(force = false): Promise<CalendarInfo> {
   if (!force && calendarCache && now - calendarCache.at < CALENDAR_TTL_MS) {
     return calendarCache.data;
   }
-  const outcome = await runBridge("calendar", {}, { timeoutMs: 30_000 });
+  const outcome = await runBridge("calendar", { strict: true }, { timeoutMs: 30_000 });
   if (outcome.ok && outcome.data) {
     const data = outcome.data as CalendarInfo;
     calendarCache = { at: now, data };
@@ -63,29 +60,11 @@ export async function getCalendar(force = false): Promise<CalendarInfo> {
   return fallbackCalendar(current, calendarCache?.data ?? null);
 }
 
-let lastMonitorRunAt = 0;
-let lastDailyStartAt = 0;
-let lastFixedMonitorRun = "";
 let lastOutboxRunAt = 0;
 let outboxRunning = false;
 
-async function fixedMonitorAlreadyScheduled(today: string, fixed: string): Promise<boolean> {
-  return (await listJobsByKindSince("monitor-cycle", today)).some((job) =>
-    job.created_at.slice(0, 16) === `${today} ${fixed}`
-  );
-}
-
 function resolveReportPath(resultPath: string): string {
   return path.isAbsolute(resultPath) ? resultPath : path.resolve(signalSystemDir, resultPath);
-}
-
-async function dailyScanState(today: string): Promise<"none" | "running" | "incomplete" | "complete"> {
-  const jobs = await listJobsByKindSince("daily-scan", today);
-  if (jobs.some((job) => job.status === "pending" || job.status === "running")) return "running";
-  const latestSuccess = jobs.find((job) => job.status === "success");
-  if (!latestSuccess) return jobs.length ? "incomplete" : "none";
-  if (!latestSuccess.result_path) return "incomplete";
-  return dailyReportState(latestSuccess.result_path);
 }
 
 export function dailyReportState(resultPath: string): "incomplete" | "complete" {
@@ -123,7 +102,7 @@ export async function estimateNextRun(
   calendar: CalendarInfo,
   now = shanghaiNow()
 ): Promise<string | null> {
-  if (!row.enabled) return null;
+  if (!row.enabled || (row.kind === "monitor_fixed" && !row.fixed_times.length)) return null;
   if (row.kind === "daily_scan") {
     const [hour, minute] = row.time.split(":").map(Number);
     const target = new Date(now);
@@ -177,64 +156,17 @@ async function tick(): Promise<void> {
   try {
     await dispatchOutboxIfDue();
     const calendar = await getCalendar();
-    const now = shanghaiNow();
-    const today = shanghaiDate(now);
-    const hhmm = shanghaiHhmm(now);
     const rows = await getScheduleRows();
-    for (const row of rows) {
-      if (!row.enabled) continue;
-      if (row.kind === "daily_scan") {
-        const dayOk = !row.trading_days_only || calendar.is_trading_day;
-        if (!dayOk) continue;
-        const state = await dailyScanState(today);
-        if (
-          hhmm >= row.time &&
-          state !== "running" &&
-          state !== "complete" &&
-          Date.now() - lastDailyStartAt >= DAILY_BATCH_COOLDOWN_MS
-        ) {
-          lastDailyStartAt = Date.now();
-          await startJob("daily-scan", { notify: true });
-        }
-      } else if (row.kind === "monitor_cycle") {
-        if (!calendar.is_trading_session) continue;
-        const fixedTimes = Array.isArray(row.fixed_times) ? row.fixed_times : [];
-        if (fixedTimes.length > 0) {
-          // 固定时点模式：只在勾选的时点各执行一次，不再按间隔执行
-          const dayOk = !row.trading_days_only || calendar.is_trading_day;
-          if (!dayOk) continue;
-          for (const fixed of fixedTimes) {
-            if (fixed === hhmm) {
-              const key = `${today}:${fixed}`;
-              if (lastFixedMonitorRun === key || await fixedMonitorAlreadyScheduled(today, fixed)) continue;
-              const running = (await listJobs(20)).some(
-                (job) =>
-                  ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) &&
-                  job.status === "running"
-              );
-              if (!running) {
-                lastFixedMonitorRun = key;
-                await startJob("monitor-cycle", { notify: true });
-              }
-            }
-          }
-        } else {
-          // 间隔模式：交易时段内按 interval_seconds 周期执行
-          const elapsed = Date.now() - lastMonitorRunAt;
-          if (elapsed >= row.interval_seconds * 1000) {
-            const running = (await listJobs(20)).some(
-              (job) => ["monitor-cycle", "monitor-once", "daily-scan", "scan"].includes(job.kind) && job.status === "running"
-            );
-            if (!running) {
-              lastMonitorRunAt = Date.now();
-              await startJob("monitor-cycle", { notify: true });
-            }
-          }
-        }
-      }
-    }
-  } catch {
-    /* scheduler must never crash the web process */
+    const { runScheduleTick } = await import("./schedule-runs");
+    await runScheduleTick(rows, calendar, shanghaiNow());
+    const { resumeScanBatches } = await import("./scan-service");
+    await resumeScanBatches();
+    const { resumeBacktests } = await import("./backtest-service");
+    await resumeBacktests();
+    const { resumeAnalysisBatches } = await import("./analysis-service");
+    await resumeAnalysisBatches();
+  } catch (error) {
+    console.error("[scheduler]", error);
   }
 }
 
@@ -296,6 +228,8 @@ export async function ensureScheduler(): Promise<void> {
     });
   }
   await resumeInterpretationJobs();
+  const { resumeAnalysisBatches } = await import("./analysis-service");
+  await resumeAnalysisBatches();
   globalState.__webSchedulerInterval = setInterval(() => {
     void tick();
   }, TICK_MS);

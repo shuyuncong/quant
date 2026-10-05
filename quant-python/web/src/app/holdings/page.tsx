@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Pencil, Plus, RefreshCw, Trash2, Wallet, X } from "lucide-react";
+import { HoldingTradeDialog, HoldingTradeHistory } from "@/components/holding-trade-dialog";
 
 interface HoldingRow {
   symbol: string;
@@ -50,6 +51,8 @@ function fmtMoney(value: number): string {
 }
 
 export default function HoldingsPage() {
+  const [trade, setTrade] = useState<{ holding: HoldingRow; action: "buy" | "sell" | "close" } | null>(null);
+  const [tradeRevision, setTradeRevision] = useState(0);
   const [holdings, setHoldings] = useState<HoldingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -67,7 +70,7 @@ export default function HoldingsPage() {
         holdings: HoldingRow[];
         total_capital?: number;
       };
-      setHoldings(data.holdings);
+      setHoldings(data.holdings.filter(row => row.shares > 0));
       setSavedCapital(Number(data.total_capital ?? 0));
       // 轮询不覆盖正在编辑的输入，仅在尚未填写时同步已保存值
       setCapitalInput((prev) =>
@@ -156,15 +159,15 @@ export default function HoldingsPage() {
   };
 
   const remove = async (symbol: string) => {
-    if (!window.confirm(`确认删除 ${symbol} 的持仓记录？`)) return;
+    if (!window.confirm(`确认将 ${symbol} 的持仓校正为 0？此操作不代表卖出，实际清仓请使用“清仓”登记成交。`)) return;
     try {
       const response = await fetch(`/api/holdings/${encodeURIComponent(symbol)}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("删除失败");
+      if (!response.ok) throw new Error("校正失败");
       if (editing === symbol) resetForm();
-      toast.success("已删除");
+      toast.success("持仓已校正为 0，成交历史保留");
       void load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "删除失败");
+      toast.error(error instanceof Error ? error.message : "校正失败");
     }
   };
 
@@ -343,7 +346,7 @@ export default function HoldingsPage() {
                 <TableHead className="text-right">持仓份额</TableHead>
                 <TableHead className="text-right">持仓价（元）</TableHead>
                 <TableHead className="text-right">总金额（元）</TableHead>
-                <TableHead className="w-28">操作</TableHead>
+                <TableHead className="min-w-72">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -363,6 +366,9 @@ export default function HoldingsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" onClick={() => setTrade({ holding: row, action: "buy" })}>加仓</Button>
+                      <Button variant="outline" size="sm" onClick={() => setTrade({ holding: row, action: "sell" })}>减仓</Button>
+                      <Button variant="outline" size="sm" onClick={() => setTrade({ holding: row, action: "close" })}>清仓</Button>
                       <Button variant="outline" size="sm" onClick={() => startEdit(row)}>
                         <Pencil className="size-3.5" />
                         编辑
@@ -391,6 +397,8 @@ export default function HoldingsPage() {
           </Table>
         </CardContent>
       </Card>
+      <HoldingTradeHistory revision={tradeRevision} />
+      {trade && <HoldingTradeDialog key={`${trade.holding.symbol}:${trade.action}`} holding={trade.holding} action={trade.action} onClose={() => setTrade(null)} onSaved={() => { setTradeRevision(value => value+1); void load(); }} />}
     </div>
   );
 }

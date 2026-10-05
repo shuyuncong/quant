@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { removeHolding, upsertHolding } from "@/lib/db";
+import { correctHolding } from "@/lib/portfolio";
 import { normalizeSymbol } from "@/lib/symbols";
 
 function toNumber(value: unknown): number {
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return value == null ? 0 : parsed;
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
@@ -21,7 +21,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   const normalized = normalizeSymbol(decodeURIComponent(symbol));
-  const holding = await upsertHolding({
+  try {
+  const holding = await correctHolding({
     symbol: normalized,
     name: String(body.name ?? "").trim(),
     shares: toNumber(body.shares),
@@ -29,10 +30,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
     total_amount: toNumber(body.total_amount),
   });
   return NextResponse.json({ ok: true, holding });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "持仓保存失败" }, { status: 422 }); }
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params;
-  await removeHolding(decodeURIComponent(symbol));
+  await correctHolding({ symbol: decodeURIComponent(symbol), shares: 0 });
   return NextResponse.json({ ok: true });
 }

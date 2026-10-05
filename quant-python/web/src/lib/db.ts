@@ -18,7 +18,7 @@ import type {
 
 export type { ScheduleRow };
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const SCHEDULER_LOCK_KEY = 1_907_082_026;
 const WATCHLIST_LOCK_KEY = 1_907_082_027;
 
@@ -64,7 +64,7 @@ function createPool(): Pool {
         };
   const pool = new Pool({
     connectionString,
-    max: Math.max(2, Number(process.env.DATABASE_POOL_MAX ?? 5) || 5),
+    max: Math.max(5, Number(process.env.DATABASE_POOL_MAX ?? 5) || 5),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
     ssl,
@@ -99,8 +99,9 @@ async function ensureDefaultSchedules(pool: Pool): Promise<void> {
   await pool.query(
     `INSERT INTO quant.schedule (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at)
      VALUES
-       ('daily_scan', '04:00', 60, '[]', TRUE, TRUE, $1),
-       ('monitor_cycle', '09:30', 3600, '["10:30","13:30","14:30"]', TRUE, TRUE, $1)
+       ('daily_scan', '15:20', 60, '[]', TRUE, FALSE, $1),
+       ('monitor_cycle', '09:30', 3600, '[]', TRUE, FALSE, $1),
+       ('monitor_fixed', '15:20', 3600, '["15:20"]', TRUE, FALSE, $1)
      ON CONFLICT (kind) DO NOTHING`,
     [nowIso()],
   );
@@ -604,7 +605,11 @@ export async function failInterruptedJobs(db?: DbClient): Promise<number> {
   const result = await client.query(
     `UPDATE quant.jobs
      SET status = 'failed', error = $1, finished_at = $2
-     WHERE status IN ('pending', 'running') AND kind <> 'interpret-report'`,
+     WHERE status IN ('pending', 'running') AND kind <> 'interpret-report'
+       AND COALESCE(payload::jsonb->>'analysis_version','') <> '2'
+       AND COALESCE(payload::jsonb->>'scan_version','') <> '2'
+       AND COALESCE(payload::jsonb->>'prepare_pending','') <> 'true'
+       AND kind <> 'backtest'`,
     ["Web service restarted; the previous process was interrupted and scheduled tasks will retry.", nowIso()],
   );
   return result.rowCount ?? 0;
@@ -698,6 +703,7 @@ function rowToSchedule(row: Record<string, unknown>): ScheduleRow {
     time: String(row.time ?? "15:20"),
     interval_seconds: Number(row.interval_seconds ?? 60),
     fixed_times: fixedTimes,
+    scope: (row.scope && typeof row.scope === "object" ? row.scope : undefined) as ScheduleRow["scope"],
     trading_days_only: Boolean(row.trading_days_only),
     enabled: Boolean(row.enabled),
     updated_at: String(row.updated_at ?? ""),
@@ -718,7 +724,7 @@ export async function upsertScheduleRow(
   const client = await resolveDb(db);
   await client.query(
     `INSERT INTO quant.schedule
-       (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at)
+       (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at, scope)
      VALUES (
        $1,
        COALESCE($2::text, '15:20'),
@@ -726,7 +732,8 @@ export async function upsertScheduleRow(
        COALESCE($4::text, '[]'),
        COALESCE($5::boolean, TRUE),
        COALESCE($6::boolean, FALSE),
-       $7
+       $7,
+       COALESCE($8::jsonb, '{"holdings":true,"watchlist":true,"pools":[],"symbols":[]}'::jsonb)
      )
      ON CONFLICT (kind) DO UPDATE SET
        time = COALESCE($2::text, quant.schedule.time),
@@ -734,7 +741,8 @@ export async function upsertScheduleRow(
        fixed_times = COALESCE($4::text, quant.schedule.fixed_times),
        trading_days_only = COALESCE($5::boolean, quant.schedule.trading_days_only),
        enabled = COALESCE($6::boolean, quant.schedule.enabled),
-       updated_at = $7`,
+       updated_at = $7,
+       scope = COALESCE($8::jsonb, quant.schedule.scope)`,
     [
       kind,
       input.time ?? null,
@@ -743,6 +751,7 @@ export async function upsertScheduleRow(
       input.trading_days_only ?? null,
       input.enabled ?? null,
       nowIso(),
+      input.scope === undefined ? null : JSON.stringify(input.scope),
     ],
   );
 }

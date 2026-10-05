@@ -94,7 +94,7 @@ describe("POST /api/run", () => {
     });
   });
 
-  it("defaults scan_kind to macd_zero_axis for old scan requests", async () => {
+  it("defaults scan_kind to all strategies", async () => {
     const response = await POST(
       new Request("http://localhost/api/run", {
         method: "POST",
@@ -104,7 +104,7 @@ describe("POST /api/run", () => {
     );
     expect(response.status).toBe(202);
     expect(startJobMock).toHaveBeenCalledWith("scan", {
-      scan_kind: "macd_zero_axis",
+      scan_kind: "all",
       notify: true,
     });
   });

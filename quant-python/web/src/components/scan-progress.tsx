@@ -1,0 +1,12 @@
+"use client";
+import { useEffect,useState } from "react";
+import { Button } from "./ui/button";
+import { STRATEGIES } from "@/lib/analysis-types";
+interface ScanJob {id:number;status:string;error:string|null;created_at:string;payload:{scan_version?:number;progress?:Record<string,{coverage?:number;candidate_count?:number;completed_round?:boolean;processed?:number;errors?:unknown[]}>}}
+export function ScanProgress({onComplete}:{onComplete?:()=>void}){
+  const [job,setJob]=useState<ScanJob|null>(null);const [error,setError]=useState("");const [retrying,setRetrying]=useState(false);
+  useEffect(()=>{let active=true;let previous="";let timer:ReturnType<typeof setTimeout>;const poll=async()=>{try{const response=await fetch('/api/jobs');if(!response.ok)throw new Error('读取筛选进度失败');const data=await response.json();if(!active)return;const latest=(data.jobs as ScanJob[]).find(item=>item.payload.scan_version===2)??null;setJob(latest);setError('');const signature=latest?`${latest.id}:${latest.status}`:'';if(previous&&previous!==signature&&latest?.status==='success')onComplete?.();previous=signature;}catch(error){if(active)setError(String(error));}finally{if(active)timer=setTimeout(()=>void poll(),5000);}};void poll();return()=>{active=false;clearTimeout(timer);};},[onComplete]);
+  async function retry(){if(!job)return;setRetrying(true);try{const response=await fetch(`/api/jobs/${job.id}/retry`,{method:'POST'});const data=await response.json();if(!response.ok)throw new Error(data.error);setJob({...job,status:'pending',error:null});}catch(error){setError(String(error));}finally{setRetrying(false);}}
+  if(!job&&!error)return null;
+  return <div className="mb-4 space-y-2 rounded border bg-muted/20 p-3 text-xs" aria-live="polite">{error&&<p role="alert" className="text-destructive">{error}</p>}{job&&<><div className="flex flex-wrap items-center justify-between gap-2"><span>最近筛选 #{job.id} · {job.created_at} · {{pending:'等待执行',running:'执行中',success:'完成',failed:'未完成'}[job.status]??job.status}</span>{job.status==='failed'&&<Button size="sm" variant="outline" disabled={retrying} onClick={()=>void retry()}>继续未完成筛选</Button>}</div><div className="flex flex-wrap gap-4">{STRATEGIES.map(strategy=>{const progress=job.payload.progress?.[strategy.id];return progress&&<span key={strategy.id}>{strategy.name}：{progress.completed_round?'已完成':`${(Number(progress.coverage??0)*100).toFixed(1)}%`} · 候选 {progress.candidate_count??'—'} 只</span>;})}</div>{job.error&&<p className="text-destructive">{job.error}</p>}</>}</div>;
+}

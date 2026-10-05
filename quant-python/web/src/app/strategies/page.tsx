@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { StrategyRuleSettings } from "@/components/strategy-rule-settings";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -288,8 +289,6 @@ export default function StrategiesPage() {
       "monitor.timeframes": form.timeframes.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.watchlist": form.watchlist.split(/[\s,，;；]+/).filter(Boolean),
       "monitor.bar_limit": Number(form.bar_limit),
-      "monitor.max_symbols_per_cycle": Number(form.max_symbols_per_cycle),
-      "scan.universe_mode": form.universe_mode,
       "stock_pool.enabled": form.stock_pool_enabled,
       "stock_pool.min_market_cap": Number(form.min_market_cap),
       "stock_pool.max_market_cap": Number(form.max_market_cap),
@@ -324,6 +323,7 @@ export default function StrategiesPage() {
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
+      <StrategyRuleSettings />
       <Card>
         <CardHeader>
           <CardTitle>策略配置</CardTitle>
@@ -359,7 +359,6 @@ export default function StrategiesPage() {
               <NumberField id="sell-threshold" label="卖出评分阈值" value={form.sell_threshold} onChange={set("sell_threshold")} />
               <NumberField id="bar-limit" label="K线数量（bar_limit）" value={form.bar_limit} onChange={set("bar_limit")} />
               <NumberField id="llm-context-bars" label="AI每周期K线数" value={form.llm_context_bars} onChange={set("llm_context_bars")} />
-              <NumberField id="max-symbols-per-cycle" label="盘中每批股票数" value={form.max_symbols_per_cycle} onChange={set("max_symbols_per_cycle")} />
             </div>
           </section>
 
@@ -484,17 +483,7 @@ export default function StrategiesPage() {
               自选股票池由「股票池」页统一维护，增删股票后自动同步到这里，此处不可编辑。
             </p>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>扫描范围</Label>
-            <select
-              className="h-9 rounded-lg border bg-transparent px-3 text-sm"
-              value={form.universe_mode}
-              onChange={set("universe_mode")}
-            >
-              <option value="watchlist">自选股（watchlist）</option>
-              <option value="all_a">全市场（all_a）</option>
-            </select>
-          </div>
+          <p className="text-xs text-muted-foreground">全市场筛选统一在「股票与持仓」执行；监控股票范围在个股分析或定时任务设置。</p>
           <div>
             <Button onClick={() => void save()} disabled={saving}>
               <Save className="size-4" /> {saving ? "保存中..." : "保存配置"}
