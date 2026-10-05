@@ -1,0 +1,1409 @@
+{
+  "cash": 250000.0,
+  "slots": 10,
+  "tie_breaks": [
+    "symbol_asc",
+    "symbol_desc",
+    "hash",
+    "rotate"
+  ],
+  "pools": {
+    "diverge": 559,
+    "yearline": 18033,
+    "baseline": 29513
+  },
+  "single_pool": {
+    "diverge": {
+      "candidates": 559,
+      "accepted": 192,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 52.4,
+          "annualized_return_pct": 22.52,
+          "max_drawdown_pct": 11.68,
+          "sharpe_ratio": 1.357,
+          "accepted": 192,
+          "candidates": 559,
+          "win_rate": 39.06,
+          "average_positions": 7.357
+        },
+        "symbol_desc": {
+          "total_return_pct": 44.03,
+          "annualized_return_pct": 19.19,
+          "max_drawdown_pct": 12.14,
+          "sharpe_ratio": 1.189,
+          "accepted": 196,
+          "candidates": 559,
+          "win_rate": 38.78,
+          "average_positions": 7.2961
+        },
+        "hash": {
+          "total_return_pct": 56.58,
+          "annualized_return_pct": 24.15,
+          "max_drawdown_pct": 12.14,
+          "sharpe_ratio": 1.47,
+          "accepted": 189,
+          "candidates": 559,
+          "win_rate": 40.74,
+          "average_positions": 7.3428
+        },
+        "rotate": {
+          "total_return_pct": 41.05,
+          "annualized_return_pct": 17.99,
+          "max_drawdown_pct": 12.14,
+          "sharpe_ratio": 1.138,
+          "accepted": 184,
+          "candidates": 559,
+          "win_rate": 40.22,
+          "average_positions": 7.3874
+        }
+      },
+      "median": {
+        "annualized_return_pct": 20.86,
+        "max_drawdown_pct": 12.14,
+        "sharpe_ratio": 1.273,
+        "return_over_drawdown": 1.718,
+        "sharpe_min": 1.138,
+        "sharpe_max": 1.47
+      }
+    },
+    "yearline": {
+      "candidates": 18033,
+      "accepted": 268,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 19.34,
+          "annualized_return_pct": 7.81,
+          "max_drawdown_pct": 22.92,
+          "sharpe_ratio": 0.477,
+          "accepted": 268,
+          "candidates": 18033,
+          "win_rate": 34.33,
+          "average_positions": 9.0163
+        },
+        "symbol_desc": {
+          "total_return_pct": 29.97,
+          "annualized_return_pct": 11.76,
+          "max_drawdown_pct": 22.86,
+          "sharpe_ratio": 0.645,
+          "accepted": 274,
+          "candidates": 18033,
+          "win_rate": 33.94,
+          "average_positions": 9.0
+        },
+        "hash": {
+          "total_return_pct": -12.1,
+          "annualized_return_pct": -5.23,
+          "max_drawdown_pct": 29.52,
+          "sharpe_ratio": -0.126,
+          "accepted": 267,
+          "candidates": 18033,
+          "win_rate": 31.46,
+          "average_positions": 8.9946
+        },
+        "rotate": {
+          "total_return_pct": -4.88,
+          "annualized_return_pct": -2.02,
+          "max_drawdown_pct": 29.47,
+          "sharpe_ratio": 0.019,
+          "accepted": 284,
+          "candidates": 18033,
+          "win_rate": 28.87,
+          "average_positions": 8.8838
+        }
+      },
+      "median": {
+        "annualized_return_pct": 2.89,
+        "max_drawdown_pct": 26.2,
+        "sharpe_ratio": 0.248,
+        "return_over_drawdown": 0.111,
+        "sharpe_min": -0.126,
+        "sharpe_max": 0.645
+      }
+    },
+    "baseline": {
+      "candidates": 29513,
+      "accepted": 467,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -23.04,
+          "annualized_return_pct": -7.49,
+          "max_drawdown_pct": 32.06,
+          "sharpe_ratio": -0.206,
+          "accepted": 467,
+          "candidates": 29513,
+          "win_rate": 26.98,
+          "average_positions": 9.1264
+        },
+        "symbol_desc": {
+          "total_return_pct": 15.69,
+          "annualized_return_pct": 4.91,
+          "max_drawdown_pct": 31.03,
+          "sharpe_ratio": 0.319,
+          "accepted": 506,
+          "candidates": 29513,
+          "win_rate": 27.47,
+          "average_positions": 8.9872
+        },
+        "hash": {
+          "total_return_pct": -21.67,
+          "annualized_return_pct": -6.99,
+          "max_drawdown_pct": 32.97,
+          "sharpe_ratio": -0.175,
+          "accepted": 465,
+          "candidates": 29513,
+          "win_rate": 26.88,
+          "average_positions": 9.06
+        },
+        "rotate": {
+          "total_return_pct": 22.87,
+          "annualized_return_pct": 6.88,
+          "max_drawdown_pct": 24.73,
+          "sharpe_ratio": 0.414,
+          "accepted": 479,
+          "candidates": 29513,
+          "win_rate": 28.81,
+          "average_positions": 9.0319
+        }
+      },
+      "median": {
+        "annualized_return_pct": -1.04,
+        "max_drawdown_pct": 31.55,
+        "sharpe_ratio": 0.072,
+        "return_over_drawdown": -0.033,
+        "sharpe_min": -0.206,
+        "sharpe_max": 0.414
+      }
+    }
+  },
+  "priority_shared": {
+    "diverge_yearline": {
+      "candidates": 18572,
+      "accepted": 271,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 67.26,
+          "annualized_return_pct": 24.31,
+          "max_drawdown_pct": 19.19,
+          "sharpe_ratio": 1.201,
+          "accepted": 271,
+          "candidates": 18572,
+          "win_rate": 37.27,
+          "average_positions": 9.0399
+        },
+        "symbol_desc": {
+          "total_return_pct": 52.1,
+          "annualized_return_pct": 19.43,
+          "max_drawdown_pct": 17.4,
+          "sharpe_ratio": 1.014,
+          "accepted": 265,
+          "candidates": 18572,
+          "win_rate": 35.47,
+          "average_positions": 9.0073
+        },
+        "hash": {
+          "total_return_pct": 16.83,
+          "annualized_return_pct": 6.85,
+          "max_drawdown_pct": 29.43,
+          "sharpe_ratio": 0.423,
+          "accepted": 273,
+          "candidates": 18572,
+          "win_rate": 30.77,
+          "average_positions": 9.0163
+        },
+        "rotate": {
+          "total_return_pct": 20.0,
+          "annualized_return_pct": 8.06,
+          "max_drawdown_pct": 22.62,
+          "sharpe_ratio": 0.473,
+          "accepted": 265,
+          "candidates": 18572,
+          "win_rate": 33.58,
+          "average_positions": 8.9383
+        }
+      },
+      "median": {
+        "annualized_return_pct": 13.75,
+        "max_drawdown_pct": 20.91,
+        "sharpe_ratio": 0.744,
+        "return_over_drawdown": 0.657,
+        "sharpe_min": 0.423,
+        "sharpe_max": 1.201
+      }
+    },
+    "yearline_diverge": {
+      "candidates": 18572,
+      "accepted": 268,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 19.34,
+          "annualized_return_pct": 7.81,
+          "max_drawdown_pct": 22.92,
+          "sharpe_ratio": 0.477,
+          "accepted": 268,
+          "candidates": 18572,
+          "win_rate": 34.33,
+          "average_positions": 9.0163
+        },
+        "symbol_desc": {
+          "total_return_pct": 29.97,
+          "annualized_return_pct": 11.76,
+          "max_drawdown_pct": 22.86,
+          "sharpe_ratio": 0.645,
+          "accepted": 274,
+          "candidates": 18572,
+          "win_rate": 33.94,
+          "average_positions": 9.0
+        },
+        "hash": {
+          "total_return_pct": -12.1,
+          "annualized_return_pct": -5.23,
+          "max_drawdown_pct": 29.52,
+          "sharpe_ratio": -0.126,
+          "accepted": 267,
+          "candidates": 18572,
+          "win_rate": 31.46,
+          "average_positions": 8.9946
+        },
+        "rotate": {
+          "total_return_pct": -4.88,
+          "annualized_return_pct": -2.02,
+          "max_drawdown_pct": 29.47,
+          "sharpe_ratio": 0.019,
+          "accepted": 284,
+          "candidates": 18572,
+          "win_rate": 28.87,
+          "average_positions": 8.8838
+        }
+      },
+      "median": {
+        "annualized_return_pct": 2.89,
+        "max_drawdown_pct": 26.2,
+        "sharpe_ratio": 0.248,
+        "return_over_drawdown": 0.111,
+        "sharpe_min": -0.126,
+        "sharpe_max": 0.645
+      }
+    },
+    "diverge_baseline": {
+      "candidates": 30066,
+      "accepted": 456,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 20.7,
+          "annualized_return_pct": 6.3,
+          "max_drawdown_pct": 33.34,
+          "sharpe_ratio": 0.391,
+          "accepted": 456,
+          "candidates": 30066,
+          "win_rate": 30.7,
+          "average_positions": 9.0664
+        },
+        "symbol_desc": {
+          "total_return_pct": 49.13,
+          "annualized_return_pct": 13.47,
+          "max_drawdown_pct": 31.64,
+          "sharpe_ratio": 0.652,
+          "accepted": 478,
+          "candidates": 30066,
+          "win_rate": 30.54,
+          "average_positions": 9.0166
+        },
+        "hash": {
+          "total_return_pct": 13.73,
+          "annualized_return_pct": 4.36,
+          "max_drawdown_pct": 22.97,
+          "sharpe_ratio": 0.306,
+          "accepted": 438,
+          "candidates": 30066,
+          "win_rate": 29.68,
+          "average_positions": 9.0983
+        },
+        "rotate": {
+          "total_return_pct": 32.88,
+          "annualized_return_pct": 9.5,
+          "max_drawdown_pct": 24.73,
+          "sharpe_ratio": 0.534,
+          "accepted": 422,
+          "candidates": 30066,
+          "win_rate": 31.99,
+          "average_positions": 9.1252
+        }
+      },
+      "median": {
+        "annualized_return_pct": 7.9,
+        "max_drawdown_pct": 28.19,
+        "sharpe_ratio": 0.463,
+        "return_over_drawdown": 0.28,
+        "sharpe_min": 0.306,
+        "sharpe_max": 0.652
+      }
+    },
+    "baseline_diverge": {
+      "candidates": 30066,
+      "accepted": 467,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -23.04,
+          "annualized_return_pct": -7.49,
+          "max_drawdown_pct": 32.06,
+          "sharpe_ratio": -0.206,
+          "accepted": 467,
+          "candidates": 30066,
+          "win_rate": 26.98,
+          "average_positions": 9.1264
+        },
+        "symbol_desc": {
+          "total_return_pct": -0.7,
+          "annualized_return_pct": 0.08,
+          "max_drawdown_pct": 31.03,
+          "sharpe_ratio": 0.149,
+          "accepted": 510,
+          "candidates": 30066,
+          "win_rate": 26.47,
+          "average_positions": 8.9821
+        },
+        "hash": {
+          "total_return_pct": -21.67,
+          "annualized_return_pct": -6.99,
+          "max_drawdown_pct": 32.97,
+          "sharpe_ratio": -0.175,
+          "accepted": 465,
+          "candidates": 30066,
+          "win_rate": 26.88,
+          "average_positions": 9.06
+        },
+        "rotate": {
+          "total_return_pct": 22.87,
+          "annualized_return_pct": 6.88,
+          "max_drawdown_pct": 24.73,
+          "sharpe_ratio": 0.414,
+          "accepted": 479,
+          "candidates": 30066,
+          "win_rate": 28.81,
+          "average_positions": 9.0319
+        }
+      },
+      "median": {
+        "annualized_return_pct": -3.46,
+        "max_drawdown_pct": 31.55,
+        "sharpe_ratio": -0.013,
+        "return_over_drawdown": -0.11,
+        "sharpe_min": -0.206,
+        "sharpe_max": 0.414
+      }
+    },
+    "yearline_baseline": {
+      "candidates": 47419,
+      "accepted": 389,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 3.79,
+          "annualized_return_pct": 1.46,
+          "max_drawdown_pct": 41.5,
+          "sharpe_ratio": 0.183,
+          "accepted": 389,
+          "candidates": 47419,
+          "win_rate": 31.88,
+          "average_positions": 9.2503
+        },
+        "symbol_desc": {
+          "total_return_pct": 9.81,
+          "annualized_return_pct": 3.24,
+          "max_drawdown_pct": 30.02,
+          "sharpe_ratio": 0.259,
+          "accepted": 411,
+          "candidates": 47419,
+          "win_rate": 30.66,
+          "average_positions": 9.2516
+        },
+        "hash": {
+          "total_return_pct": -19.39,
+          "annualized_return_pct": -6.16,
+          "max_drawdown_pct": 33.17,
+          "sharpe_ratio": -0.151,
+          "accepted": 390,
+          "candidates": 47419,
+          "win_rate": 30.77,
+          "average_positions": 9.2989
+        },
+        "rotate": {
+          "total_return_pct": -0.94,
+          "annualized_return_pct": 0.01,
+          "max_drawdown_pct": 27.56,
+          "sharpe_ratio": 0.114,
+          "accepted": 404,
+          "candidates": 47419,
+          "win_rate": 29.46,
+          "average_positions": 9.2031
+        }
+      },
+      "median": {
+        "annualized_return_pct": 0.73,
+        "max_drawdown_pct": 31.59,
+        "sharpe_ratio": 0.148,
+        "return_over_drawdown": 0.023,
+        "sharpe_min": -0.151,
+        "sharpe_max": 0.259
+      }
+    },
+    "baseline_yearline": {
+      "candidates": 47419,
+      "accepted": 471,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -23.02,
+          "annualized_return_pct": -7.49,
+          "max_drawdown_pct": 32.06,
+          "sharpe_ratio": -0.202,
+          "accepted": 471,
+          "candidates": 47419,
+          "win_rate": 27.18,
+          "average_positions": 9.1788
+        },
+        "symbol_desc": {
+          "total_return_pct": 35.03,
+          "annualized_return_pct": 10.04,
+          "max_drawdown_pct": 30.15,
+          "sharpe_ratio": 0.519,
+          "accepted": 508,
+          "candidates": 47419,
+          "win_rate": 28.94,
+          "average_positions": 9.0766
+        },
+        "hash": {
+          "total_return_pct": -18.57,
+          "annualized_return_pct": -5.87,
+          "max_drawdown_pct": 34.69,
+          "sharpe_ratio": -0.12,
+          "accepted": 471,
+          "candidates": 47419,
+          "win_rate": 26.96,
+          "average_positions": 9.1328
+        },
+        "rotate": {
+          "total_return_pct": 26.97,
+          "annualized_return_pct": 7.97,
+          "max_drawdown_pct": 24.73,
+          "sharpe_ratio": 0.46,
+          "accepted": 486,
+          "candidates": 47419,
+          "win_rate": 29.01,
+          "average_positions": 9.1086
+        }
+      },
+      "median": {
+        "annualized_return_pct": 1.05,
+        "max_drawdown_pct": 31.11,
+        "sharpe_ratio": 0.17,
+        "return_over_drawdown": 0.034,
+        "sharpe_min": -0.202,
+        "sharpe_max": 0.519
+      }
+    }
+  },
+  "three_pool": {
+    "diverge_yearline_baseline": {
+      "candidates": 47952,
+      "accepted": 401,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 15.34,
+          "annualized_return_pct": 4.82,
+          "max_drawdown_pct": 41.91,
+          "sharpe_ratio": 0.325,
+          "accepted": 401,
+          "candidates": 47952,
+          "win_rate": 31.92,
+          "average_positions": 9.2835
+        },
+        "symbol_desc": {
+          "total_return_pct": 14.93,
+          "annualized_return_pct": 4.7,
+          "max_drawdown_pct": 32.3,
+          "sharpe_ratio": 0.319,
+          "accepted": 430,
+          "candidates": 47952,
+          "win_rate": 30.0,
+          "average_positions": 9.2299
+        },
+        "hash": {
+          "total_return_pct": 1.72,
+          "annualized_return_pct": 0.83,
+          "max_drawdown_pct": 33.17,
+          "sharpe_ratio": 0.156,
+          "accepted": 401,
+          "candidates": 47952,
+          "win_rate": 29.93,
+          "average_positions": 9.2797
+        },
+        "rotate": {
+          "total_return_pct": 15.5,
+          "annualized_return_pct": 4.86,
+          "max_drawdown_pct": 27.33,
+          "sharpe_ratio": 0.331,
+          "accepted": 393,
+          "candidates": 47952,
+          "win_rate": 32.32,
+          "average_positions": 9.2337
+        }
+      },
+      "median": {
+        "annualized_return_pct": 4.76,
+        "max_drawdown_pct": 32.73,
+        "sharpe_ratio": 0.322,
+        "return_over_drawdown": 0.145,
+        "sharpe_min": 0.156,
+        "sharpe_max": 0.331
+      }
+    },
+    "diverge_baseline_yearline": {
+      "candidates": 47952,
+      "accepted": 468,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 18.58,
+          "annualized_return_pct": 5.72,
+          "max_drawdown_pct": 33.34,
+          "sharpe_ratio": 0.365,
+          "accepted": 468,
+          "candidates": 47952,
+          "win_rate": 30.34,
+          "average_positions": 9.1392
+        },
+        "symbol_desc": {
+          "total_return_pct": 69.79,
+          "annualized_return_pct": 18.11,
+          "max_drawdown_pct": 30.41,
+          "sharpe_ratio": 0.859,
+          "accepted": 484,
+          "candidates": 47952,
+          "win_rate": 32.02,
+          "average_positions": 9.1034
+        },
+        "hash": {
+          "total_return_pct": 13.96,
+          "annualized_return_pct": 4.43,
+          "max_drawdown_pct": 22.97,
+          "sharpe_ratio": 0.309,
+          "accepted": 441,
+          "candidates": 47952,
+          "win_rate": 30.39,
+          "average_positions": 9.1775
+        },
+        "rotate": {
+          "total_return_pct": 31.23,
+          "annualized_return_pct": 9.08,
+          "max_drawdown_pct": 24.73,
+          "sharpe_ratio": 0.514,
+          "accepted": 433,
+          "candidates": 47952,
+          "win_rate": 31.64,
+          "average_positions": 9.1941
+        }
+      },
+      "median": {
+        "annualized_return_pct": 7.4,
+        "max_drawdown_pct": 27.57,
+        "sharpe_ratio": 0.44,
+        "return_over_drawdown": 0.268,
+        "sharpe_min": 0.309,
+        "sharpe_max": 0.859
+      }
+    },
+    "yearline_diverge_baseline": {
+      "candidates": 47952,
+      "accepted": 389,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 3.79,
+          "annualized_return_pct": 1.46,
+          "max_drawdown_pct": 41.5,
+          "sharpe_ratio": 0.183,
+          "accepted": 389,
+          "candidates": 47952,
+          "win_rate": 31.88,
+          "average_positions": 9.2503
+        },
+        "symbol_desc": {
+          "total_return_pct": 9.81,
+          "annualized_return_pct": 3.24,
+          "max_drawdown_pct": 30.02,
+          "sharpe_ratio": 0.259,
+          "accepted": 411,
+          "candidates": 47952,
+          "win_rate": 30.66,
+          "average_positions": 9.2516
+        },
+        "hash": {
+          "total_return_pct": -19.39,
+          "annualized_return_pct": -6.16,
+          "max_drawdown_pct": 33.17,
+          "sharpe_ratio": -0.151,
+          "accepted": 390,
+          "candidates": 47952,
+          "win_rate": 30.77,
+          "average_positions": 9.2989
+        },
+        "rotate": {
+          "total_return_pct": -0.94,
+          "annualized_return_pct": 0.01,
+          "max_drawdown_pct": 27.56,
+          "sharpe_ratio": 0.114,
+          "accepted": 404,
+          "candidates": 47952,
+          "win_rate": 29.46,
+          "average_positions": 9.2031
+        }
+      },
+      "median": {
+        "annualized_return_pct": 0.73,
+        "max_drawdown_pct": 31.59,
+        "sharpe_ratio": 0.148,
+        "return_over_drawdown": 0.023,
+        "sharpe_min": -0.151,
+        "sharpe_max": 0.259
+      }
+    }
+  },
+  "unified_ranking": {
+    "priority_only": {
+      "candidates": 47952,
+      "accepted": 401,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 15.34,
+          "annualized_return_pct": 4.82,
+          "max_drawdown_pct": 41.91,
+          "sharpe_ratio": 0.325,
+          "accepted": 401,
+          "candidates": 47952,
+          "win_rate": 31.92,
+          "average_positions": 9.2835
+        },
+        "symbol_desc": {
+          "total_return_pct": 14.93,
+          "annualized_return_pct": 4.7,
+          "max_drawdown_pct": 32.3,
+          "sharpe_ratio": 0.319,
+          "accepted": 430,
+          "candidates": 47952,
+          "win_rate": 30.0,
+          "average_positions": 9.2299
+        },
+        "hash": {
+          "total_return_pct": 1.72,
+          "annualized_return_pct": 0.83,
+          "max_drawdown_pct": 33.17,
+          "sharpe_ratio": 0.156,
+          "accepted": 401,
+          "candidates": 47952,
+          "win_rate": 29.93,
+          "average_positions": 9.2797
+        },
+        "rotate": {
+          "total_return_pct": 15.5,
+          "annualized_return_pct": 4.86,
+          "max_drawdown_pct": 27.33,
+          "sharpe_ratio": 0.331,
+          "accepted": 393,
+          "candidates": 47952,
+          "win_rate": 32.32,
+          "average_positions": 9.2337
+        }
+      },
+      "median": {
+        "annualized_return_pct": 4.76,
+        "max_drawdown_pct": 32.73,
+        "sharpe_ratio": 0.322,
+        "return_over_drawdown": 0.145,
+        "sharpe_min": 0.156,
+        "sharpe_max": 0.331
+      }
+    },
+    "near_line": {
+      "candidates": 47952,
+      "accepted": 384,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -14.74,
+          "annualized_return_pct": -4.52,
+          "max_drawdown_pct": 36.95,
+          "sharpe_ratio": -0.083,
+          "accepted": 384,
+          "candidates": 47952,
+          "win_rate": 28.65,
+          "average_positions": 9.3308
+        },
+        "symbol_desc": {
+          "total_return_pct": -20.7,
+          "annualized_return_pct": -6.63,
+          "max_drawdown_pct": 43.94,
+          "sharpe_ratio": -0.169,
+          "accepted": 399,
+          "candidates": 47952,
+          "win_rate": 27.82,
+          "average_positions": 9.2554
+        },
+        "hash": {
+          "total_return_pct": -17.61,
+          "annualized_return_pct": -5.53,
+          "max_drawdown_pct": 37.6,
+          "sharpe_ratio": -0.13,
+          "accepted": 382,
+          "candidates": 47952,
+          "win_rate": 28.53,
+          "average_positions": 9.318
+        },
+        "rotate": {
+          "total_return_pct": -8.66,
+          "annualized_return_pct": -2.47,
+          "max_drawdown_pct": 33.3,
+          "sharpe_ratio": 0.005,
+          "accepted": 387,
+          "candidates": 47952,
+          "win_rate": 29.2,
+          "average_positions": 9.3436
+        }
+      },
+      "median": {
+        "annualized_return_pct": -5.03,
+        "max_drawdown_pct": 37.28,
+        "sharpe_ratio": -0.107,
+        "return_over_drawdown": -0.135,
+        "sharpe_min": -0.169,
+        "sharpe_max": 0.005
+      }
+    },
+    "high_vol": {
+      "candidates": 47952,
+      "accepted": 423,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -4.0,
+          "annualized_return_pct": -0.96,
+          "max_drawdown_pct": 42.62,
+          "sharpe_ratio": 0.082,
+          "accepted": 423,
+          "candidates": 47952,
+          "win_rate": 30.02,
+          "average_positions": 9.1341
+        },
+        "symbol_desc": {
+          "total_return_pct": -15.35,
+          "annualized_return_pct": -4.73,
+          "max_drawdown_pct": 45.65,
+          "sharpe_ratio": -0.072,
+          "accepted": 436,
+          "candidates": 47952,
+          "win_rate": 28.21,
+          "average_positions": 9.0524
+        },
+        "hash": {
+          "total_return_pct": -21.61,
+          "annualized_return_pct": -6.96,
+          "max_drawdown_pct": 45.53,
+          "sharpe_ratio": -0.181,
+          "accepted": 421,
+          "candidates": 47952,
+          "win_rate": 29.22,
+          "average_positions": 9.1558
+        },
+        "rotate": {
+          "total_return_pct": 20.31,
+          "annualized_return_pct": 6.19,
+          "max_drawdown_pct": 27.21,
+          "sharpe_ratio": 0.388,
+          "accepted": 433,
+          "candidates": 47952,
+          "win_rate": 31.18,
+          "average_positions": 9.1699
+        }
+      },
+      "median": {
+        "annualized_return_pct": -2.85,
+        "max_drawdown_pct": 44.08,
+        "sharpe_ratio": 0.005,
+        "return_over_drawdown": -0.065,
+        "sharpe_min": -0.181,
+        "sharpe_max": 0.388
+      }
+    },
+    "low_vol": {
+      "candidates": 47952,
+      "accepted": 430,
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": -28.64,
+          "annualized_return_pct": -9.63,
+          "max_drawdown_pct": 37.15,
+          "sharpe_ratio": -0.318,
+          "accepted": 430,
+          "candidates": 47952,
+          "win_rate": 27.91,
+          "average_positions": 9.2171
+        },
+        "symbol_desc": {
+          "total_return_pct": -0.0,
+          "annualized_return_pct": 0.3,
+          "max_drawdown_pct": 40.35,
+          "sharpe_ratio": 0.15,
+          "accepted": 488,
+          "candidates": 47952,
+          "win_rate": 27.87,
+          "average_positions": 9.1788
+        },
+        "hash": {
+          "total_return_pct": -18.51,
+          "annualized_return_pct": -5.85,
+          "max_drawdown_pct": 43.19,
+          "sharpe_ratio": -0.145,
+          "accepted": 435,
+          "candidates": 47952,
+          "win_rate": 27.82,
+          "average_positions": 9.1584
+        },
+        "rotate": {
+          "total_return_pct": 13.34,
+          "annualized_return_pct": 4.25,
+          "max_drawdown_pct": 24.99,
+          "sharpe_ratio": 0.305,
+          "accepted": 440,
+          "candidates": 47952,
+          "win_rate": 29.77,
+          "average_positions": 9.2184
+        }
+      },
+      "median": {
+        "annualized_return_pct": -2.77,
+        "max_drawdown_pct": 38.75,
+        "sharpe_ratio": 0.003,
+        "return_over_drawdown": -0.072,
+        "sharpe_min": -0.318,
+        "sharpe_max": 0.305
+      }
+    }
+  },
+  "capital_split": {
+    "diverge70+yearline30": {
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 59.64,
+          "annualized_return_pct": 21.89,
+          "max_drawdown_pct": 10.75,
+          "sharpe_ratio": 1.341,
+          "accepted": 216,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 281212.85,
+              "accepted": 139,
+              "total_return_pct": 60.69
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 117885.9,
+              "accepted": 77,
+              "total_return_pct": 57.18
+            }
+          ]
+        },
+        "symbol_desc": {
+          "total_return_pct": 48.32,
+          "annualized_return_pct": 18.16,
+          "max_drawdown_pct": 14.34,
+          "sharpe_ratio": 1.149,
+          "accepted": 229,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 266030.28,
+              "accepted": 147,
+              "total_return_pct": 52.02
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 104765.48,
+              "accepted": 82,
+              "total_return_pct": 39.69
+            }
+          ]
+        },
+        "hash": {
+          "total_return_pct": 39.43,
+          "annualized_return_pct": 15.13,
+          "max_drawdown_pct": 12.73,
+          "sharpe_ratio": 0.984,
+          "accepted": 231,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 274957.29,
+              "accepted": 142,
+              "total_return_pct": 57.12
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 73623.8,
+              "accepted": 89,
+              "total_return_pct": -1.83
+            }
+          ]
+        },
+        "rotate": {
+          "total_return_pct": 14.51,
+          "annualized_return_pct": 5.95,
+          "max_drawdown_pct": 14.35,
+          "sharpe_ratio": 0.455,
+          "accepted": 233,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 248748.51,
+              "accepted": 140,
+              "total_return_pct": 42.14
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 37516.78,
+              "accepted": 93,
+              "total_return_pct": -49.98
+            }
+          ]
+        }
+      },
+      "accepted": 216,
+      "median": {
+        "annualized_return_pct": 16.64,
+        "max_drawdown_pct": 13.54,
+        "sharpe_ratio": 1.067,
+        "return_over_drawdown": 1.23,
+        "sharpe_min": 0.455,
+        "sharpe_max": 1.341
+      }
+    },
+    "diverge50+yearline50": {
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 42.02,
+          "annualized_return_pct": 16.02,
+          "max_drawdown_pct": 13.92,
+          "sharpe_ratio": 0.954,
+          "accepted": 241,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 194486.77,
+              "accepted": 111,
+              "total_return_pct": 55.59
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 160551.19,
+              "accepted": 130,
+              "total_return_pct": 28.44
+            }
+          ]
+        },
+        "symbol_desc": {
+          "total_return_pct": 41.85,
+          "annualized_return_pct": 15.96,
+          "max_drawdown_pct": 15.67,
+          "sharpe_ratio": 0.961,
+          "accepted": 254,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 187624.42,
+              "accepted": 112,
+              "total_return_pct": 50.1
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 167004.68,
+              "accepted": 142,
+              "total_return_pct": 33.6
+            }
+          ]
+        },
+        "hash": {
+          "total_return_pct": 36.8,
+          "annualized_return_pct": 14.2,
+          "max_drawdown_pct": 15.4,
+          "sharpe_ratio": 0.859,
+          "accepted": 243,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 218303.99,
+              "accepted": 106,
+              "total_return_pct": 74.64
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 123700.36,
+              "accepted": 137,
+              "total_return_pct": -1.04
+            }
+          ]
+        },
+        "rotate": {
+          "total_return_pct": 8.39,
+          "annualized_return_pct": 3.52,
+          "max_drawdown_pct": 19.7,
+          "sharpe_ratio": 0.291,
+          "accepted": 251,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 173543.76,
+              "accepted": 102,
+              "total_return_pct": 38.84
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 97420.6,
+              "accepted": 149,
+              "total_return_pct": -22.06
+            }
+          ]
+        }
+      },
+      "accepted": 241,
+      "median": {
+        "annualized_return_pct": 15.08,
+        "max_drawdown_pct": 15.54,
+        "sharpe_ratio": 0.906,
+        "return_over_drawdown": 0.971,
+        "sharpe_min": 0.291,
+        "sharpe_max": 0.961
+      }
+    },
+    "diverge30+yearline70": {
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 44.1,
+          "annualized_return_pct": 16.74,
+          "max_drawdown_pct": 18.5,
+          "sharpe_ratio": 0.954,
+          "accepted": 254,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 139402.88,
+              "accepted": 70,
+              "total_return_pct": 85.87
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 220857.89,
+              "accepted": 184,
+              "total_return_pct": 26.2
+            }
+          ]
+        },
+        "symbol_desc": {
+          "total_return_pct": 32.04,
+          "annualized_return_pct": 12.51,
+          "max_drawdown_pct": 20.69,
+          "sharpe_ratio": 0.731,
+          "accepted": 264,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 120450.63,
+              "accepted": 64,
+              "total_return_pct": 60.6
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 209656.23,
+              "accepted": 200,
+              "total_return_pct": 19.8
+            }
+          ]
+        },
+        "hash": {
+          "total_return_pct": 9.25,
+          "annualized_return_pct": 3.87,
+          "max_drawdown_pct": 21.75,
+          "sharpe_ratio": 0.302,
+          "accepted": 252,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 104215.97,
+              "accepted": 62,
+              "total_return_pct": 38.95
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 168911.18,
+              "accepted": 190,
+              "total_return_pct": -3.48
+            }
+          ]
+        },
+        "rotate": {
+          "total_return_pct": 14.49,
+          "annualized_return_pct": 5.94,
+          "max_drawdown_pct": 23.49,
+          "sharpe_ratio": 0.407,
+          "accepted": 272,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 125456.19,
+              "accepted": 64,
+              "total_return_pct": 67.27
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.7,
+              "cash": 175000.0,
+              "slots": 7,
+              "final_equity": 160762.0,
+              "accepted": 208,
+              "total_return_pct": -8.14
+            }
+          ]
+        }
+      },
+      "accepted": 254,
+      "median": {
+        "annualized_return_pct": 9.22,
+        "max_drawdown_pct": 21.22,
+        "sharpe_ratio": 0.569,
+        "return_over_drawdown": 0.435,
+        "sharpe_min": 0.302,
+        "sharpe_max": 0.954
+      }
+    },
+    "diverge50+yearline30+baseline20": {
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 34.66,
+          "annualized_return_pct": 9.95,
+          "max_drawdown_pct": 17.1,
+          "sharpe_ratio": 0.697,
+          "accepted": 290,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 194486.77,
+              "accepted": 111,
+              "total_return_pct": 55.59
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 117885.9,
+              "accepted": 77,
+              "total_return_pct": 57.18
+            },
+            {
+              "pool": "baseline",
+              "ratio": 0.2,
+              "cash": 50000.0,
+              "slots": 2,
+              "final_equity": 24287.55,
+              "accepted": 102,
+              "total_return_pct": -51.42
+            }
+          ]
+        },
+        "symbol_desc": {
+          "total_return_pct": 40.61,
+          "annualized_return_pct": 11.43,
+          "max_drawdown_pct": 17.42,
+          "sharpe_ratio": 0.755,
+          "accepted": 305,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 187624.42,
+              "accepted": 112,
+              "total_return_pct": 50.1
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 104765.48,
+              "accepted": 82,
+              "total_return_pct": 39.69
+            },
+            {
+              "pool": "baseline",
+              "ratio": 0.2,
+              "cash": 50000.0,
+              "slots": 2,
+              "final_equity": 59140.99,
+              "accepted": 111,
+              "total_return_pct": 18.28
+            }
+          ]
+        },
+        "hash": {
+          "total_return_pct": 23.39,
+          "annualized_return_pct": 7.02,
+          "max_drawdown_pct": 21.87,
+          "sharpe_ratio": 0.522,
+          "accepted": 298,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 218303.99,
+              "accepted": 106,
+              "total_return_pct": 74.64
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 73623.8,
+              "accepted": 89,
+              "total_return_pct": -1.83
+            },
+            {
+              "pool": "baseline",
+              "ratio": 0.2,
+              "cash": 50000.0,
+              "slots": 2,
+              "final_equity": 16550.95,
+              "accepted": 103,
+              "total_return_pct": -66.9
+            }
+          ]
+        },
+        "rotate": {
+          "total_return_pct": 6.36,
+          "annualized_return_pct": 2.22,
+          "max_drawdown_pct": 18.23,
+          "sharpe_ratio": 0.222,
+          "accepted": 291,
+          "sub_results": [
+            {
+              "pool": "diverge",
+              "ratio": 0.5,
+              "cash": 125000.0,
+              "slots": 5,
+              "final_equity": 173543.76,
+              "accepted": 102,
+              "total_return_pct": 38.84
+            },
+            {
+              "pool": "yearline",
+              "ratio": 0.3,
+              "cash": 75000.0,
+              "slots": 3,
+              "final_equity": 37516.78,
+              "accepted": 93,
+              "total_return_pct": -49.98
+            },
+            {
+              "pool": "baseline",
+              "ratio": 0.2,
+              "cash": 50000.0,
+              "slots": 2,
+              "final_equity": 54832.04,
+              "accepted": 96,
+              "total_return_pct": 9.66
+            }
+          ]
+        }
+      },
+      "accepted": 290,
+      "median": {
+        "annualized_return_pct": 8.48,
+        "max_drawdown_pct": 17.83,
+        "sharpe_ratio": 0.609,
+        "return_over_drawdown": 0.476,
+        "sharpe_min": 0.222,
+        "sharpe_max": 0.755
+      }
+    }
+  }
+}
