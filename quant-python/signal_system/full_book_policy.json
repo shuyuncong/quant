@@ -1,0 +1,126 @@
+{
+  "cash": 250000.0,
+  "round_trip_cost_pct": 0.23,
+  "cases": {
+    "slots4": {
+      "slots": 4,
+      "position_size_pct": 0.25,
+      "accepted": {
+        "count": 88,
+        "mean_pnl_pct": 4.55,
+        "median_pnl_pct": -7.41,
+        "win_rate": 43.2,
+        "profit_factor": 2.04,
+        "best_pct": 38.0,
+        "worst_pct": -12.2
+      },
+      "rejection_reasons": {
+        "max_positions": 468,
+        "symbol_already_held": 3
+      },
+      "rejected_max_positions": {
+        "count": 468,
+        "mean_pnl_pct": 1.06,
+        "median_pnl_pct": -8.39,
+        "win_rate": 36.5,
+        "profit_factor": 1.19,
+        "best_pct": 50.1,
+        "worst_pct": -21.4
+      },
+      "rejected_symbol_already_held": {
+        "count": 3,
+        "mean_pnl_pct": -8.75,
+        "median_pnl_pct": -8.68,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "best_pct": -8.5,
+        "worst_pct": -9.0
+      },
+      "forgone_upside": {
+        "observations": 1806,
+        "mean_remaining_pct": 2.4,
+        "median_remaining_pct": -0.9,
+        "positive_share_pct": 45.0,
+        "best_remaining_pct": 41.5,
+        "worst_remaining_pct": -21.1
+      }
+    },
+    "slots5": {
+      "slots": 5,
+      "position_size_pct": 0.25,
+      "accepted": {
+        "count": 111,
+        "mean_pnl_pct": 2.77,
+        "median_pnl_pct": -8.24,
+        "win_rate": 37.8,
+        "profit_factor": 1.55,
+        "best_pct": 38.0,
+        "worst_pct": -19.0
+      },
+      "rejection_reasons": {
+        "max_positions": 445,
+        "symbol_already_held": 3
+      },
+      "rejected_max_positions": {
+        "count": 445,
+        "mean_pnl_pct": 1.37,
+        "median_pnl_pct": -8.38,
+        "win_rate": 37.5,
+        "profit_factor": 1.25,
+        "best_pct": 50.1,
+        "worst_pct": -21.4
+      },
+      "rejected_symbol_already_held": {
+        "count": 3,
+        "mean_pnl_pct": -8.75,
+        "median_pnl_pct": -8.68,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "best_pct": -8.5,
+        "worst_pct": -9.0
+      },
+      "forgone_upside": {
+        "observations": 2159,
+        "mean_remaining_pct": 1.04,
+        "median_remaining_pct": -2.04,
+        "positive_share_pct": 40.9,
+        "best_remaining_pct": 41.5,
+        "worst_remaining_pct": -23.5
+      }
+    }
+  },
+  "slot_ladder": {
+    "4": {
+      "accepted": 88,
+      "candidates": 559,
+      "annualized_return_pct": 38.71,
+      "max_drawdown_pct": 13.05,
+      "sharpe_ratio": 1.65,
+      "average_positions": 3.3651
+    },
+    "10": {
+      "accepted": 192,
+      "candidates": 559,
+      "annualized_return_pct": 22.52,
+      "max_drawdown_pct": 11.68,
+      "sharpe_ratio": 1.357,
+      "average_positions": 7.357
+    },
+    "20": {
+      "accepted": 324,
+      "candidates": 559,
+      "annualized_return_pct": 19.21,
+      "max_drawdown_pct": 9.7,
+      "sharpe_ratio": 1.5,
+      "average_positions": 12.284
+    },
+    "30": {
+      "accepted": 390,
+      "candidates": 559,
+      "annualized_return_pct": 14.82,
+      "max_drawdown_pct": 7.62,
+      "sharpe_ratio": 1.44,
+      "average_positions": 15.3753
+    }
+  }
+}
