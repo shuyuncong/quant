@@ -11,6 +11,9 @@ export interface JobRow {
 }
 
 export interface ModelProfile {
+  /** Older profiles default to Chat Completions. */
+  protocol?: import("./model-protocol").ModelProtocol;
+  reasoning_effort?: import("./model-protocol").ReasoningEffort;
   id: number;
   name: string;
   base_url: string;

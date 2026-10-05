@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { deleteModel, getModel, updateModel } from "@/lib/db";
+import { isModelProtocol, isReasoningEffort, modelEndpoint } from "@/lib/model-protocol";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +21,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Request body must be JSON" }, { status: 400 });
   }
   const patch: Record<string, unknown> = {};
+  if (body.reasoning_effort !== undefined) {
+    if (!isReasoningEffort(body.reasoning_effort)) return NextResponse.json({ error: "不支持的推理强度" }, { status: 422 });
+    patch.reasoning_effort = body.reasoning_effort;
+  }
+  if (body.protocol !== undefined) {
+    if (!isModelProtocol(body.protocol)) return NextResponse.json({ error: "不支持的模型协议" }, { status: 422 });
+    patch.protocol = body.protocol;
+  }
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
   if (typeof body.base_url === "string" && body.base_url.trim()) patch.base_url = body.base_url.trim().replace(/\/$/, "");
   if (typeof body.model === "string" && body.model.trim()) patch.model = body.model.trim();
@@ -28,6 +37,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (typeof body.proxy === "string") patch.proxy = body.proxy.trim();
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
   if (typeof body.vision_supported === "boolean") patch.vision_supported = body.vision_supported;
+  try { modelEndpoint(String(patch.base_url ?? current.base_url), current.protocol ?? "chat_completions"); } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 422 });
+  }
   await updateModel(modelId, patch);
   return NextResponse.json({ ok: true });
 }

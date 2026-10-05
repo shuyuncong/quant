@@ -3,6 +3,9 @@ import type { ModelProfile } from "./types";
 import { normalizeSymbol } from "./symbols";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 import type { Response } from "undici";
+import { modelEndpoint, MODEL_PROTOCOL_LABELS, type ModelProtocol } from "./model-protocol";
+import { responsesRequest, responseText, protocolStreamText, codexCompatibleRequest } from "./llm-protocol";
+import { randomUUID } from "node:crypto";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -108,35 +111,44 @@ async function chatCompletion(
 ): Promise<string> {
   const apiKey = resolveApiKey(profile);
   if (!apiKey) throw new Error("模型未配置 API Key");
-  const url = `${profile.base_url.replace(/\/$/, "")}/chat/completions`;
-  const body = {
+  const protocol = profile.protocol ?? "chat_completions";
+  const requestStream = stream || protocol === "responses";
+  const url = modelEndpoint(profile.base_url, protocol);
+  let body: Record<string, unknown> = {
     model: profile.model,
-    messages,
-    temperature: 0.2,
-    ...(stream ? { stream: true } : {}),
+    ...(protocol === "responses" ? responsesRequest(messages, profile.reasoning_effort) : { messages }),
+    ...(requestStream ? { stream: true } : {}),
   };
-  const doFetch = async () => {
+  let codexCompatibilityApplied = false;
+  const doFetch = async (): Promise<string> => {
     const response = await undiciFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
+        Accept: requestStream ? "text/event-stream" : "application/json",
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
       ...(dispatcher ? { dispatcher } : {}),
     });
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`HTTP ${response.status}: ${detail.slice(0, 300)}`);
+      const detail = (await response.text().catch(() => "")).split(apiKey).join("[redacted]");
+      if (protocol === "responses" && !codexCompatibilityApplied && response.status === 400 &&
+          /invalid codex request|invalid_responses_request/i.test(detail)) {
+        codexCompatibilityApplied = true;
+        body = codexCompatibleRequest(body, randomUUID());
+        return await doFetch();
+      }
+      const hint = response.status === 404 || response.status === 405
+        ? "；请核对 Base URL 和接口协议" : "";
+      throw new Error(`${MODEL_PROTOCOL_LABELS[protocol]} HTTP ${response.status}: ${detail.slice(0, 300)}${hint}`);
     }
-    if (stream) return await readStreamContent(response);
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string };
-    };
-    if (data.error?.message) throw new Error(data.error.message);
-    const content = data.choices?.[0]?.message?.content;
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("text/event-stream") || (requestStream && !contentType.includes("application/json"))) {
+      return await readStreamContent(response, protocol);
+    }
+    const content = responseText(await response.json(), protocol);
     if (!content) throw new Error("模型返回内容为空");
     return content;
   };
@@ -146,8 +158,8 @@ async function chatCompletion(
     return await doFetch();
   } catch (error) {
     // one retry for transient network/timeout failures (including upstream HTTP 524)
-    if (error instanceof Error && /timeout|ECONNRESET|fetch failed|ETIMEDOUT|ENOTFOUND|HTTP 524/i.test(error.message)) {
-      return doFetch();
+    if (error instanceof Error && /timeout|ECONNRESET|fetch failed|ETIMEDOUT|ENOTFOUND|HTTP 524|do_request_failed/i.test(error.message)) {
+      return await doFetch();
     }
     throw error;
   } finally {
@@ -160,42 +172,15 @@ async function chatCompletion(
  * 解读类请求用流式：首个 token 到达后连接保持活跃，
  * 可避开上游 Cloudflare 的源站响应超时（HTTP 524）即使完整生成耗时数分钟。
  */
-export async function readStreamContent(response: Response): Promise<string> {
-  if (!response.body) throw new Error("模型流式响应无 body");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let content = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        const chunk = JSON.parse(payload) as {
-          choices?: Array<{ delta?: { content?: string } }>;
-        };
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) content += delta;
-      } catch {
-        /* 忽略无法解析的心跳/元数据行 */
-      }
-    }
-  }
-  if (!content) throw new Error("模型流式返回内容为空");
-  return content;
+export async function readStreamContent(response: Response, protocol: ModelProtocol = "chat_completions"): Promise<string> {
+  return protocolStreamText(response, protocol);
 }
 
 export async function testProfile(profile: ModelProfile): Promise<{ ok: boolean; detail: string }> {
   try {
     const content = await chatCompletion(profile, [
       { role: "user", content: "请回复 OK" },
-    ], 30_000);
+    ], 60_000);
     return { ok: true, detail: content.slice(0, 200) };
   } catch (error) {
     return { ok: false, detail: error instanceof Error ? error.message : String(error) };

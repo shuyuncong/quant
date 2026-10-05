@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ModelPurposeSettings } from "@/components/model-purpose-settings";
+import { MODEL_PROTOCOL_LABELS, REASONING_EFFORTS, type ModelProtocol, type ReasoningEffort } from "@/lib/model-protocol";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ import {
 import { ArrowDown, ArrowUp, CheckCircle2, Copy, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 
 interface ModelItem {
+  reasoning_effort?: ReasoningEffort;
+  protocol?: ModelProtocol;
   id: number;
   name: string;
   base_url: string;
@@ -50,6 +53,8 @@ interface ModelItem {
 }
 
 interface ModelForm {
+  reasoning_effort: ReasoningEffort;
+  protocol: ModelProtocol;
   name: string;
   base_url: string;
   model: string;
@@ -61,6 +66,8 @@ interface ModelForm {
 }
 
 const EMPTY_FORM: ModelForm = {
+  reasoning_effort: "default",
+  protocol: "chat_completions",
   name: "",
   base_url: "",
   model: "",
@@ -105,6 +112,8 @@ export default function ModelsPage() {
     setEditingId(model.id);
     setForm({
       name: model.name,
+      reasoning_effort: model.reasoning_effort ?? "default",
+      protocol: model.protocol ?? "chat_completions",
       base_url: model.base_url,
       model: model.model,
       api_key: model.api_key === "****" ? "****" : "",
@@ -121,6 +130,8 @@ export default function ModelsPage() {
     setEditingId(null);
     setForm({
       name: `${model.name} 副本`,
+      reasoning_effort: model.reasoning_effort ?? "default",
+      protocol: model.protocol ?? "chat_completions",
       base_url: model.base_url,
       model: model.model,
       api_key: model.api_key === "****" ? "****" : "",
@@ -221,7 +232,7 @@ export default function ModelsPage() {
         <div>
           <h1 className="text-xl font-semibold">模型配置</h1>
           <p className="text-sm text-muted-foreground">
-            支持 1~N 个 OpenAI 兼容接口（/chat/completions）。启用且配置了 Key 的模型用于 AI 解读与图片识别。
+            支持 Chat Completions 和 Responses 协议。启用且配置了 Key 的模型用于 AI 解读与图片识别。
           </p>
         </div>
         <Button onClick={openAdd}><Plus className="size-4" /> 新增模型</Button>
@@ -240,6 +251,7 @@ export default function ModelsPage() {
                 <TableHead>名称</TableHead>
                 <TableHead>Base URL</TableHead>
                 <TableHead>模型</TableHead>
+                <TableHead>协议</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>视觉</TableHead>
                 <TableHead>Key</TableHead>
@@ -253,6 +265,12 @@ export default function ModelsPage() {
                   <TableCell className="max-w-44 truncate font-medium" title={model.name}>{model.name}</TableCell>
                   <TableCell className="max-w-40 truncate font-mono text-xs" title={model.base_url}>{model.base_url}</TableCell>
                   <TableCell className="max-w-32 truncate font-mono text-xs" title={model.model}>{model.model}</TableCell>
+                  <TableCell className="text-xs">
+                    {MODEL_PROTOCOL_LABELS[model.protocol ?? "chat_completions"]}
+                    {model.protocol === "responses" && model.reasoning_effort && model.reasoning_effort !== "default" && (
+                      <span className="block text-muted-foreground">推理：{model.reasoning_effort}</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {model.enabled ? (
                       <Badge><CheckCircle2 className="size-3" /> 启用</Badge>
@@ -302,7 +320,7 @@ export default function ModelsPage() {
               ))}
               {models.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground">
                     暂无模型，点击右上角新增
                   </TableCell>
                 </TableRow>
@@ -319,6 +337,29 @@ export default function ModelsPage() {
             <DialogDescription>OpenAI 兼容接口配置，支持任意 base_url + model + api_key。</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="model-protocol">接口协议</Label>
+              <select id="model-protocol" aria-describedby="model-protocol-help" value={form.protocol}
+                onChange={(event) => setForm((prev) => ({ ...prev, protocol: event.target.value as ModelProtocol }))}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring">
+                <option value="chat_completions">OpenAI Chat Completions</option>
+                <option value="responses">OpenAI Responses</option>
+              </select>
+              <p id="model-protocol-help" className="text-xs text-muted-foreground">
+                按服务商支持的协议选择。Base URL 通常填写到 /v1；测试、AI 分析和图片识别均使用此协议。修改后先保存，再测试。
+              </p>
+            </div>
+            {form.protocol === "responses" && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="model-reasoning">推理强度</Label>
+                <select id="model-reasoning" aria-describedby="model-reasoning-help" value={form.reasoning_effort}
+                  onChange={(event) => setForm((prev) => ({ ...prev, reasoning_effort: event.target.value as ReasoningEffort }))}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring">
+                  {REASONING_EFFORTS.map(effort => <option key={effort} value={effort}>{effort === "default" ? "服务默认" : effort}</option>)}
+                </select>
+                <p id="model-reasoning-help" className="text-xs text-muted-foreground">仅选择服务商支持的档位；较高强度可能增加耗时和费用。</p>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label>名称</Label>
               <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="例如：本地 DeepSeek" />

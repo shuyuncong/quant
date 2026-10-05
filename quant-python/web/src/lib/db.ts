@@ -5,6 +5,7 @@ import {
   type QueryResultRow,
 } from "pg";
 import { nowIso } from "./time";
+import { isModelProtocol, isReasoningEffort, type ModelProtocol, type ReasoningEffort } from "./model-protocol";
 import type {
   AnalysisNote,
   HoldingRow,
@@ -211,7 +212,19 @@ export async function getAllSettings(db?: DbClient): Promise<Record<string, unkn
 // ---------- model profiles ----------
 
 function rowToModel(row: Record<string, unknown>): ModelProfile {
+  let reasoning_effort: ReasoningEffort = "default";
+  try {
+    const stored: unknown = JSON.parse(String(row.reasoning_json ?? "null"));
+    if (isReasoningEffort(stored)) reasoning_effort = stored;
+  } catch { /* Leave reasoning to the provider for older profiles. */ }
+  let protocol: ModelProtocol = "chat_completions";
+  try {
+    const stored: unknown = JSON.parse(String(row.protocol_json ?? "null"));
+    if (isModelProtocol(stored)) protocol = stored;
+  } catch { /* Older profiles use the existing protocol. */ }
   return {
+    reasoning_effort,
+    protocol,
     id: Number(row.id),
     name: String(row.name ?? ""),
     base_url: String(row.base_url ?? ""),
@@ -229,18 +242,24 @@ function rowToModel(row: Record<string, unknown>): ModelProfile {
 
 export async function listModels(db?: DbClient): Promise<ModelProfile[]> {
   const client = await resolveDb(db);
-  const result = await client.query("SELECT * FROM quant.model_profiles ORDER BY priority, id");
+  const result = await client.query(`SELECT m.*, s.value AS protocol_json, r.value AS reasoning_json FROM quant.model_profiles m
+    LEFT JOIN quant.settings s ON s.key = 'models.protocol.' || m.id::text
+    LEFT JOIN quant.settings r ON r.key = 'models.reasoning.' || m.id::text ORDER BY m.priority, m.id`);
   return result.rows.map(rowToModel);
 }
 
 export async function getModel(id: number, db?: DbClient): Promise<ModelProfile | null> {
   const client = await resolveDb(db);
-  const result = await client.query("SELECT * FROM quant.model_profiles WHERE id = $1", [id]);
+  const result = await client.query(`SELECT m.*, s.value AS protocol_json, r.value AS reasoning_json FROM quant.model_profiles m
+    LEFT JOIN quant.settings s ON s.key = 'models.protocol.' || m.id::text
+    LEFT JOIN quant.settings r ON r.key = 'models.reasoning.' || m.id::text WHERE m.id = $1`, [id]);
   return result.rows[0] ? rowToModel(result.rows[0]) : null;
 }
 
 export async function createModel(
   input: {
+    protocol?: ModelProtocol;
+    reasoning_effort?: ReasoningEffort;
     name: string;
     base_url: string;
     model: string;
@@ -252,37 +271,43 @@ export async function createModel(
   },
   db?: DbClient,
 ): Promise<number> {
-  const client = await resolveDb(db);
-  const now = nowIso();
-  // 新模型默认排到最末（MAX+1）；并发极少见，单条查询足够。
-  const priorityResult = await client.query<{ max: number | null }>(
-    "SELECT MAX(priority) AS max FROM quant.model_profiles",
-  );
-  const priority = Number(priorityResult.rows[0]?.max ?? -1) + 1;
-  const result = await client.query<{ id: string | number }>(
-    `INSERT INTO quant.model_profiles
-       (name, base_url, model, api_key, env_key, proxy, enabled, vision_supported, priority, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-     RETURNING id`,
-    [
-      input.name,
-      input.base_url,
-      input.model,
-      input.api_key ?? "",
-      input.env_key ?? "",
-      input.proxy ?? "",
-      Boolean(input.enabled),
-      input.vision_supported !== false,
-      priority,
-      now,
-    ],
-  );
-  return Number(result.rows[0].id);
+  return inTransaction(db, async (client) => {
+    const now = nowIso();
+    // 新模型默认排到最末（MAX+1）；并发极少见，单条查询足够。
+    const priorityResult = await client.query<{ max: number | null }>(
+      "SELECT MAX(priority) AS max FROM quant.model_profiles",
+    );
+    const priority = Number(priorityResult.rows[0]?.max ?? -1) + 1;
+    const result = await client.query<{ id: string | number }>(
+      `INSERT INTO quant.model_profiles
+         (name, base_url, model, api_key, env_key, proxy, enabled, vision_supported, priority, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+       RETURNING id`,
+      [
+        input.name,
+        input.base_url,
+        input.model,
+        input.api_key ?? "",
+        input.env_key ?? "",
+        input.proxy ?? "",
+        Boolean(input.enabled),
+        input.vision_supported !== false,
+        priority,
+        now,
+      ],
+    );
+    const id = Number(result.rows[0].id);
+    await setSetting(`models.protocol.${id}`, input.protocol ?? "chat_completions", client);
+    await setSetting(`models.reasoning.${id}`, input.reasoning_effort ?? "default", client);
+    return id;
+  });
 }
 
 export async function updateModel(
   id: number,
   input: Partial<{
+    protocol: ModelProtocol;
+    reasoning_effort: ReasoningEffort;
     name: string;
     base_url: string;
     model: string;
@@ -311,20 +336,26 @@ export async function updateModel(
     values.push(input[key]);
     fields.push(`${key} = $${values.length}`);
   }
-  if (fields.length === 0) return;
+  if (fields.length === 0 && input.protocol === undefined && input.reasoning_effort === undefined) return;
   values.push(nowIso(), id);
-  const client = await resolveDb(db);
-  await client.query(
-    `UPDATE quant.model_profiles
-     SET ${fields.join(", ")}, updated_at = $${values.length - 1}
-     WHERE id = $${values.length}`,
-    values,
-  );
+  await inTransaction(db, async (client) => {
+    await client.query(
+      `UPDATE quant.model_profiles
+       SET ${fields.length ? fields.join(", ") + ", " : ""}updated_at = $${values.length - 1}
+       WHERE id = $${values.length}`,
+      values,
+    );
+    if (input.protocol !== undefined) await setSetting(`models.protocol.${id}`, input.protocol, client);
+    if (input.reasoning_effort !== undefined) await setSetting(`models.reasoning.${id}`, input.reasoning_effort, client);
+  });
 }
 
 export async function deleteModel(id: number, db?: DbClient): Promise<void> {
-  const client = await resolveDb(db);
-  await client.query("DELETE FROM quant.model_profiles WHERE id = $1", [id]);
+  await inTransaction(db, async (client) => {
+    await client.query("DELETE FROM quant.model_profiles WHERE id = $1", [id]);
+    await deleteSetting(`models.protocol.${id}`, client);
+    await deleteSetting(`models.reasoning.${id}`, client);
+  });
 }
 
 /**
