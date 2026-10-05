@@ -1,0 +1,273 @@
+{
+  "window": {
+    "start": "2023-05-01",
+    "end": "2026-10-04"
+  },
+  "universe": {
+    "history_dir": "D:\\development\\github\\quant\\quant-python\\signal_system\\cache\\daily_history",
+    "symbols_considered": 5007,
+    "adjust": "qfq"
+  },
+  "execution": {
+    "stop_loss_pct": 0.08,
+    "take_profit_pct": 0.3,
+    "max_holding_bars": 40,
+    "commission_pct": 0.0003,
+    "stamp_tax_pct": 0.001,
+    "slippage_pct": 0.0005,
+    "t_plus_one": true,
+    "price_limit_model": "conservative",
+    "portfolio": {
+      "initial_cash": 100000.0,
+      "max_positions": 4,
+      "position_size_pct": 0.25,
+      "lot_size": 100,
+      "signal_priority": [
+        "macd_golden_cross_pullback_confirmed_above",
+        "macd_golden_cross_pullback_confirmed_near",
+        "buy_1",
+        "buy_2",
+        "buy_3"
+      ],
+      "score_mode": "P0",
+      "tie_break": "symbol_asc",
+      "seed": 20261004
+    }
+  },
+  "exit_mode": "production",
+  "gates_applied": {
+    "market_gate": false,
+    "stock_pool": false,
+    "note": "两条臂都不加市场/股票池闸门, 差异只来自信号本身"
+  },
+  "arms": {
+    "yearline__fixed": {
+      "signal": "yearline_all",
+      "stats": {
+        "symbols_with_history": 4920,
+        "symbols_evaluated": 4742,
+        "signal_count": 19459,
+        "insufficient_history": 87
+      },
+      "execution_rejections": {
+        "incomplete_horizon": 1335,
+        "missing_entry_bar": 22,
+        "entry_limit_up": 69
+      },
+      "trade_count": 18033,
+      "exit_reasons": {
+        "stop_loss": {
+          "count": 8470,
+          "share_pct": 46.97,
+          "avg_pnl_pct": -9.21,
+          "total_pnl_pp": -77990.1
+        },
+        "timeout": {
+          "count": 6826,
+          "share_pct": 37.85,
+          "avg_pnl_pct": 4.86,
+          "total_pnl_pp": 33153.2
+        },
+        "take_profit": {
+          "count": 2737,
+          "share_pct": 15.18,
+          "avg_pnl_pct": 29.68,
+          "total_pnl_pp": 81245.3
+        }
+      },
+      "single_trade_summary": {
+        "count": 18033,
+        "win_rate": 42.42,
+        "avg_pnl_pct": 2.02,
+        "median_pnl_pct": -4.7,
+        "avg_win_pct": 15.86,
+        "avg_loss_pct": -8.17,
+        "gross_profit_pct": 121296.18,
+        "gross_loss_pct": -84887.79,
+        "avg_win_loss_ratio": 1.94,
+        "profit_factor": 1.43,
+        "total_pnl_cash": 0.0,
+        "cash_profit_factor": null,
+        "avg_holding_days": 37.7
+      },
+      "portfolio_variants": {
+        "symbol_asc": {
+          "summary": {
+            "count": 89,
+            "win_rate": 38.2,
+            "avg_pnl_pct": 0.9,
+            "median_pnl_pct": -8.04,
+            "avg_win_pct": 14.94,
+            "avg_loss_pct": -7.78,
+            "gross_profit_pct": 508.06,
+            "gross_loss_pct": -427.65,
+            "avg_win_loss_ratio": 1.92,
+            "profit_factor": 1.19,
+            "total_pnl_cash": 14872.49,
+            "cash_profit_factor": 1.15,
+            "avg_holding_days": 34.0,
+            "initial_cash": 100000.0,
+            "final_equity": 114872.49,
+            "total_return_pct": 14.87,
+            "max_drawdown_pct": 28.02,
+            "max_positions_used": 4,
+            "open_positions": 0,
+            "candidates": 18033,
+            "accepted": 89,
+            "rejected": 17944,
+            "annualized_return_pct": 6.2,
+            "annualized_volatility_pct": 23.13,
+            "sharpe_ratio": 0.398,
+            "span_days": 866
+          },
+          "rejection_reasons": {
+            "max_positions": 17914,
+            "symbol_already_held": 29,
+            "same_day_reentry": 1
+          }
+        },
+        "symbol_desc": {
+          "summary": {
+            "count": 105,
+            "win_rate": 40.95,
+            "avg_pnl_pct": 4.16,
+            "median_pnl_pct": -8.24,
+            "avg_win_pct": 21.73,
+            "avg_loss_pct": -8.03,
+            "gross_profit_pct": 934.55,
+            "gross_loss_pct": -498.06,
+            "avg_win_loss_ratio": 2.71,
+            "profit_factor": 1.88,
+            "total_pnl_cash": 96108.26,
+            "cash_profit_factor": 1.84,
+            "avg_holding_days": 29.1,
+            "initial_cash": 100000.0,
+            "final_equity": 196108.26,
+            "total_return_pct": 96.11,
+            "max_drawdown_pct": 18.76,
+            "max_positions_used": 4,
+            "open_positions": 0,
+            "candidates": 18033,
+            "accepted": 105,
+            "rejected": 17928,
+            "annualized_return_pct": 33.07,
+            "annualized_volatility_pct": 23.46,
+            "sharpe_ratio": 1.441,
+            "span_days": 866
+          },
+          "rejection_reasons": {
+            "max_positions": 17905,
+            "symbol_already_held": 21,
+            "same_day_reentry": 1,
+            "insufficient_cash": 1
+          }
+        },
+        "hash": {
+          "summary": {
+            "count": 114,
+            "win_rate": 32.46,
+            "avg_pnl_pct": 0.19,
+            "median_pnl_pct": -8.24,
+            "avg_win_pct": 17.85,
+            "avg_loss_pct": -8.29,
+            "gross_profit_pct": 660.28,
+            "gross_loss_pct": -638.53,
+            "avg_win_loss_ratio": 2.15,
+            "profit_factor": 1.03,
+            "total_pnl_cash": -4073.66,
+            "cash_profit_factor": 0.97,
+            "avg_holding_days": 26.8,
+            "initial_cash": 100000.0,
+            "final_equity": 95926.34,
+            "total_return_pct": -4.07,
+            "max_drawdown_pct": 32.17,
+            "max_positions_used": 4,
+            "open_positions": 0,
+            "candidates": 18033,
+            "accepted": 114,
+            "rejected": 17919,
+            "annualized_return_pct": -1.58,
+            "annualized_volatility_pct": 28.19,
+            "sharpe_ratio": 0.08,
+            "span_days": 866
+          },
+          "rejection_reasons": {
+            "max_positions": 17896,
+            "symbol_already_held": 23
+          }
+        },
+        "rotate": {
+          "summary": {
+            "count": 123,
+            "win_rate": 26.02,
+            "avg_pnl_pct": -1.12,
+            "median_pnl_pct": -8.24,
+            "avg_win_pct": 18.66,
+            "avg_loss_pct": -8.07,
+            "gross_profit_pct": 597.26,
+            "gross_loss_pct": -734.64,
+            "avg_win_loss_ratio": 2.31,
+            "profit_factor": 0.81,
+            "total_pnl_cash": -35841.37,
+            "cash_profit_factor": 0.76,
+            "avg_holding_days": 24.3,
+            "initial_cash": 100000.0,
+            "final_equity": 64158.63,
+            "total_return_pct": -35.84,
+            "max_drawdown_pct": 49.93,
+            "max_positions_used": 4,
+            "open_positions": 0,
+            "candidates": 18033,
+            "accepted": 123,
+            "rejected": 17910,
+            "annualized_return_pct": -16.93,
+            "annualized_volatility_pct": 30.13,
+            "sharpe_ratio": -0.518,
+            "span_days": 866
+          },
+          "rejection_reasons": {
+            "max_positions": 17883,
+            "symbol_already_held": 22,
+            "same_day_reentry": 1,
+            "insufficient_cash": 4
+          }
+        }
+      },
+      "portfolio_summary": {
+        "count": 89,
+        "win_rate": 38.2,
+        "avg_pnl_pct": 0.9,
+        "median_pnl_pct": -8.04,
+        "avg_win_pct": 14.94,
+        "avg_loss_pct": -7.78,
+        "gross_profit_pct": 508.06,
+        "gross_loss_pct": -427.65,
+        "avg_win_loss_ratio": 1.92,
+        "profit_factor": 1.19,
+        "total_pnl_cash": 14872.49,
+        "cash_profit_factor": 1.15,
+        "avg_holding_days": 34.0,
+        "initial_cash": 100000.0,
+        "final_equity": 114872.49,
+        "total_return_pct": 14.87,
+        "max_drawdown_pct": 28.02,
+        "max_positions_used": 4,
+        "open_positions": 0,
+        "candidates": 18033,
+        "accepted": 89,
+        "rejected": 17944,
+        "annualized_return_pct": 6.2,
+        "annualized_volatility_pct": 23.13,
+        "sharpe_ratio": 0.398,
+        "span_days": 866
+      },
+      "portfolio_rejections": {
+        "max_positions": 17914,
+        "symbol_already_held": 29,
+        "same_day_reentry": 1
+      },
+      "buy_token": "yearline",
+      "exit_token": "fixed"
+    }
+  }
+}

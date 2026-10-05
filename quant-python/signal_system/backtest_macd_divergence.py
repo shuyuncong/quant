@@ -540,6 +540,72 @@ def simulate_with_exit_rules(
     )
 
 
+# 组合层年化 / 夏普。引擎的 summary 只给累计收益与最大回撤,
+# 而"资金在不同时间被占用"的组合必须按日频权益序列算, 否则不可比。
+TRADING_DAYS_PER_YEAR = 252
+RISK_FREE_RATE = 0.0
+
+
+def portfolio_risk_metrics(equity_curve: list[dict[str, Any]]) -> dict[str, Any]:
+    """Annualized return / Sharpe / exposure from the daily equity curve.
+
+    Wall-clock calendar days, not session count: equal-span comparisons between
+    strategies that trade on the same dataset therefore use the same span.
+    """
+    points = sorted(
+        ((str(point["day"]), float(point["equity"])) for point in equity_curve),
+        key=lambda item: item[0],
+    )
+    if len(points) < 2:
+        return {
+            "annualized_return_pct": None,
+            "annualized_volatility_pct": None,
+            "sharpe_ratio": None,
+            "span_days": None,
+        }
+    first_day = date.fromisoformat(points[0][0])
+    last_day = date.fromisoformat(points[-1][0])
+    span_days = (last_day - first_day).days
+    initial = points[0][1]
+    final = points[-1][1]
+    if initial <= 0 or span_days <= 0:
+        return {
+            "annualized_return_pct": None,
+            "annualized_volatility_pct": None,
+            "sharpe_ratio": None,
+            "span_days": span_days or None,
+        }
+    annualized = (final / initial) ** (365.25 / span_days) - 1.0
+    returns = [
+        points[index][1] / points[index - 1][1] - 1.0
+        for index in range(1, len(points))
+        if points[index - 1][1] > 0
+    ]
+    if len(returns) > 1:
+        daily_std = float(np.std(returns, ddof=1))
+        mean_daily = float(np.mean(returns)) - RISK_FREE_RATE / TRADING_DAYS_PER_YEAR
+        volatility = daily_std * (TRADING_DAYS_PER_YEAR ** 0.5)
+        sharpe = mean_daily / daily_std * (TRADING_DAYS_PER_YEAR ** 0.5) if daily_std else None
+    else:
+        volatility = 0.0
+        sharpe = None
+    return {
+        "annualized_return_pct": round(annualized * 100.0, 2),
+        "annualized_volatility_pct": round(volatility * 100.0, 2),
+        "sharpe_ratio": round(sharpe, 3) if sharpe is not None else None,
+        "span_days": span_days,
+    }
+
+
+# 买入信号 → run_arm 的 signal_name。交叉臂用它把"买入策略"和"卖出规则"解耦:
+# 同一个买入信号可以分别配 fixed / v1b 两套卖出规则, 差异只来自卖出规则。
+CROSS_SIGNALS: dict[str, str] = {
+    "baseline": "production_macd_pullback",   # 日线零轴金叉+回落确认 (实盘推送)
+    "yearline": "yearline_all",               # 年线趋势 (A突破 + B回踩)
+    "diverge": "divergence_v1",               # 零轴+底背离 四条件 AND
+}
+
+
 def run_arm(
     args: argparse.Namespace,
     signal_name: str,
@@ -664,8 +730,10 @@ def run_arm(
             result = bt.run_portfolio(
                 copy.deepcopy(trades), costs, variant_config
             )
+            summary = dict(result["summary"])
+            summary.update(portfolio_risk_metrics(result["equity_curve"]))
             variants[tie_break] = {
-                "summary": result["summary"],
+                "summary": summary,
                 "rejection_reasons": result["rejection_reasons"],
             }
         arm["portfolio_variants"] = variants
@@ -706,7 +774,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     # signal on identical data/execution, so differences come from the signal.
     # Selectable so the expensive production (chan) arm can run in parallel.
     arm_specs: list[tuple[str, dict[str, Any] | None]] = []
-    for token in [item.strip() for item in args.arms.split(",") if item.strip()]:
+    for token in [
+        item.strip()
+        for item in args.arms.replace("+", ",").split(",")
+        if item.strip()
+    ]:
         if token in EXIT_RULE_SETS:
             spec = EXIT_RULE_SETS[token]
             if spec.get("mode") == "production":
@@ -743,6 +815,26 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             arm_specs.append(("production_macd_pullback", None))
         elif token == "yearline":
             arm_specs.append(("yearline_all", None))
+        elif "x" in token and token.split("x", 1)[0].strip() in CROSS_SIGNALS:
+            # 买入×卖出 交叉臂: "baseline x v1b" / "yearline x fixed"。
+            # 口径与已提交的 eng_* 臂完全一致, 只是把卖出规则换成通配作用域,
+            # 这样"同一买入信号换卖出规则"的差异只来自卖出规则本身。
+            buy_token, _, exit_token = token.partition("x")
+            buy_token, exit_token = buy_token.strip(), exit_token.strip()
+            if exit_token not in {"fixed", "v1b"}:
+                raise SystemExit(f"cross arm exit must be fixed|v1b, got {exit_token!r}")
+            signal_name = CROSS_SIGNALS[buy_token]
+            arm_specs.append(
+                (
+                    f"{buy_token}__{exit_token}",
+                    {
+                        "__engine__": "cross",
+                        "__buy__": signal_name,
+                        "__exit__": exit_token,
+                        "__buy_token__": buy_token,
+                    },
+                )
+            )
         else:
             raise SystemExit(f"unknown arm: {token}")
     if args.min_volume_ratio is not None:
@@ -752,6 +844,27 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     arms: dict[str, Any] = {}
     for name, arm_settings in arm_specs:
+        if isinstance(arm_settings, dict) and arm_settings.get("__engine__") == "cross":
+            exit_token = arm_settings["__exit__"]
+            arms[name] = run_arm(
+                args,
+                arm_settings["__buy__"],
+                copy.deepcopy(settings),
+                config,
+                costs,
+                portfolio_config,
+                paths,
+                start,
+                end,
+                exit_mode="engine",
+                engine_exit_mode="divergence_trend" if exit_token == "v1b" else "fixed",
+                # 通配作用域: 让 v1b 卖出规则作用到这条买入信号的全部 signal_type
+                # (年线池有 yearline_A_breakout / yearline_B_pullback 两种类型)。
+                engine_scope=("*",) if exit_token == "v1b" else (),
+            )
+            arms[name]["buy_token"] = arm_settings["__buy_token__"]
+            arms[name]["exit_token"] = exit_token
+            continue
         # Engine-path arms: run the shipped simulator with the config's exits.
         if isinstance(arm_settings, dict) and "__engine__" in arm_settings:
             arms[name] = run_arm(

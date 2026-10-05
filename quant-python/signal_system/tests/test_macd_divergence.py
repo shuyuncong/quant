@@ -456,6 +456,31 @@ class EngineTrendExitTests(unittest.TestCase):
         execution = bt._execution_values(costs)
         self.assertTrue(bt._uses_trend_exits(execution, {"signal_type": "anything"}))
 
+    def test_wildcard_scope_covers_every_signal_type(self):
+        """Used by the buy x sell comparison arms; must not depend on the name."""
+        bt, costs = self._resolved(apply_to_signal_types=["*"])
+        execution = bt._execution_values(costs)
+        for signal_type in (
+            "macd_divergence_bottom",
+            "yearline_A_breakout",
+            "yearline_B_pullback",
+            "macd_golden_cross_pullback_confirmed_above",
+        ):
+            self.assertTrue(bt._uses_trend_exits(execution, {"signal_type": signal_type}))
+
+    def test_prefix_scope_matches_a_family_only(self):
+        bt, costs = self._resolved(apply_to_signal_types=["yearline_*"])
+        execution = bt._execution_values(costs)
+        self.assertTrue(
+            bt._uses_trend_exits(execution, {"signal_type": "yearline_A_breakout"})
+        )
+        self.assertTrue(
+            bt._uses_trend_exits(execution, {"signal_type": "yearline_B_pullback"})
+        )
+        self.assertFalse(
+            bt._uses_trend_exits(execution, {"signal_type": "macd_divergence_bottom"})
+        )
+
     def test_invalid_mode_is_rejected(self):
         import backtest_winrate as bt
 

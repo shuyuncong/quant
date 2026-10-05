@@ -90,3 +90,6 @@ quant-python/web/*.log*
 
 # Contains live R2 credentials - rotate first, never commit as-is
 /docs/oracle-backup.md
+
+# 策略对照研究: 每条臂的中间结果日志 (JSON 数据保留)
+quant-python/signal_system/strategy_comparison_arms/*.log

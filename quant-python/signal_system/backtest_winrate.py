@@ -896,7 +896,20 @@ def _uses_trend_exits(execution: dict[str, Any], buy: dict) -> bool:
     scope = execution.get("exit_rules_scope") or []
     if not scope:
         return True
-    return str(buy.get("signal_type") or "") in {str(item) for item in scope}
+    signal_type = str(buy.get("signal_type") or "")
+    for item in scope:
+        item = str(item)
+        # "*" = 全部信号 (研究用: 把 v1b 卖出规则套到任意买入信号上做对照);
+        # "prefix*" = 前缀匹配 (如 "yearline_*" 覆盖 yearline_A_breakout/B_pullback)。
+        if item == "*":
+            return True
+        if item.endswith("*"):
+            if signal_type.startswith(item[:-1]):
+                return True
+            continue
+        if signal_type == item:
+            return True
+    return False
 
 
 def _build_trend_exit_flags(
