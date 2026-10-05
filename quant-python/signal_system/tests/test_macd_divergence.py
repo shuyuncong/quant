@@ -782,5 +782,78 @@ class CapacitySweepTests(unittest.TestCase):
             self.assertEqual(arm["trade_count"], 0)
 
 
+class RankingTests(unittest.TestCase):
+    """当日候选多于剩余仓位时, 排名因子决定买谁——必须真的改变成交集合。"""
+
+    @staticmethod
+    def _trades() -> list[dict]:
+        base = {
+            "signal_day": "2025-01-02",
+            "signal_type": "macd_divergence_bottom",
+            "entry_day": "2025-01-02",
+            "entry_index": 0,
+            "exit_index": 10,
+            "quantity": 100,
+            "entry_cost_cash": 1000.0,
+            "holding_days": 10,
+            "exit_reason": "timeout",
+        }
+        # 3 只同一天开仓, 只有 1 个仓位: 排名因子必须决定谁成交。
+        good = dict(base, symbol="000001", exit_day="2025-01-12", entry_price=10.0,
+                    exit_price=12.0, pnl_pct=20.0, pnl_cash=2000.0)
+        bad = [dict(base, symbol=f"{index:06d}", exit_day="2025-01-12", entry_price=10.0,
+                    exit_price=9.0, pnl_pct=-10.0, pnl_cash=-1000.0) for index in (2, 3)]
+        return [bad[0], good, bad[1]]
+
+    def _run(self, ranks: list[float]):
+        import backtest_winrate as bt
+
+        trades = self._trades()
+        for trade, rank in zip(trades, ranks):
+            trade["_portfolio_rank_score"] = rank
+        costs = bt._resolve_execution_config(_config())
+        return bt.run_portfolio(
+            trades,
+            costs,
+            {
+                "initial_cash": 100000.0,
+                "max_positions": 1,
+                "position_size_pct": 1.0,
+                "lot_size": 100,
+                "score_mode": "external_causal_score",
+                "tie_break": "symbol_asc",
+                "seed": 1,
+            },
+        )
+
+    def test_rank_score_decides_which_candidate_fills_the_slot(self):
+        # 给盈利那笔最高分 -> 应当成交它。
+        winner = self._run([0.0, 1.0, 0.0])
+        self.assertEqual(winner["summary"]["accepted"], 1)
+        self.assertGreater(winner["summary"]["total_return_pct"], 0)
+
+        # 反过来把分数给亏损的 -> 成交结果必须改变 (证明排名真的生效)。
+        loser = self._run([2.0, 0.0, 0.0])
+        self.assertEqual(loser["summary"]["accepted"], 1)
+        self.assertLess(loser["summary"]["total_return_pct"], 0)
+
+    def test_missing_rank_score_is_rejected_loudly(self):
+        import backtest_winrate as bt
+
+        trades = self._trades()
+        costs = bt._resolve_execution_config(_config())
+        with self.assertRaises(ValueError):
+            bt.run_portfolio(
+                trades,
+                costs,
+                {
+                    "initial_cash": 100000.0,
+                    "max_positions": 1,
+                    "position_size_pct": 1.0,
+                    "score_mode": "external_causal_score",
+                },
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

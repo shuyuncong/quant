@@ -94,3 +94,6 @@ quant-python/web/*.log*
 # 策略对照研究: 每条臂的中间结果日志 (JSON 数据保留)
 quant-python/signal_system/strategy_comparison_arms/*.log
 quant-python/signal_system/capacity_sweep_arms/*.log
+quant-python/signal_system/rankcache/*.log
+quant-python/signal_system/rankcache/*.pkl
+quant-python/signal_system/account_25w_arms/*.log

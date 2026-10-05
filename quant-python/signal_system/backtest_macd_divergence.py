@@ -757,13 +757,21 @@ def run_arm(
             else [int(portfolio_config.get("max_positions", 4))]
         )
         cash_per_slot = float(getattr(args, "cash_per_slot", 0.0) or 0.0)
+        fixed_pct = float(getattr(args, "position_pct", 0.0) or 0.0)
+        absolute_cash = float(getattr(args, "initial_cash", 0.0) or 0.0)
         for level in slot_levels:
             slot_count = max(int(level), 1)
             for tie_break in tie_breaks:
                 variant_config = copy.deepcopy(portfolio_config)
                 variant_config["tie_break"] = tie_break
                 variant_config["max_positions"] = slot_count
-                variant_config["position_size_pct"] = 1.0 / slot_count
+                # 默认按 1/仓位上限 等权; --position-pct 可固定为 config 口径
+                # (如 25%), 用来观察"仓位占用不匹配时第 5 个仓位买不进"的真实效果。
+                variant_config["position_size_pct"] = (
+                    fixed_pct if fixed_pct > 0 else 1.0 / slot_count
+                )
+                if absolute_cash > 0:
+                    variant_config["initial_cash"] = absolute_cash
                 if cash_per_slot > 0:
                     # 单笔金额固定 = cash_per_slot, 总本金 = 单笔 × 仓位上限。
                     # 这样各档比较的是"能同时装多少个 2.5 万的仓位", 而不是下注金额;
@@ -1145,6 +1153,18 @@ def main() -> int:
         type=float,
         default=0.0,
         help="单笔金额 (0 = 用 config); 总本金 = 单笔 × 仓位档位, 使各档位可比较",
+    )
+    parser.add_argument(
+        "--position-pct",
+        type=float,
+        default=0.0,
+        help="固定单笔仓位比例 (0 = 按 1/仓位档位等权); 用于复现 config 的 25%% 口径",
+    )
+    parser.add_argument(
+        "--initial-cash",
+        type=float,
+        default=0.0,
+        help="覆盖初始资金 (0 = 用 config); 与 --position-pct 配合模拟固定本金",
     )
     parser.add_argument(
         "--entry-step",
