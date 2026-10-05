@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -692,6 +693,93 @@ class GateTests(unittest.TestCase):
         self.assertFalse(
             signal["signal_type"].startswith("macd_golden_cross_pullback_confirmed_")
         )
+
+
+class CapacitySweepTests(unittest.TestCase):
+    """资金容量阶梯: 回答"同一账户装得下谁的信号"。
+
+    超订策略(18033 个信号 / 4 个仓位)的组合结果由"抽到哪 0.5%"决定, 所以容量
+    阶梯必须保证: 档位越高 -> 成交越多 -> 占用率越高。占用率若不高, 说明瓶颈
+    不是资金而是信号本身。
+    """
+
+    def test_slot_ladder_increases_accepted_and_exposes_occupancy(self):
+        import backtest_macd_divergence as bmd
+        import backtest_winrate as bt
+
+        # 9 个信号全部落在同一天开仓、同一天平仓: 4 个仓位只能装 4 个,
+        # 16 个仓位能全装 -> 阶梯必须体现差异。
+        trades = []
+        for slot in range(9):
+            trades.append(
+                {
+                    "symbol": f"{slot:06d}",
+                    "signal_day": "2025-01-02",
+                    "signal_type": "macd_divergence_bottom",
+                    "entry_day": "2025-01-02",
+                    "entry_index": 0,
+                    "exit_index": 1,
+                    "exit_day": "2025-01-20",
+                    "entry_price": 10.0,
+                    "exit_price": 10.5,
+                    "pnl_pct": 5.0,
+                    "pnl_cash": 500.0,
+                    "holding_days": 18,
+                    "quantity": 100,
+                    "entry_cost_cash": 1000.0,
+                    "exit_reason": "timeout",
+                }
+            )
+        config = _config()
+        costs = bt._resolve_execution_config(config)
+        base = {
+            "initial_cash": 100000.0,
+            "position_size_pct": 0.25,
+            "lot_size": 100,
+            "tie_break": "symbol_asc",
+            "seed": 1,
+        }
+        accepted = {}
+        for level in (4, 16):
+            result = bt.run_portfolio(
+                [dict(trade) for trade in trades],
+                costs,
+                {**base, "max_positions": level, "position_size_pct": 1.0 / level},
+            )
+            accepted[level] = result["summary"]["accepted"]
+            attribution = result["attribution"]
+            # 占用率必须存在, 否则无法判断瓶颈是资金还是信号。
+            self.assertIsNotNone(attribution.get("average_positions"))
+            self.assertLessEqual(
+                float(attribution["average_positions"]), float(level) + 1e-9
+            )
+        self.assertGreater(accepted[16], accepted[4])
+
+    def test_run_arm_tolerates_slots_as_int_and_list(self):
+        """老审计脚本传 int slots; 新驱动传 slots_list。两者都必须可用。"""
+        import argparse
+
+        import backtest_macd_divergence as bmd
+
+        for namespace in (
+            argparse.Namespace(slots=4),
+            argparse.Namespace(slots_list="4,8"),
+            argparse.Namespace(),
+        ):
+            namespace.tie_break_list = ["symbol_asc"]
+            # run_arm 只从 args 读取扫描参数; 空 path 列表让它直接返回。
+            arm = bmd.run_arm(
+                namespace,
+                "synthetic",
+                _config(),
+                _config(),
+                bmd.bt._resolve_execution_config(_config()),
+                {"initial_cash": 100000.0, "max_positions": 4},
+                [],
+                date(2025, 1, 1),
+                date(2025, 12, 31),
+            )
+            self.assertEqual(arm["trade_count"], 0)
 
 
 if __name__ == "__main__":

@@ -628,6 +628,12 @@ def run_arm(
     old and new numbers stay comparable; exit_mode="rules" swaps in the research
     exits (top divergence / MA20 / MA250 / stop, no timeout).
     """
+    # 资金容量与入场抽样从 CLI 读取, 这样所有臂共用同一套扫描参数。
+    entry_step = max(int(getattr(args, "entry_step", 1) or 1), 1)
+    entry_offset = max(int(getattr(args, "entry_offset", 0) or 0), 0)
+    # 全局候选计数器: 抽样必须按**全部候选**取模, 不能按单只股票取模——
+    # 否则 1 个信号的股票在 offset>0 时会被整只丢掉, 样本量塌陷。
+    seen_candidates = 0
     rule_params = dict(rule_params or {})
     # The legacy arm must keep the pre-v1b behaviour even though the config now
     # selects divergence_trend by default; otherwise it silently duplicates v1b.
@@ -661,6 +667,17 @@ def run_arm(
             buys, _ = build_entries(symbol, closed, settings)
         dates = [item.date() for item in pd.to_datetime(closed["datetime"])]
         window = [b for b in buys if start <= date.fromisoformat(str(b["day"])) <= end]
+        # 入场抽样: 超订策略 (18033 个信号 / 4 个仓位) 的组合结果由"抽到哪 0.5%"决定。
+        # 用全局计数器取模, 保证每份样本恰好占 1/step 且互不重叠; 若按单只股票取模,
+        # "只有 1 个信号"的股票在 offset>0 时会被整只丢掉, 样本量会塌陷。
+        candidate_count = len(window)
+        if entry_step > 1:
+            window = [
+                buy
+                for index, buy in enumerate(window, start=seen_candidates)
+                if index % entry_step == entry_offset
+            ]
+        seen_candidates += candidate_count
         if not window:
             continue
         stats["symbols_evaluated"] += 1
@@ -705,6 +722,7 @@ def run_arm(
         "stats": stats,
         "execution_rejections": dict(rejections),
         "trade_count": len(trades),
+        "entry_sampling": {"step": entry_step, "offset": entry_offset},
         "exit_reasons": {
             reason: {
                 "count": len(values),
@@ -724,20 +742,52 @@ def run_arm(
             str(portfolio_config.get("tie_break", "symbol_asc"))
         ]
         variants: dict[str, Any] = {}
-        for tie_break in tie_breaks:
-            variant_config = copy.deepcopy(portfolio_config)
-            variant_config["tie_break"] = tie_break
-            result = bt.run_portfolio(
-                copy.deepcopy(trades), costs, variant_config
-            )
-            summary = dict(result["summary"])
-            summary.update(portfolio_risk_metrics(result["equity_curve"]))
-            variants[tie_break] = {
-                "summary": summary,
-                "rejection_reasons": result["rejection_reasons"],
-            }
+        # 仓位上限扫描: 一组 trades 只算一次(贵), 组合层反复跑(便宜)。
+        # 每档单笔仓位 = 1/仓位上限, 也就是"满仓时正好用完全部资金";
+        # 这样各档位之间比较的是**能同时容纳多少个信号**, 而不是下注金额。
+        # A 股 100 股一手, 高仓位档位需要更大本金, 故配合 --initial-cash 使用。
+        raw_levels = str(getattr(args, "slots_list", "") or "").strip()
+        if not raw_levels:
+            # 兼容旧的 --slots int 形式 (既有审计脚本仍在用)。
+            legacy_slots = int(getattr(args, "slots", 0) or 0)
+            raw_levels = str(legacy_slots) if legacy_slots > 0 else ""
+        slot_levels = (
+            [int(item) for item in raw_levels.split(",") if item.strip()]
+            if raw_levels
+            else [int(portfolio_config.get("max_positions", 4))]
+        )
+        cash_per_slot = float(getattr(args, "cash_per_slot", 0.0) or 0.0)
+        for level in slot_levels:
+            slot_count = max(int(level), 1)
+            for tie_break in tie_breaks:
+                variant_config = copy.deepcopy(portfolio_config)
+                variant_config["tie_break"] = tie_break
+                variant_config["max_positions"] = slot_count
+                variant_config["position_size_pct"] = 1.0 / slot_count
+                if cash_per_slot > 0:
+                    # 单笔金额固定 = cash_per_slot, 总本金 = 单笔 × 仓位上限。
+                    # 这样各档比较的是"能同时装多少个 2.5 万的仓位", 而不是下注金额;
+                    # 若不随档位放大本金, 高仓位档位会被"买不起一手"挡掉, 看起来像容量不足。
+                    variant_config["initial_cash"] = cash_per_slot * slot_count
+                result = bt.run_portfolio(
+                    copy.deepcopy(trades), costs, variant_config
+                )
+                summary = dict(result["summary"])
+                summary.update(portfolio_risk_metrics(result["equity_curve"]))
+                # 占用率: 平均同时持仓数 / 仓位上限。它区分"持仓少是因为没信号"
+                # 与"是因为没资金"——这是判断资金瓶颈的直接证据。
+                average_positions = result["attribution"].get("average_positions")
+                summary["average_positions"] = average_positions
+                summary["occupancy_pct"] = round(
+                    float(average_positions or 0.0) / max(slot_count, 1) * 100.0,
+                    2,
+                )
+                variants[f"slots{level if level >= 0 else 'inf'}:{tie_break}"] = {
+                    "summary": summary,
+                    "rejection_reasons": result["rejection_reasons"],
+                }
         arm["portfolio_variants"] = variants
-        primary = tie_breaks[0]
+        primary = f"slots{slot_levels[0] if slot_levels[0] >= 0 else 'inf'}:{tie_breaks[0]}"
         arm["portfolio_summary"] = variants[primary]["summary"]
         arm["portfolio_rejections"] = variants[primary]["rejection_reasons"]
     return arm
@@ -1085,6 +1135,24 @@ def main() -> int:
         help="comma list of portfolio tie-breaks; range exposes ordering luck",
     )
     parser.add_argument("--seed", type=int, default=20261004)
+    parser.add_argument(
+        "--slots-list",
+        default="",
+        help="仓位上限列表, 如 4,10,20,50; 空 = 用 config 的 max_stocks",
+    )
+    parser.add_argument(
+        "--cash-per-slot",
+        type=float,
+        default=0.0,
+        help="单笔金额 (0 = 用 config); 总本金 = 单笔 × 仓位档位, 使各档位可比较",
+    )
+    parser.add_argument(
+        "--entry-step",
+        type=int,
+        default=1,
+        help="入场抽样步长 (>1 时只保留 1/step 的信号); 用于区分超订策略的真实表现与抽样运气",
+    )
+    parser.add_argument("--entry-offset", type=int, default=0, help="抽样起始偏移")
     parser.add_argument("--out", default="divergence_backtest_report.json")
     args = parser.parse_args()
     args.tie_break_list = [
