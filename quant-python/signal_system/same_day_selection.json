@@ -1,0 +1,3879 @@
+{
+  "cash": 250000.0,
+  "slots": [
+    3,
+    5
+  ],
+  "tie_breaks": [
+    "symbol_asc",
+    "symbol_desc",
+    "hash",
+    "rotate"
+  ],
+  "pools": {
+    "diverge": {
+      "trades": 559,
+      "diagnosis": {
+        "3": {
+          "trading_days_with_candidates": 243,
+          "days_candidates_exceed_slots": 35,
+          "days_exceed_pct": 14.4,
+          "average_candidates_per_day": 2.3,
+          "max_candidates_in_a_day": 14,
+          "total_candidates": 559
+        },
+        "5": {
+          "trading_days_with_candidates": 243,
+          "days_candidates_exceed_slots": 22,
+          "days_exceed_pct": 9.1,
+          "average_candidates_per_day": 2.3,
+          "max_candidates_in_a_day": 14,
+          "total_candidates": 559
+        }
+      },
+      "factors": {
+        "code": {
+          "label": "按代码 (引擎现状)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 91.08,
+                  "annualized_return_pct": 36.05,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 1.468,
+                  "accepted": 70,
+                  "candidates": 559,
+                  "win_rate": 42.86,
+                  "avg_pnl_pct": 3.95,
+                  "max_positions_rejections": 488
+                },
+                "symbol_desc": {
+                  "total_return_pct": 91.08,
+                  "annualized_return_pct": 36.05,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 1.468,
+                  "accepted": 70,
+                  "candidates": 559,
+                  "win_rate": 42.86,
+                  "avg_pnl_pct": 3.95,
+                  "max_positions_rejections": 488
+                },
+                "hash": {
+                  "total_return_pct": 91.08,
+                  "annualized_return_pct": 36.05,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 1.468,
+                  "accepted": 70,
+                  "candidates": 559,
+                  "win_rate": 42.86,
+                  "avg_pnl_pct": 3.95,
+                  "max_positions_rejections": 488
+                },
+                "rotate": {
+                  "total_return_pct": 91.08,
+                  "annualized_return_pct": 36.05,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 1.468,
+                  "accepted": 70,
+                  "candidates": 559,
+                  "win_rate": 42.86,
+                  "avg_pnl_pct": 3.95,
+                  "max_positions_rejections": 488
+                }
+              },
+              "median": {
+                "annualized_return_pct": 36.05,
+                "max_drawdown_pct": 17.41,
+                "sharpe_ratio": 1.468,
+                "win_rate": 42.86,
+                "avg_pnl_pct": 3.95
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 58.29,
+                  "annualized_return_pct": 24.51,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.143,
+                  "accepted": 111,
+                  "candidates": 559,
+                  "win_rate": 37.84,
+                  "avg_pnl_pct": 2.78,
+                  "max_positions_rejections": 445
+                },
+                "symbol_desc": {
+                  "total_return_pct": 58.29,
+                  "annualized_return_pct": 24.51,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.143,
+                  "accepted": 111,
+                  "candidates": 559,
+                  "win_rate": 37.84,
+                  "avg_pnl_pct": 2.78,
+                  "max_positions_rejections": 445
+                },
+                "hash": {
+                  "total_return_pct": 58.29,
+                  "annualized_return_pct": 24.51,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.143,
+                  "accepted": 111,
+                  "candidates": 559,
+                  "win_rate": 37.84,
+                  "avg_pnl_pct": 2.78,
+                  "max_positions_rejections": 445
+                },
+                "rotate": {
+                  "total_return_pct": 58.29,
+                  "annualized_return_pct": 24.51,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.143,
+                  "accepted": 111,
+                  "candidates": 559,
+                  "win_rate": 37.84,
+                  "avg_pnl_pct": 2.78,
+                  "max_positions_rejections": 445
+                }
+              },
+              "median": {
+                "annualized_return_pct": 24.51,
+                "max_drawdown_pct": 13.22,
+                "sharpe_ratio": 1.143,
+                "win_rate": 37.84,
+                "avg_pnl_pct": 2.78
+              }
+            }
+          }
+        },
+        "random_hash": {
+          "label": "随机 (对照组, 用代码哈希)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 43.34,
+                  "annualized_return_pct": 18.25,
+                  "max_drawdown_pct": 19.96,
+                  "sharpe_ratio": 0.822,
+                  "accepted": 67,
+                  "candidates": 559,
+                  "win_rate": 34.33,
+                  "avg_pnl_pct": 1.94,
+                  "max_positions_rejections": 489
+                },
+                "symbol_desc": {
+                  "total_return_pct": 43.34,
+                  "annualized_return_pct": 18.25,
+                  "max_drawdown_pct": 19.96,
+                  "sharpe_ratio": 0.822,
+                  "accepted": 67,
+                  "candidates": 559,
+                  "win_rate": 34.33,
+                  "avg_pnl_pct": 1.94,
+                  "max_positions_rejections": 489
+                },
+                "hash": {
+                  "total_return_pct": 43.34,
+                  "annualized_return_pct": 18.25,
+                  "max_drawdown_pct": 19.96,
+                  "sharpe_ratio": 0.822,
+                  "accepted": 67,
+                  "candidates": 559,
+                  "win_rate": 34.33,
+                  "avg_pnl_pct": 1.94,
+                  "max_positions_rejections": 489
+                },
+                "rotate": {
+                  "total_return_pct": 43.34,
+                  "annualized_return_pct": 18.25,
+                  "max_drawdown_pct": 19.96,
+                  "sharpe_ratio": 0.822,
+                  "accepted": 67,
+                  "candidates": 559,
+                  "win_rate": 34.33,
+                  "avg_pnl_pct": 1.94,
+                  "max_positions_rejections": 489
+                }
+              },
+              "median": {
+                "annualized_return_pct": 18.25,
+                "max_drawdown_pct": 19.96,
+                "sharpe_ratio": 0.822,
+                "win_rate": 34.33,
+                "avg_pnl_pct": 1.94
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 28.75,
+                  "annualized_return_pct": 12.58,
+                  "max_drawdown_pct": 15.12,
+                  "sharpe_ratio": 0.667,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 33.04,
+                  "avg_pnl_pct": 1.3,
+                  "max_positions_rejections": 444
+                },
+                "symbol_desc": {
+                  "total_return_pct": 28.75,
+                  "annualized_return_pct": 12.58,
+                  "max_drawdown_pct": 15.12,
+                  "sharpe_ratio": 0.667,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 33.04,
+                  "avg_pnl_pct": 1.3,
+                  "max_positions_rejections": 444
+                },
+                "hash": {
+                  "total_return_pct": 28.75,
+                  "annualized_return_pct": 12.58,
+                  "max_drawdown_pct": 15.12,
+                  "sharpe_ratio": 0.667,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 33.04,
+                  "avg_pnl_pct": 1.3,
+                  "max_positions_rejections": 444
+                },
+                "rotate": {
+                  "total_return_pct": 28.75,
+                  "annualized_return_pct": 12.58,
+                  "max_drawdown_pct": 15.12,
+                  "sharpe_ratio": 0.667,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 33.04,
+                  "avg_pnl_pct": 1.3,
+                  "max_positions_rejections": 444
+                }
+              },
+              "median": {
+                "annualized_return_pct": 12.58,
+                "max_drawdown_pct": 15.12,
+                "sharpe_ratio": 0.667,
+                "win_rate": 33.04,
+                "avg_pnl_pct": 1.3
+              }
+            }
+          }
+        },
+        "vol_high": {
+          "label": "放量倍数越大越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 90.44,
+                  "annualized_return_pct": 35.82,
+                  "max_drawdown_pct": 17.64,
+                  "sharpe_ratio": 1.415,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 43.08,
+                  "avg_pnl_pct": 4.25,
+                  "max_positions_rejections": 492
+                },
+                "symbol_desc": {
+                  "total_return_pct": 90.44,
+                  "annualized_return_pct": 35.82,
+                  "max_drawdown_pct": 17.64,
+                  "sharpe_ratio": 1.415,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 43.08,
+                  "avg_pnl_pct": 4.25,
+                  "max_positions_rejections": 492
+                },
+                "hash": {
+                  "total_return_pct": 90.44,
+                  "annualized_return_pct": 35.82,
+                  "max_drawdown_pct": 17.64,
+                  "sharpe_ratio": 1.415,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 43.08,
+                  "avg_pnl_pct": 4.25,
+                  "max_positions_rejections": 492
+                },
+                "rotate": {
+                  "total_return_pct": 90.44,
+                  "annualized_return_pct": 35.82,
+                  "max_drawdown_pct": 17.64,
+                  "sharpe_ratio": 1.415,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 43.08,
+                  "avg_pnl_pct": 4.25,
+                  "max_positions_rejections": 492
+                }
+              },
+              "median": {
+                "annualized_return_pct": 35.82,
+                "max_drawdown_pct": 17.64,
+                "sharpe_ratio": 1.415,
+                "win_rate": 43.08,
+                "avg_pnl_pct": 4.25
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 57.01,
+                  "annualized_return_pct": 24.02,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.164,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 37.27,
+                  "avg_pnl_pct": 2.65,
+                  "max_positions_rejections": 446
+                },
+                "symbol_desc": {
+                  "total_return_pct": 57.01,
+                  "annualized_return_pct": 24.02,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.164,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 37.27,
+                  "avg_pnl_pct": 2.65,
+                  "max_positions_rejections": 446
+                },
+                "hash": {
+                  "total_return_pct": 57.01,
+                  "annualized_return_pct": 24.02,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.164,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 37.27,
+                  "avg_pnl_pct": 2.65,
+                  "max_positions_rejections": 446
+                },
+                "rotate": {
+                  "total_return_pct": 57.01,
+                  "annualized_return_pct": 24.02,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.164,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 37.27,
+                  "avg_pnl_pct": 2.65,
+                  "max_positions_rejections": 446
+                }
+              },
+              "median": {
+                "annualized_return_pct": 24.02,
+                "max_drawdown_pct": 15.7,
+                "sharpe_ratio": 1.164,
+                "win_rate": 37.27,
+                "avg_pnl_pct": 2.65
+              }
+            }
+          }
+        },
+        "vol_low": {
+          "label": "放量倍数越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 31.75,
+                  "annualized_return_pct": 13.48,
+                  "max_drawdown_pct": 18.2,
+                  "sharpe_ratio": 0.633,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 33.85,
+                  "avg_pnl_pct": 1.45,
+                  "max_positions_rejections": 489
+                },
+                "symbol_desc": {
+                  "total_return_pct": 31.75,
+                  "annualized_return_pct": 13.48,
+                  "max_drawdown_pct": 18.2,
+                  "sharpe_ratio": 0.633,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 33.85,
+                  "avg_pnl_pct": 1.45,
+                  "max_positions_rejections": 489
+                },
+                "hash": {
+                  "total_return_pct": 31.75,
+                  "annualized_return_pct": 13.48,
+                  "max_drawdown_pct": 18.2,
+                  "sharpe_ratio": 0.633,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 33.85,
+                  "avg_pnl_pct": 1.45,
+                  "max_positions_rejections": 489
+                },
+                "rotate": {
+                  "total_return_pct": 31.75,
+                  "annualized_return_pct": 13.48,
+                  "max_drawdown_pct": 18.2,
+                  "sharpe_ratio": 0.633,
+                  "accepted": 65,
+                  "candidates": 559,
+                  "win_rate": 33.85,
+                  "avg_pnl_pct": 1.45,
+                  "max_positions_rejections": 489
+                }
+              },
+              "median": {
+                "annualized_return_pct": 13.48,
+                "max_drawdown_pct": 18.2,
+                "sharpe_ratio": 0.633,
+                "win_rate": 33.85,
+                "avg_pnl_pct": 1.45
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 36.17,
+                  "annualized_return_pct": 15.7,
+                  "max_drawdown_pct": 14.07,
+                  "sharpe_ratio": 0.772,
+                  "accepted": 107,
+                  "candidates": 559,
+                  "win_rate": 37.38,
+                  "avg_pnl_pct": 1.77,
+                  "max_positions_rejections": 446
+                },
+                "symbol_desc": {
+                  "total_return_pct": 36.17,
+                  "annualized_return_pct": 15.7,
+                  "max_drawdown_pct": 14.07,
+                  "sharpe_ratio": 0.772,
+                  "accepted": 107,
+                  "candidates": 559,
+                  "win_rate": 37.38,
+                  "avg_pnl_pct": 1.77,
+                  "max_positions_rejections": 446
+                },
+                "hash": {
+                  "total_return_pct": 36.17,
+                  "annualized_return_pct": 15.7,
+                  "max_drawdown_pct": 14.07,
+                  "sharpe_ratio": 0.772,
+                  "accepted": 107,
+                  "candidates": 559,
+                  "win_rate": 37.38,
+                  "avg_pnl_pct": 1.77,
+                  "max_positions_rejections": 446
+                },
+                "rotate": {
+                  "total_return_pct": 36.17,
+                  "annualized_return_pct": 15.7,
+                  "max_drawdown_pct": 14.07,
+                  "sharpe_ratio": 0.772,
+                  "accepted": 107,
+                  "candidates": 559,
+                  "win_rate": 37.38,
+                  "avg_pnl_pct": 1.77,
+                  "max_positions_rejections": 446
+                }
+              },
+              "median": {
+                "annualized_return_pct": 15.7,
+                "max_drawdown_pct": 14.07,
+                "sharpe_ratio": 0.772,
+                "win_rate": 37.38,
+                "avg_pnl_pct": 1.77
+              }
+            }
+          }
+        },
+        "near_dist": {
+          "label": "距年线绝对值越小越买 (贴近年线)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "symbol_desc": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "hash": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "rotate": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                }
+              },
+              "median": {
+                "annualized_return_pct": 17.23,
+                "max_drawdown_pct": 21.13,
+                "sharpe_ratio": 0.712,
+                "win_rate": 30.99,
+                "avg_pnl_pct": 1.67
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "symbol_desc": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "hash": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "rotate": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                }
+              },
+              "median": {
+                "annualized_return_pct": 10.85,
+                "max_drawdown_pct": 18.34,
+                "sharpe_ratio": 0.566,
+                "win_rate": 31.58,
+                "avg_pnl_pct": 1.08
+              }
+            }
+          }
+        },
+        "below_line": {
+          "label": "越低于年线越买 (10.2 的那个因子)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "symbol_desc": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "hash": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                },
+                "rotate": {
+                  "total_return_pct": 40.81,
+                  "annualized_return_pct": 17.23,
+                  "max_drawdown_pct": 21.13,
+                  "sharpe_ratio": 0.712,
+                  "accepted": 71,
+                  "candidates": 559,
+                  "win_rate": 30.99,
+                  "avg_pnl_pct": 1.67,
+                  "max_positions_rejections": 485
+                }
+              },
+              "median": {
+                "annualized_return_pct": 17.23,
+                "max_drawdown_pct": 21.13,
+                "sharpe_ratio": 0.712,
+                "win_rate": 30.99,
+                "avg_pnl_pct": 1.67
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "symbol_desc": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "hash": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                },
+                "rotate": {
+                  "total_return_pct": 24.73,
+                  "annualized_return_pct": 10.85,
+                  "max_drawdown_pct": 18.34,
+                  "sharpe_ratio": 0.566,
+                  "accepted": 114,
+                  "candidates": 559,
+                  "win_rate": 31.58,
+                  "avg_pnl_pct": 1.08,
+                  "max_positions_rejections": 441
+                }
+              },
+              "median": {
+                "annualized_return_pct": 10.85,
+                "max_drawdown_pct": 18.34,
+                "sharpe_ratio": 0.566,
+                "win_rate": 31.58,
+                "avg_pnl_pct": 1.08
+              }
+            }
+          }
+        },
+        "ma_slope": {
+          "label": "年线越陡向上越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 46.6,
+                  "annualized_return_pct": 19.55,
+                  "max_drawdown_pct": 17.92,
+                  "sharpe_ratio": 0.827,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 35.29,
+                  "avg_pnl_pct": 2.06,
+                  "max_positions_rejections": 488
+                },
+                "symbol_desc": {
+                  "total_return_pct": 46.6,
+                  "annualized_return_pct": 19.55,
+                  "max_drawdown_pct": 17.92,
+                  "sharpe_ratio": 0.827,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 35.29,
+                  "avg_pnl_pct": 2.06,
+                  "max_positions_rejections": 488
+                },
+                "hash": {
+                  "total_return_pct": 46.6,
+                  "annualized_return_pct": 19.55,
+                  "max_drawdown_pct": 17.92,
+                  "sharpe_ratio": 0.827,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 35.29,
+                  "avg_pnl_pct": 2.06,
+                  "max_positions_rejections": 488
+                },
+                "rotate": {
+                  "total_return_pct": 46.6,
+                  "annualized_return_pct": 19.55,
+                  "max_drawdown_pct": 17.92,
+                  "sharpe_ratio": 0.827,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 35.29,
+                  "avg_pnl_pct": 2.06,
+                  "max_positions_rejections": 488
+                }
+              },
+              "median": {
+                "annualized_return_pct": 19.55,
+                "max_drawdown_pct": 17.92,
+                "sharpe_ratio": 0.827,
+                "win_rate": 35.29,
+                "avg_pnl_pct": 2.06
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 56.75,
+                  "annualized_return_pct": 23.92,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.132,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 37.5,
+                  "avg_pnl_pct": 2.57,
+                  "max_positions_rejections": 444
+                },
+                "symbol_desc": {
+                  "total_return_pct": 56.75,
+                  "annualized_return_pct": 23.92,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.132,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 37.5,
+                  "avg_pnl_pct": 2.57,
+                  "max_positions_rejections": 444
+                },
+                "hash": {
+                  "total_return_pct": 56.75,
+                  "annualized_return_pct": 23.92,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.132,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 37.5,
+                  "avg_pnl_pct": 2.57,
+                  "max_positions_rejections": 444
+                },
+                "rotate": {
+                  "total_return_pct": 56.75,
+                  "annualized_return_pct": 23.92,
+                  "max_drawdown_pct": 15.7,
+                  "sharpe_ratio": 1.132,
+                  "accepted": 112,
+                  "candidates": 559,
+                  "win_rate": 37.5,
+                  "avg_pnl_pct": 2.57,
+                  "max_positions_rejections": 444
+                }
+              },
+              "median": {
+                "annualized_return_pct": 23.92,
+                "max_drawdown_pct": 15.7,
+                "sharpe_ratio": 1.132,
+                "win_rate": 37.5,
+                "avg_pnl_pct": 2.57
+              }
+            }
+          }
+        },
+        "recovery_60": {
+          "label": "距 60 日低点反弹越少越买 (更早介入)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 58.32,
+                  "annualized_return_pct": 24.12,
+                  "max_drawdown_pct": 14.91,
+                  "sharpe_ratio": 1.08,
+                  "accepted": 62,
+                  "candidates": 559,
+                  "win_rate": 41.94,
+                  "avg_pnl_pct": 2.86,
+                  "max_positions_rejections": 496
+                },
+                "symbol_desc": {
+                  "total_return_pct": 58.32,
+                  "annualized_return_pct": 24.12,
+                  "max_drawdown_pct": 14.91,
+                  "sharpe_ratio": 1.08,
+                  "accepted": 62,
+                  "candidates": 559,
+                  "win_rate": 41.94,
+                  "avg_pnl_pct": 2.86,
+                  "max_positions_rejections": 496
+                },
+                "hash": {
+                  "total_return_pct": 58.32,
+                  "annualized_return_pct": 24.12,
+                  "max_drawdown_pct": 14.91,
+                  "sharpe_ratio": 1.08,
+                  "accepted": 62,
+                  "candidates": 559,
+                  "win_rate": 41.94,
+                  "avg_pnl_pct": 2.86,
+                  "max_positions_rejections": 496
+                },
+                "rotate": {
+                  "total_return_pct": 58.32,
+                  "annualized_return_pct": 24.12,
+                  "max_drawdown_pct": 14.91,
+                  "sharpe_ratio": 1.08,
+                  "accepted": 62,
+                  "candidates": 559,
+                  "win_rate": 41.94,
+                  "avg_pnl_pct": 2.86,
+                  "max_positions_rejections": 496
+                }
+              },
+              "median": {
+                "annualized_return_pct": 24.12,
+                "max_drawdown_pct": 14.91,
+                "sharpe_ratio": 1.08,
+                "win_rate": 41.94,
+                "avg_pnl_pct": 2.86
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 56.3,
+                  "annualized_return_pct": 23.74,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.201,
+                  "accepted": 100,
+                  "candidates": 559,
+                  "win_rate": 41.0,
+                  "avg_pnl_pct": 2.94,
+                  "max_positions_rejections": 456
+                },
+                "symbol_desc": {
+                  "total_return_pct": 56.3,
+                  "annualized_return_pct": 23.74,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.201,
+                  "accepted": 100,
+                  "candidates": 559,
+                  "win_rate": 41.0,
+                  "avg_pnl_pct": 2.94,
+                  "max_positions_rejections": 456
+                },
+                "hash": {
+                  "total_return_pct": 56.3,
+                  "annualized_return_pct": 23.74,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.201,
+                  "accepted": 100,
+                  "candidates": 559,
+                  "win_rate": 41.0,
+                  "avg_pnl_pct": 2.94,
+                  "max_positions_rejections": 456
+                },
+                "rotate": {
+                  "total_return_pct": 56.3,
+                  "annualized_return_pct": 23.74,
+                  "max_drawdown_pct": 13.22,
+                  "sharpe_ratio": 1.201,
+                  "accepted": 100,
+                  "candidates": 559,
+                  "win_rate": 41.0,
+                  "avg_pnl_pct": 2.94,
+                  "max_positions_rejections": 456
+                }
+              },
+              "median": {
+                "annualized_return_pct": 23.74,
+                "max_drawdown_pct": 13.22,
+                "sharpe_ratio": 1.201,
+                "win_rate": 41.0,
+                "avg_pnl_pct": 2.94
+              }
+            }
+          }
+        },
+        "drawdown_120": {
+          "label": "距 120 日高点回撤越深越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 54.69,
+                  "annualized_return_pct": 22.72,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 0.983,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 39.71,
+                  "avg_pnl_pct": 2.43,
+                  "max_positions_rejections": 486
+                },
+                "symbol_desc": {
+                  "total_return_pct": 55.03,
+                  "annualized_return_pct": 22.86,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 0.989,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 39.71,
+                  "avg_pnl_pct": 2.43,
+                  "max_positions_rejections": 486
+                },
+                "hash": {
+                  "total_return_pct": 54.69,
+                  "annualized_return_pct": 22.72,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 0.983,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 39.71,
+                  "avg_pnl_pct": 2.43,
+                  "max_positions_rejections": 486
+                },
+                "rotate": {
+                  "total_return_pct": 54.69,
+                  "annualized_return_pct": 22.72,
+                  "max_drawdown_pct": 17.41,
+                  "sharpe_ratio": 0.983,
+                  "accepted": 68,
+                  "candidates": 559,
+                  "win_rate": 39.71,
+                  "avg_pnl_pct": 2.43,
+                  "max_positions_rejections": 486
+                }
+              },
+              "median": {
+                "annualized_return_pct": 22.72,
+                "max_drawdown_pct": 17.41,
+                "sharpe_ratio": 0.983,
+                "win_rate": 39.71,
+                "avg_pnl_pct": 2.43
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 52.53,
+                  "annualized_return_pct": 22.28,
+                  "max_drawdown_pct": 13.45,
+                  "sharpe_ratio": 1.093,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 40.0,
+                  "avg_pnl_pct": 2.44,
+                  "max_positions_rejections": 444
+                },
+                "symbol_desc": {
+                  "total_return_pct": 52.53,
+                  "annualized_return_pct": 22.28,
+                  "max_drawdown_pct": 13.45,
+                  "sharpe_ratio": 1.093,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 40.0,
+                  "avg_pnl_pct": 2.44,
+                  "max_positions_rejections": 444
+                },
+                "hash": {
+                  "total_return_pct": 52.53,
+                  "annualized_return_pct": 22.28,
+                  "max_drawdown_pct": 13.45,
+                  "sharpe_ratio": 1.093,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 40.0,
+                  "avg_pnl_pct": 2.44,
+                  "max_positions_rejections": 444
+                },
+                "rotate": {
+                  "total_return_pct": 52.53,
+                  "annualized_return_pct": 22.28,
+                  "max_drawdown_pct": 13.45,
+                  "sharpe_ratio": 1.093,
+                  "accepted": 110,
+                  "candidates": 559,
+                  "win_rate": 40.0,
+                  "avg_pnl_pct": 2.44,
+                  "max_positions_rejections": 444
+                }
+              },
+              "median": {
+                "annualized_return_pct": 22.28,
+                "max_drawdown_pct": 13.45,
+                "sharpe_ratio": 1.093,
+                "win_rate": 40.0,
+                "avg_pnl_pct": 2.44
+              }
+            }
+          }
+        },
+        "momentum_20": {
+          "label": "20 日涨幅越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 107.16,
+                  "annualized_return_pct": 41.51,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 1.734,
+                  "accepted": 64,
+                  "candidates": 559,
+                  "win_rate": 45.31,
+                  "avg_pnl_pct": 5.05,
+                  "max_positions_rejections": 492
+                },
+                "symbol_desc": {
+                  "total_return_pct": 107.16,
+                  "annualized_return_pct": 41.51,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 1.734,
+                  "accepted": 64,
+                  "candidates": 559,
+                  "win_rate": 45.31,
+                  "avg_pnl_pct": 5.05,
+                  "max_positions_rejections": 492
+                },
+                "hash": {
+                  "total_return_pct": 107.16,
+                  "annualized_return_pct": 41.51,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 1.734,
+                  "accepted": 64,
+                  "candidates": 559,
+                  "win_rate": 45.31,
+                  "avg_pnl_pct": 5.05,
+                  "max_positions_rejections": 492
+                },
+                "rotate": {
+                  "total_return_pct": 107.16,
+                  "annualized_return_pct": 41.51,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 1.734,
+                  "accepted": 64,
+                  "candidates": 559,
+                  "win_rate": 45.31,
+                  "avg_pnl_pct": 5.05,
+                  "max_positions_rejections": 492
+                }
+              },
+              "median": {
+                "annualized_return_pct": 41.51,
+                "max_drawdown_pct": 14.38,
+                "sharpe_ratio": 1.734,
+                "win_rate": 45.31,
+                "avg_pnl_pct": 5.05
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 71.95,
+                  "annualized_return_pct": 29.64,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 1.402,
+                  "accepted": 102,
+                  "candidates": 559,
+                  "win_rate": 43.14,
+                  "avg_pnl_pct": 3.71,
+                  "max_positions_rejections": 452
+                },
+                "symbol_desc": {
+                  "total_return_pct": 71.95,
+                  "annualized_return_pct": 29.64,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 1.402,
+                  "accepted": 102,
+                  "candidates": 559,
+                  "win_rate": 43.14,
+                  "avg_pnl_pct": 3.71,
+                  "max_positions_rejections": 452
+                },
+                "hash": {
+                  "total_return_pct": 71.95,
+                  "annualized_return_pct": 29.64,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 1.402,
+                  "accepted": 102,
+                  "candidates": 559,
+                  "win_rate": 43.14,
+                  "avg_pnl_pct": 3.71,
+                  "max_positions_rejections": 452
+                },
+                "rotate": {
+                  "total_return_pct": 71.95,
+                  "annualized_return_pct": 29.64,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 1.402,
+                  "accepted": 102,
+                  "candidates": 559,
+                  "win_rate": 43.14,
+                  "avg_pnl_pct": 3.71,
+                  "max_positions_rejections": 452
+                }
+              },
+              "median": {
+                "annualized_return_pct": 29.64,
+                "max_drawdown_pct": 13.66,
+                "sharpe_ratio": 1.402,
+                "win_rate": 43.14,
+                "avg_pnl_pct": 3.71
+              }
+            }
+          }
+        },
+        "oracle": {
+          "label": "【未来函数·上界】按已实现收益排序",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 174.23,
+                  "annualized_return_pct": 62.25,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 2.24,
+                  "accepted": 59,
+                  "candidates": 559,
+                  "win_rate": 54.24,
+                  "avg_pnl_pct": 8.96,
+                  "max_positions_rejections": 495
+                },
+                "symbol_desc": {
+                  "total_return_pct": 174.23,
+                  "annualized_return_pct": 62.25,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 2.24,
+                  "accepted": 59,
+                  "candidates": 559,
+                  "win_rate": 54.24,
+                  "avg_pnl_pct": 8.96,
+                  "max_positions_rejections": 495
+                },
+                "hash": {
+                  "total_return_pct": 174.23,
+                  "annualized_return_pct": 62.25,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 2.24,
+                  "accepted": 59,
+                  "candidates": 559,
+                  "win_rate": 54.24,
+                  "avg_pnl_pct": 8.96,
+                  "max_positions_rejections": 495
+                },
+                "rotate": {
+                  "total_return_pct": 174.23,
+                  "annualized_return_pct": 62.25,
+                  "max_drawdown_pct": 14.38,
+                  "sharpe_ratio": 2.24,
+                  "accepted": 59,
+                  "candidates": 559,
+                  "win_rate": 54.24,
+                  "avg_pnl_pct": 8.96,
+                  "max_positions_rejections": 495
+                }
+              },
+              "median": {
+                "annualized_return_pct": 62.25,
+                "max_drawdown_pct": 14.38,
+                "sharpe_ratio": 2.24,
+                "win_rate": 54.24,
+                "avg_pnl_pct": 8.96
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 128.0,
+                  "annualized_return_pct": 48.76,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 2.035,
+                  "accepted": 109,
+                  "candidates": 559,
+                  "win_rate": 45.87,
+                  "avg_pnl_pct": 6.09,
+                  "max_positions_rejections": 445
+                },
+                "symbol_desc": {
+                  "total_return_pct": 128.0,
+                  "annualized_return_pct": 48.76,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 2.035,
+                  "accepted": 109,
+                  "candidates": 559,
+                  "win_rate": 45.87,
+                  "avg_pnl_pct": 6.09,
+                  "max_positions_rejections": 445
+                },
+                "hash": {
+                  "total_return_pct": 128.0,
+                  "annualized_return_pct": 48.76,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 2.035,
+                  "accepted": 109,
+                  "candidates": 559,
+                  "win_rate": 45.87,
+                  "avg_pnl_pct": 6.09,
+                  "max_positions_rejections": 445
+                },
+                "rotate": {
+                  "total_return_pct": 128.0,
+                  "annualized_return_pct": 48.76,
+                  "max_drawdown_pct": 13.66,
+                  "sharpe_ratio": 2.035,
+                  "accepted": 109,
+                  "candidates": 559,
+                  "win_rate": 45.87,
+                  "avg_pnl_pct": 6.09,
+                  "max_positions_rejections": 445
+                }
+              },
+              "median": {
+                "annualized_return_pct": 48.76,
+                "max_drawdown_pct": 13.66,
+                "sharpe_ratio": 2.035,
+                "win_rate": 45.87,
+                "avg_pnl_pct": 6.09
+              }
+            }
+          }
+        }
+      }
+    },
+    "yearline": {
+      "trades": 18033,
+      "diagnosis": {
+        "3": {
+          "trading_days_with_candidates": 503,
+          "days_candidates_exceed_slots": 473,
+          "days_exceed_pct": 94.0,
+          "average_candidates_per_day": 35.85,
+          "max_candidates_in_a_day": 588,
+          "total_candidates": 18033
+        },
+        "5": {
+          "trading_days_with_candidates": 503,
+          "days_candidates_exceed_slots": 451,
+          "days_exceed_pct": 89.7,
+          "average_candidates_per_day": 35.85,
+          "max_candidates_in_a_day": 588,
+          "total_candidates": 18033
+        }
+      },
+      "factors": {
+        "code": {
+          "label": "按代码 (引擎现状)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 21.39,
+                  "annualized_return_pct": 8.75,
+                  "max_drawdown_pct": 28.09,
+                  "sharpe_ratio": 0.482,
+                  "accepted": 69,
+                  "candidates": 18033,
+                  "win_rate": 37.68,
+                  "avg_pnl_pct": 1.17,
+                  "max_positions_rejections": 17943
+                },
+                "symbol_desc": {
+                  "total_return_pct": 21.39,
+                  "annualized_return_pct": 8.75,
+                  "max_drawdown_pct": 28.09,
+                  "sharpe_ratio": 0.482,
+                  "accepted": 69,
+                  "candidates": 18033,
+                  "win_rate": 37.68,
+                  "avg_pnl_pct": 1.17,
+                  "max_positions_rejections": 17943
+                },
+                "hash": {
+                  "total_return_pct": 21.39,
+                  "annualized_return_pct": 8.75,
+                  "max_drawdown_pct": 28.09,
+                  "sharpe_ratio": 0.482,
+                  "accepted": 69,
+                  "candidates": 18033,
+                  "win_rate": 37.68,
+                  "avg_pnl_pct": 1.17,
+                  "max_positions_rejections": 17943
+                },
+                "rotate": {
+                  "total_return_pct": 21.39,
+                  "annualized_return_pct": 8.75,
+                  "max_drawdown_pct": 28.09,
+                  "sharpe_ratio": 0.482,
+                  "accepted": 69,
+                  "candidates": 18033,
+                  "win_rate": 37.68,
+                  "avg_pnl_pct": 1.17,
+                  "max_positions_rejections": 17943
+                }
+              },
+              "median": {
+                "annualized_return_pct": 8.75,
+                "max_drawdown_pct": 28.09,
+                "sharpe_ratio": 0.482,
+                "win_rate": 37.68,
+                "avg_pnl_pct": 1.17
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 15.96,
+                  "annualized_return_pct": 6.58,
+                  "max_drawdown_pct": 27.97,
+                  "sharpe_ratio": 0.418,
+                  "accepted": 112,
+                  "candidates": 18033,
+                  "win_rate": 38.39,
+                  "avg_pnl_pct": 0.99,
+                  "max_positions_rejections": 17886
+                },
+                "symbol_desc": {
+                  "total_return_pct": 15.96,
+                  "annualized_return_pct": 6.58,
+                  "max_drawdown_pct": 27.97,
+                  "sharpe_ratio": 0.418,
+                  "accepted": 112,
+                  "candidates": 18033,
+                  "win_rate": 38.39,
+                  "avg_pnl_pct": 0.99,
+                  "max_positions_rejections": 17886
+                },
+                "hash": {
+                  "total_return_pct": 15.96,
+                  "annualized_return_pct": 6.58,
+                  "max_drawdown_pct": 27.97,
+                  "sharpe_ratio": 0.418,
+                  "accepted": 112,
+                  "candidates": 18033,
+                  "win_rate": 38.39,
+                  "avg_pnl_pct": 0.99,
+                  "max_positions_rejections": 17886
+                },
+                "rotate": {
+                  "total_return_pct": 15.96,
+                  "annualized_return_pct": 6.58,
+                  "max_drawdown_pct": 27.97,
+                  "sharpe_ratio": 0.418,
+                  "accepted": 112,
+                  "candidates": 18033,
+                  "win_rate": 38.39,
+                  "avg_pnl_pct": 0.99,
+                  "max_positions_rejections": 17886
+                }
+              },
+              "median": {
+                "annualized_return_pct": 6.58,
+                "max_drawdown_pct": 27.97,
+                "sharpe_ratio": 0.418,
+                "win_rate": 38.39,
+                "avg_pnl_pct": 0.99
+              }
+            }
+          }
+        },
+        "random_hash": {
+          "label": "随机 (对照组, 用代码哈希)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -37.64,
+                  "annualized_return_pct": -17.88,
+                  "max_drawdown_pct": 45.69,
+                  "sharpe_ratio": -0.642,
+                  "accepted": 84,
+                  "candidates": 18033,
+                  "win_rate": 28.57,
+                  "avg_pnl_pct": -1.25,
+                  "max_positions_rejections": 17933
+                },
+                "symbol_desc": {
+                  "total_return_pct": -37.64,
+                  "annualized_return_pct": -17.88,
+                  "max_drawdown_pct": 45.69,
+                  "sharpe_ratio": -0.642,
+                  "accepted": 84,
+                  "candidates": 18033,
+                  "win_rate": 28.57,
+                  "avg_pnl_pct": -1.25,
+                  "max_positions_rejections": 17933
+                },
+                "hash": {
+                  "total_return_pct": -37.64,
+                  "annualized_return_pct": -17.88,
+                  "max_drawdown_pct": 45.69,
+                  "sharpe_ratio": -0.642,
+                  "accepted": 84,
+                  "candidates": 18033,
+                  "win_rate": 28.57,
+                  "avg_pnl_pct": -1.25,
+                  "max_positions_rejections": 17933
+                },
+                "rotate": {
+                  "total_return_pct": -37.64,
+                  "annualized_return_pct": -17.88,
+                  "max_drawdown_pct": 45.69,
+                  "sharpe_ratio": -0.642,
+                  "accepted": 84,
+                  "candidates": 18033,
+                  "win_rate": 28.57,
+                  "avg_pnl_pct": -1.25,
+                  "max_positions_rejections": 17933
+                }
+              },
+              "median": {
+                "annualized_return_pct": -17.88,
+                "max_drawdown_pct": 45.69,
+                "sharpe_ratio": -0.642,
+                "win_rate": 28.57,
+                "avg_pnl_pct": -1.25
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -11.72,
+                  "annualized_return_pct": -5.0,
+                  "max_drawdown_pct": 34.06,
+                  "sharpe_ratio": -0.098,
+                  "accepted": 140,
+                  "candidates": 18033,
+                  "win_rate": 32.14,
+                  "avg_pnl_pct": 0.12,
+                  "max_positions_rejections": 17870
+                },
+                "symbol_desc": {
+                  "total_return_pct": -11.72,
+                  "annualized_return_pct": -5.0,
+                  "max_drawdown_pct": 34.06,
+                  "sharpe_ratio": -0.098,
+                  "accepted": 140,
+                  "candidates": 18033,
+                  "win_rate": 32.14,
+                  "avg_pnl_pct": 0.12,
+                  "max_positions_rejections": 17870
+                },
+                "hash": {
+                  "total_return_pct": -11.72,
+                  "annualized_return_pct": -5.0,
+                  "max_drawdown_pct": 34.06,
+                  "sharpe_ratio": -0.098,
+                  "accepted": 140,
+                  "candidates": 18033,
+                  "win_rate": 32.14,
+                  "avg_pnl_pct": 0.12,
+                  "max_positions_rejections": 17870
+                },
+                "rotate": {
+                  "total_return_pct": -11.72,
+                  "annualized_return_pct": -5.0,
+                  "max_drawdown_pct": 34.06,
+                  "sharpe_ratio": -0.098,
+                  "accepted": 140,
+                  "candidates": 18033,
+                  "win_rate": 32.14,
+                  "avg_pnl_pct": 0.12,
+                  "max_positions_rejections": 17870
+                }
+              },
+              "median": {
+                "annualized_return_pct": -5.0,
+                "max_drawdown_pct": 34.06,
+                "sharpe_ratio": -0.098,
+                "win_rate": 32.14,
+                "avg_pnl_pct": 0.12
+              }
+            }
+          }
+        },
+        "vol_high": {
+          "label": "放量倍数越大越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 2.69,
+                  "annualized_return_pct": 1.35,
+                  "max_drawdown_pct": 35.93,
+                  "sharpe_ratio": 0.209,
+                  "accepted": 105,
+                  "candidates": 18033,
+                  "win_rate": 29.52,
+                  "avg_pnl_pct": 0.64,
+                  "max_positions_rejections": 17919
+                },
+                "symbol_desc": {
+                  "total_return_pct": 2.69,
+                  "annualized_return_pct": 1.35,
+                  "max_drawdown_pct": 35.93,
+                  "sharpe_ratio": 0.209,
+                  "accepted": 105,
+                  "candidates": 18033,
+                  "win_rate": 29.52,
+                  "avg_pnl_pct": 0.64,
+                  "max_positions_rejections": 17919
+                },
+                "hash": {
+                  "total_return_pct": 2.69,
+                  "annualized_return_pct": 1.35,
+                  "max_drawdown_pct": 35.93,
+                  "sharpe_ratio": 0.209,
+                  "accepted": 105,
+                  "candidates": 18033,
+                  "win_rate": 29.52,
+                  "avg_pnl_pct": 0.64,
+                  "max_positions_rejections": 17919
+                },
+                "rotate": {
+                  "total_return_pct": 2.69,
+                  "annualized_return_pct": 1.35,
+                  "max_drawdown_pct": 35.93,
+                  "sharpe_ratio": 0.209,
+                  "accepted": 105,
+                  "candidates": 18033,
+                  "win_rate": 29.52,
+                  "avg_pnl_pct": 0.64,
+                  "max_positions_rejections": 17919
+                }
+              },
+              "median": {
+                "annualized_return_pct": 1.35,
+                "max_drawdown_pct": 35.93,
+                "sharpe_ratio": 0.209,
+                "win_rate": 29.52,
+                "avg_pnl_pct": 0.64
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -26.7,
+                  "annualized_return_pct": -12.16,
+                  "max_drawdown_pct": 39.55,
+                  "sharpe_ratio": -0.324,
+                  "accepted": 173,
+                  "candidates": 18033,
+                  "win_rate": 26.01,
+                  "avg_pnl_pct": -0.64,
+                  "max_positions_rejections": 17843
+                },
+                "symbol_desc": {
+                  "total_return_pct": -26.7,
+                  "annualized_return_pct": -12.16,
+                  "max_drawdown_pct": 39.55,
+                  "sharpe_ratio": -0.324,
+                  "accepted": 173,
+                  "candidates": 18033,
+                  "win_rate": 26.01,
+                  "avg_pnl_pct": -0.64,
+                  "max_positions_rejections": 17843
+                },
+                "hash": {
+                  "total_return_pct": -26.7,
+                  "annualized_return_pct": -12.16,
+                  "max_drawdown_pct": 39.55,
+                  "sharpe_ratio": -0.324,
+                  "accepted": 173,
+                  "candidates": 18033,
+                  "win_rate": 26.01,
+                  "avg_pnl_pct": -0.64,
+                  "max_positions_rejections": 17843
+                },
+                "rotate": {
+                  "total_return_pct": -26.7,
+                  "annualized_return_pct": -12.16,
+                  "max_drawdown_pct": 39.55,
+                  "sharpe_ratio": -0.324,
+                  "accepted": 173,
+                  "candidates": 18033,
+                  "win_rate": 26.01,
+                  "avg_pnl_pct": -0.64,
+                  "max_positions_rejections": 17843
+                }
+              },
+              "median": {
+                "annualized_return_pct": -12.16,
+                "max_drawdown_pct": 39.55,
+                "sharpe_ratio": -0.324,
+                "win_rate": 26.01,
+                "avg_pnl_pct": -0.64
+              }
+            }
+          }
+        },
+        "vol_low": {
+          "label": "放量倍数越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -26.13,
+                  "annualized_return_pct": -11.8,
+                  "max_drawdown_pct": 43.83,
+                  "sharpe_ratio": -0.334,
+                  "accepted": 79,
+                  "candidates": 18033,
+                  "win_rate": 29.11,
+                  "avg_pnl_pct": -1.12,
+                  "max_positions_rejections": 17934
+                },
+                "symbol_desc": {
+                  "total_return_pct": -26.13,
+                  "annualized_return_pct": -11.8,
+                  "max_drawdown_pct": 43.83,
+                  "sharpe_ratio": -0.334,
+                  "accepted": 79,
+                  "candidates": 18033,
+                  "win_rate": 29.11,
+                  "avg_pnl_pct": -1.12,
+                  "max_positions_rejections": 17934
+                },
+                "hash": {
+                  "total_return_pct": -26.13,
+                  "annualized_return_pct": -11.8,
+                  "max_drawdown_pct": 43.83,
+                  "sharpe_ratio": -0.334,
+                  "accepted": 79,
+                  "candidates": 18033,
+                  "win_rate": 29.11,
+                  "avg_pnl_pct": -1.12,
+                  "max_positions_rejections": 17934
+                },
+                "rotate": {
+                  "total_return_pct": -26.13,
+                  "annualized_return_pct": -11.8,
+                  "max_drawdown_pct": 43.83,
+                  "sharpe_ratio": -0.334,
+                  "accepted": 79,
+                  "candidates": 18033,
+                  "win_rate": 29.11,
+                  "avg_pnl_pct": -1.12,
+                  "max_positions_rejections": 17934
+                }
+              },
+              "median": {
+                "annualized_return_pct": -11.8,
+                "max_drawdown_pct": 43.83,
+                "sharpe_ratio": -0.334,
+                "win_rate": 29.11,
+                "avg_pnl_pct": -1.12
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -8.01,
+                  "annualized_return_pct": -3.33,
+                  "max_drawdown_pct": 37.68,
+                  "sharpe_ratio": -0.032,
+                  "accepted": 128,
+                  "candidates": 18033,
+                  "win_rate": 32.81,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 17876
+                },
+                "symbol_desc": {
+                  "total_return_pct": -8.01,
+                  "annualized_return_pct": -3.33,
+                  "max_drawdown_pct": 37.68,
+                  "sharpe_ratio": -0.032,
+                  "accepted": 128,
+                  "candidates": 18033,
+                  "win_rate": 32.81,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 17876
+                },
+                "hash": {
+                  "total_return_pct": -8.01,
+                  "annualized_return_pct": -3.33,
+                  "max_drawdown_pct": 37.68,
+                  "sharpe_ratio": -0.032,
+                  "accepted": 128,
+                  "candidates": 18033,
+                  "win_rate": 32.81,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 17876
+                },
+                "rotate": {
+                  "total_return_pct": -8.01,
+                  "annualized_return_pct": -3.33,
+                  "max_drawdown_pct": 37.68,
+                  "sharpe_ratio": -0.032,
+                  "accepted": 128,
+                  "candidates": 18033,
+                  "win_rate": 32.81,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 17876
+                }
+              },
+              "median": {
+                "annualized_return_pct": -3.33,
+                "max_drawdown_pct": 37.68,
+                "sharpe_ratio": -0.032,
+                "win_rate": 32.81,
+                "avg_pnl_pct": -0.01
+              }
+            }
+          }
+        },
+        "near_dist": {
+          "label": "距年线绝对值越小越买 (贴近年线)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "symbol_desc": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "hash": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "rotate": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                }
+              },
+              "median": {
+                "annualized_return_pct": -11.89,
+                "max_drawdown_pct": 42.55,
+                "sharpe_ratio": -0.172,
+                "win_rate": 26.09,
+                "avg_pnl_pct": -1.29
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "symbol_desc": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "hash": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "rotate": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                }
+              },
+              "median": {
+                "annualized_return_pct": -15.41,
+                "max_drawdown_pct": 45.48,
+                "sharpe_ratio": -0.378,
+                "win_rate": 24.38,
+                "avg_pnl_pct": -1.7
+              }
+            }
+          }
+        },
+        "below_line": {
+          "label": "越低于年线越买 (10.2 的那个因子)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "symbol_desc": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "hash": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                },
+                "rotate": {
+                  "total_return_pct": -26.31,
+                  "annualized_return_pct": -11.89,
+                  "max_drawdown_pct": 42.55,
+                  "sharpe_ratio": -0.172,
+                  "accepted": 92,
+                  "candidates": 18033,
+                  "win_rate": 26.09,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 17863
+                }
+              },
+              "median": {
+                "annualized_return_pct": -11.89,
+                "max_drawdown_pct": 42.55,
+                "sharpe_ratio": -0.172,
+                "win_rate": 26.09,
+                "avg_pnl_pct": -1.29
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "symbol_desc": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "hash": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                },
+                "rotate": {
+                  "total_return_pct": -32.96,
+                  "annualized_return_pct": -15.41,
+                  "max_drawdown_pct": 45.48,
+                  "sharpe_ratio": -0.378,
+                  "accepted": 160,
+                  "candidates": 18033,
+                  "win_rate": 24.38,
+                  "avg_pnl_pct": -1.7,
+                  "max_positions_rejections": 17493
+                }
+              },
+              "median": {
+                "annualized_return_pct": -15.41,
+                "max_drawdown_pct": 45.48,
+                "sharpe_ratio": -0.378,
+                "win_rate": 24.38,
+                "avg_pnl_pct": -1.7
+              }
+            }
+          }
+        },
+        "ma_slope": {
+          "label": "年线越陡向上越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -22.45,
+                  "annualized_return_pct": -9.97,
+                  "max_drawdown_pct": 39.93,
+                  "sharpe_ratio": -0.081,
+                  "accepted": 110,
+                  "candidates": 18033,
+                  "win_rate": 30.0,
+                  "avg_pnl_pct": 0.18,
+                  "max_positions_rejections": 17909
+                },
+                "symbol_desc": {
+                  "total_return_pct": -22.45,
+                  "annualized_return_pct": -9.97,
+                  "max_drawdown_pct": 39.93,
+                  "sharpe_ratio": -0.081,
+                  "accepted": 110,
+                  "candidates": 18033,
+                  "win_rate": 30.0,
+                  "avg_pnl_pct": 0.18,
+                  "max_positions_rejections": 17909
+                },
+                "hash": {
+                  "total_return_pct": -22.45,
+                  "annualized_return_pct": -9.97,
+                  "max_drawdown_pct": 39.93,
+                  "sharpe_ratio": -0.081,
+                  "accepted": 110,
+                  "candidates": 18033,
+                  "win_rate": 30.0,
+                  "avg_pnl_pct": 0.18,
+                  "max_positions_rejections": 17909
+                },
+                "rotate": {
+                  "total_return_pct": -22.45,
+                  "annualized_return_pct": -9.97,
+                  "max_drawdown_pct": 39.93,
+                  "sharpe_ratio": -0.081,
+                  "accepted": 110,
+                  "candidates": 18033,
+                  "win_rate": 30.0,
+                  "avg_pnl_pct": 0.18,
+                  "max_positions_rejections": 17909
+                }
+              },
+              "median": {
+                "annualized_return_pct": -9.97,
+                "max_drawdown_pct": 39.93,
+                "sharpe_ratio": -0.081,
+                "win_rate": 30.0,
+                "avg_pnl_pct": 0.18
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -24.06,
+                  "annualized_return_pct": -10.84,
+                  "max_drawdown_pct": 35.17,
+                  "sharpe_ratio": -0.209,
+                  "accepted": 174,
+                  "candidates": 18033,
+                  "win_rate": 29.31,
+                  "avg_pnl_pct": -0.48,
+                  "max_positions_rejections": 17831
+                },
+                "symbol_desc": {
+                  "total_return_pct": -24.06,
+                  "annualized_return_pct": -10.84,
+                  "max_drawdown_pct": 35.17,
+                  "sharpe_ratio": -0.209,
+                  "accepted": 174,
+                  "candidates": 18033,
+                  "win_rate": 29.31,
+                  "avg_pnl_pct": -0.48,
+                  "max_positions_rejections": 17831
+                },
+                "hash": {
+                  "total_return_pct": -24.06,
+                  "annualized_return_pct": -10.84,
+                  "max_drawdown_pct": 35.17,
+                  "sharpe_ratio": -0.209,
+                  "accepted": 174,
+                  "candidates": 18033,
+                  "win_rate": 29.31,
+                  "avg_pnl_pct": -0.48,
+                  "max_positions_rejections": 17831
+                },
+                "rotate": {
+                  "total_return_pct": -24.06,
+                  "annualized_return_pct": -10.84,
+                  "max_drawdown_pct": 35.17,
+                  "sharpe_ratio": -0.209,
+                  "accepted": 174,
+                  "candidates": 18033,
+                  "win_rate": 29.31,
+                  "avg_pnl_pct": -0.48,
+                  "max_positions_rejections": 17831
+                }
+              },
+              "median": {
+                "annualized_return_pct": -10.84,
+                "max_drawdown_pct": 35.17,
+                "sharpe_ratio": -0.209,
+                "win_rate": 29.31,
+                "avg_pnl_pct": -0.48
+              }
+            }
+          }
+        },
+        "recovery_60": {
+          "label": "距 60 日低点反弹越少越买 (更早介入)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 34.66,
+                  "annualized_return_pct": 13.62,
+                  "max_drawdown_pct": 17.89,
+                  "sharpe_ratio": 0.732,
+                  "accepted": 68,
+                  "candidates": 18033,
+                  "win_rate": 41.18,
+                  "avg_pnl_pct": 1.76,
+                  "max_positions_rejections": 17945
+                },
+                "symbol_desc": {
+                  "total_return_pct": 34.66,
+                  "annualized_return_pct": 13.62,
+                  "max_drawdown_pct": 17.89,
+                  "sharpe_ratio": 0.732,
+                  "accepted": 68,
+                  "candidates": 18033,
+                  "win_rate": 41.18,
+                  "avg_pnl_pct": 1.76,
+                  "max_positions_rejections": 17945
+                },
+                "hash": {
+                  "total_return_pct": 34.66,
+                  "annualized_return_pct": 13.62,
+                  "max_drawdown_pct": 17.89,
+                  "sharpe_ratio": 0.732,
+                  "accepted": 68,
+                  "candidates": 18033,
+                  "win_rate": 41.18,
+                  "avg_pnl_pct": 1.76,
+                  "max_positions_rejections": 17945
+                },
+                "rotate": {
+                  "total_return_pct": 34.66,
+                  "annualized_return_pct": 13.62,
+                  "max_drawdown_pct": 17.89,
+                  "sharpe_ratio": 0.732,
+                  "accepted": 68,
+                  "candidates": 18033,
+                  "win_rate": 41.18,
+                  "avg_pnl_pct": 1.76,
+                  "max_positions_rejections": 17945
+                }
+              },
+              "median": {
+                "annualized_return_pct": 13.62,
+                "max_drawdown_pct": 17.89,
+                "sharpe_ratio": 0.732,
+                "win_rate": 41.18,
+                "avg_pnl_pct": 1.76
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 40.37,
+                  "annualized_return_pct": 15.53,
+                  "max_drawdown_pct": 18.59,
+                  "sharpe_ratio": 0.931,
+                  "accepted": 114,
+                  "candidates": 18033,
+                  "win_rate": 41.23,
+                  "avg_pnl_pct": 2.0,
+                  "max_positions_rejections": 17886
+                },
+                "symbol_desc": {
+                  "total_return_pct": 40.37,
+                  "annualized_return_pct": 15.53,
+                  "max_drawdown_pct": 18.59,
+                  "sharpe_ratio": 0.931,
+                  "accepted": 114,
+                  "candidates": 18033,
+                  "win_rate": 41.23,
+                  "avg_pnl_pct": 2.0,
+                  "max_positions_rejections": 17886
+                },
+                "hash": {
+                  "total_return_pct": 40.37,
+                  "annualized_return_pct": 15.53,
+                  "max_drawdown_pct": 18.59,
+                  "sharpe_ratio": 0.931,
+                  "accepted": 114,
+                  "candidates": 18033,
+                  "win_rate": 41.23,
+                  "avg_pnl_pct": 2.0,
+                  "max_positions_rejections": 17886
+                },
+                "rotate": {
+                  "total_return_pct": 40.37,
+                  "annualized_return_pct": 15.53,
+                  "max_drawdown_pct": 18.59,
+                  "sharpe_ratio": 0.931,
+                  "accepted": 114,
+                  "candidates": 18033,
+                  "win_rate": 41.23,
+                  "avg_pnl_pct": 2.0,
+                  "max_positions_rejections": 17886
+                }
+              },
+              "median": {
+                "annualized_return_pct": 15.53,
+                "max_drawdown_pct": 18.59,
+                "sharpe_ratio": 0.931,
+                "win_rate": 41.23,
+                "avg_pnl_pct": 2.0
+              }
+            }
+          }
+        },
+        "drawdown_120": {
+          "label": "距 120 日高点回撤越深越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 19.82,
+                  "annualized_return_pct": 8.16,
+                  "max_drawdown_pct": 37.58,
+                  "sharpe_ratio": 0.425,
+                  "accepted": 97,
+                  "candidates": 18033,
+                  "win_rate": 30.93,
+                  "avg_pnl_pct": 1.01,
+                  "max_positions_rejections": 17919
+                },
+                "symbol_desc": {
+                  "total_return_pct": 19.82,
+                  "annualized_return_pct": 8.16,
+                  "max_drawdown_pct": 37.58,
+                  "sharpe_ratio": 0.425,
+                  "accepted": 97,
+                  "candidates": 18033,
+                  "win_rate": 30.93,
+                  "avg_pnl_pct": 1.01,
+                  "max_positions_rejections": 17919
+                },
+                "hash": {
+                  "total_return_pct": 19.82,
+                  "annualized_return_pct": 8.16,
+                  "max_drawdown_pct": 37.58,
+                  "sharpe_ratio": 0.425,
+                  "accepted": 97,
+                  "candidates": 18033,
+                  "win_rate": 30.93,
+                  "avg_pnl_pct": 1.01,
+                  "max_positions_rejections": 17919
+                },
+                "rotate": {
+                  "total_return_pct": 19.82,
+                  "annualized_return_pct": 8.16,
+                  "max_drawdown_pct": 37.58,
+                  "sharpe_ratio": 0.425,
+                  "accepted": 97,
+                  "candidates": 18033,
+                  "win_rate": 30.93,
+                  "avg_pnl_pct": 1.01,
+                  "max_positions_rejections": 17919
+                }
+              },
+              "median": {
+                "annualized_return_pct": 8.16,
+                "max_drawdown_pct": 37.58,
+                "sharpe_ratio": 0.425,
+                "win_rate": 30.93,
+                "avg_pnl_pct": 1.01
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 3.67,
+                  "annualized_return_pct": 1.66,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.206,
+                  "accepted": 155,
+                  "candidates": 18033,
+                  "win_rate": 29.68,
+                  "avg_pnl_pct": 0.3,
+                  "max_positions_rejections": 17637
+                },
+                "symbol_desc": {
+                  "total_return_pct": 3.67,
+                  "annualized_return_pct": 1.66,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.206,
+                  "accepted": 155,
+                  "candidates": 18033,
+                  "win_rate": 29.68,
+                  "avg_pnl_pct": 0.3,
+                  "max_positions_rejections": 17637
+                },
+                "hash": {
+                  "total_return_pct": 3.67,
+                  "annualized_return_pct": 1.66,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.206,
+                  "accepted": 155,
+                  "candidates": 18033,
+                  "win_rate": 29.68,
+                  "avg_pnl_pct": 0.3,
+                  "max_positions_rejections": 17637
+                },
+                "rotate": {
+                  "total_return_pct": 3.67,
+                  "annualized_return_pct": 1.66,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.206,
+                  "accepted": 155,
+                  "candidates": 18033,
+                  "win_rate": 29.68,
+                  "avg_pnl_pct": 0.3,
+                  "max_positions_rejections": 17637
+                }
+              },
+              "median": {
+                "annualized_return_pct": 1.66,
+                "max_drawdown_pct": 35.57,
+                "sharpe_ratio": 0.206,
+                "win_rate": 29.68,
+                "avg_pnl_pct": 0.3
+              }
+            }
+          }
+        },
+        "momentum_20": {
+          "label": "20 日涨幅越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 42.17,
+                  "annualized_return_pct": 16.25,
+                  "max_drawdown_pct": 27.56,
+                  "sharpe_ratio": 0.702,
+                  "accepted": 83,
+                  "candidates": 18033,
+                  "win_rate": 38.55,
+                  "avg_pnl_pct": 1.99,
+                  "max_positions_rejections": 17936
+                },
+                "symbol_desc": {
+                  "total_return_pct": 42.17,
+                  "annualized_return_pct": 16.25,
+                  "max_drawdown_pct": 27.56,
+                  "sharpe_ratio": 0.702,
+                  "accepted": 83,
+                  "candidates": 18033,
+                  "win_rate": 38.55,
+                  "avg_pnl_pct": 1.99,
+                  "max_positions_rejections": 17936
+                },
+                "hash": {
+                  "total_return_pct": 42.17,
+                  "annualized_return_pct": 16.25,
+                  "max_drawdown_pct": 27.56,
+                  "sharpe_ratio": 0.702,
+                  "accepted": 83,
+                  "candidates": 18033,
+                  "win_rate": 38.55,
+                  "avg_pnl_pct": 1.99,
+                  "max_positions_rejections": 17936
+                },
+                "rotate": {
+                  "total_return_pct": 42.17,
+                  "annualized_return_pct": 16.25,
+                  "max_drawdown_pct": 27.56,
+                  "sharpe_ratio": 0.702,
+                  "accepted": 83,
+                  "candidates": 18033,
+                  "win_rate": 38.55,
+                  "avg_pnl_pct": 1.99,
+                  "max_positions_rejections": 17936
+                }
+              },
+              "median": {
+                "annualized_return_pct": 16.25,
+                "max_drawdown_pct": 27.56,
+                "sharpe_ratio": 0.702,
+                "win_rate": 38.55,
+                "avg_pnl_pct": 1.99
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 53.09,
+                  "annualized_return_pct": 19.83,
+                  "max_drawdown_pct": 22.79,
+                  "sharpe_ratio": 0.901,
+                  "accepted": 134,
+                  "candidates": 18033,
+                  "win_rate": 39.55,
+                  "avg_pnl_pct": 2.23,
+                  "max_positions_rejections": 17878
+                },
+                "symbol_desc": {
+                  "total_return_pct": 53.09,
+                  "annualized_return_pct": 19.83,
+                  "max_drawdown_pct": 22.79,
+                  "sharpe_ratio": 0.901,
+                  "accepted": 134,
+                  "candidates": 18033,
+                  "win_rate": 39.55,
+                  "avg_pnl_pct": 2.23,
+                  "max_positions_rejections": 17878
+                },
+                "hash": {
+                  "total_return_pct": 53.09,
+                  "annualized_return_pct": 19.83,
+                  "max_drawdown_pct": 22.79,
+                  "sharpe_ratio": 0.901,
+                  "accepted": 134,
+                  "candidates": 18033,
+                  "win_rate": 39.55,
+                  "avg_pnl_pct": 2.23,
+                  "max_positions_rejections": 17878
+                },
+                "rotate": {
+                  "total_return_pct": 53.09,
+                  "annualized_return_pct": 19.83,
+                  "max_drawdown_pct": 22.79,
+                  "sharpe_ratio": 0.901,
+                  "accepted": 134,
+                  "candidates": 18033,
+                  "win_rate": 39.55,
+                  "avg_pnl_pct": 2.23,
+                  "max_positions_rejections": 17878
+                }
+              },
+              "median": {
+                "annualized_return_pct": 19.83,
+                "max_drawdown_pct": 22.79,
+                "sharpe_ratio": 0.901,
+                "win_rate": 39.55,
+                "avg_pnl_pct": 2.23
+              }
+            }
+          }
+        },
+        "oracle": {
+          "label": "【未来函数·上界】按已实现收益排序",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 497.01,
+                  "annualized_return_pct": 112.93,
+                  "max_drawdown_pct": 8.41,
+                  "sharpe_ratio": 4.527,
+                  "accepted": 71,
+                  "candidates": 18033,
+                  "win_rate": 81.69,
+                  "avg_pnl_pct": 21.37,
+                  "max_positions_rejections": 17948
+                },
+                "symbol_desc": {
+                  "total_return_pct": 497.01,
+                  "annualized_return_pct": 112.93,
+                  "max_drawdown_pct": 8.41,
+                  "sharpe_ratio": 4.527,
+                  "accepted": 71,
+                  "candidates": 18033,
+                  "win_rate": 81.69,
+                  "avg_pnl_pct": 21.37,
+                  "max_positions_rejections": 17948
+                },
+                "hash": {
+                  "total_return_pct": 497.01,
+                  "annualized_return_pct": 112.93,
+                  "max_drawdown_pct": 8.41,
+                  "sharpe_ratio": 4.527,
+                  "accepted": 71,
+                  "candidates": 18033,
+                  "win_rate": 81.69,
+                  "avg_pnl_pct": 21.37,
+                  "max_positions_rejections": 17948
+                },
+                "rotate": {
+                  "total_return_pct": 497.01,
+                  "annualized_return_pct": 112.93,
+                  "max_drawdown_pct": 8.41,
+                  "sharpe_ratio": 4.527,
+                  "accepted": 71,
+                  "candidates": 18033,
+                  "win_rate": 81.69,
+                  "avg_pnl_pct": 21.37,
+                  "max_positions_rejections": 17948
+                }
+              },
+              "median": {
+                "annualized_return_pct": 112.93,
+                "max_drawdown_pct": 8.41,
+                "sharpe_ratio": 4.527,
+                "win_rate": 81.69,
+                "avg_pnl_pct": 21.37
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 496.98,
+                  "annualized_return_pct": 112.74,
+                  "max_drawdown_pct": 8.37,
+                  "sharpe_ratio": 4.765,
+                  "accepted": 118,
+                  "candidates": 18033,
+                  "win_rate": 81.36,
+                  "avg_pnl_pct": 21.6,
+                  "max_positions_rejections": 17892
+                },
+                "symbol_desc": {
+                  "total_return_pct": 496.98,
+                  "annualized_return_pct": 112.74,
+                  "max_drawdown_pct": 8.37,
+                  "sharpe_ratio": 4.765,
+                  "accepted": 118,
+                  "candidates": 18033,
+                  "win_rate": 81.36,
+                  "avg_pnl_pct": 21.6,
+                  "max_positions_rejections": 17892
+                },
+                "hash": {
+                  "total_return_pct": 496.98,
+                  "annualized_return_pct": 112.74,
+                  "max_drawdown_pct": 8.37,
+                  "sharpe_ratio": 4.765,
+                  "accepted": 118,
+                  "candidates": 18033,
+                  "win_rate": 81.36,
+                  "avg_pnl_pct": 21.6,
+                  "max_positions_rejections": 17892
+                },
+                "rotate": {
+                  "total_return_pct": 496.98,
+                  "annualized_return_pct": 112.74,
+                  "max_drawdown_pct": 8.37,
+                  "sharpe_ratio": 4.765,
+                  "accepted": 118,
+                  "candidates": 18033,
+                  "win_rate": 81.36,
+                  "avg_pnl_pct": 21.6,
+                  "max_positions_rejections": 17892
+                }
+              },
+              "median": {
+                "annualized_return_pct": 112.74,
+                "max_drawdown_pct": 8.37,
+                "sharpe_ratio": 4.765,
+                "win_rate": 81.36,
+                "avg_pnl_pct": 21.6
+              }
+            }
+          }
+        }
+      }
+    },
+    "baseline": {
+      "trades": 29513,
+      "diagnosis": {
+        "3": {
+          "trading_days_with_candidates": 739,
+          "days_candidates_exceed_slots": 700,
+          "days_exceed_pct": 94.7,
+          "average_candidates_per_day": 39.94,
+          "max_candidates_in_a_day": 328,
+          "total_candidates": 29513
+        },
+        "5": {
+          "trading_days_with_candidates": 739,
+          "days_candidates_exceed_slots": 676,
+          "days_exceed_pct": 91.5,
+          "average_candidates_per_day": 39.94,
+          "max_candidates_in_a_day": 328,
+          "total_candidates": 29513
+        }
+      },
+      "factors": {
+        "code": {
+          "label": "按代码 (引擎现状)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                },
+                "symbol_desc": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                },
+                "hash": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                },
+                "rotate": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                }
+              },
+              "median": {
+                "annualized_return_pct": 17.25,
+                "max_drawdown_pct": 23.24,
+                "sharpe_ratio": 0.786,
+                "win_rate": 36.36,
+                "avg_pnl_pct": 1.88
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                },
+                "symbol_desc": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                },
+                "hash": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                },
+                "rotate": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                }
+              },
+              "median": {
+                "annualized_return_pct": 2.54,
+                "max_drawdown_pct": 31.19,
+                "sharpe_ratio": 0.23,
+                "win_rate": 32.31,
+                "avg_pnl_pct": 0.43
+              }
+            }
+          }
+        },
+        "random_hash": {
+          "label": "随机 (对照组, 用代码哈希)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -36.76,
+                  "annualized_return_pct": -12.32,
+                  "max_drawdown_pct": 55.1,
+                  "sharpe_ratio": -0.25,
+                  "accepted": 139,
+                  "candidates": 29513,
+                  "win_rate": 26.62,
+                  "avg_pnl_pct": -0.5,
+                  "max_positions_rejections": 28683
+                },
+                "symbol_desc": {
+                  "total_return_pct": -36.76,
+                  "annualized_return_pct": -12.32,
+                  "max_drawdown_pct": 55.1,
+                  "sharpe_ratio": -0.25,
+                  "accepted": 139,
+                  "candidates": 29513,
+                  "win_rate": 26.62,
+                  "avg_pnl_pct": -0.5,
+                  "max_positions_rejections": 28683
+                },
+                "hash": {
+                  "total_return_pct": -36.76,
+                  "annualized_return_pct": -12.32,
+                  "max_drawdown_pct": 55.1,
+                  "sharpe_ratio": -0.25,
+                  "accepted": 139,
+                  "candidates": 29513,
+                  "win_rate": 26.62,
+                  "avg_pnl_pct": -0.5,
+                  "max_positions_rejections": 28683
+                },
+                "rotate": {
+                  "total_return_pct": -36.76,
+                  "annualized_return_pct": -12.32,
+                  "max_drawdown_pct": 55.1,
+                  "sharpe_ratio": -0.25,
+                  "accepted": 139,
+                  "candidates": 29513,
+                  "win_rate": 26.62,
+                  "avg_pnl_pct": -0.5,
+                  "max_positions_rejections": 28683
+                }
+              },
+              "median": {
+                "annualized_return_pct": -12.32,
+                "max_drawdown_pct": 55.1,
+                "sharpe_ratio": -0.25,
+                "win_rate": 26.62,
+                "avg_pnl_pct": -0.5
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -37.89,
+                  "annualized_return_pct": -13.16,
+                  "max_drawdown_pct": 54.22,
+                  "sharpe_ratio": -0.356,
+                  "accepted": 237,
+                  "candidates": 29513,
+                  "win_rate": 27.43,
+                  "avg_pnl_pct": 0.17,
+                  "max_positions_rejections": 29002
+                },
+                "symbol_desc": {
+                  "total_return_pct": -37.89,
+                  "annualized_return_pct": -13.16,
+                  "max_drawdown_pct": 54.22,
+                  "sharpe_ratio": -0.356,
+                  "accepted": 237,
+                  "candidates": 29513,
+                  "win_rate": 27.43,
+                  "avg_pnl_pct": 0.17,
+                  "max_positions_rejections": 29002
+                },
+                "hash": {
+                  "total_return_pct": -37.89,
+                  "annualized_return_pct": -13.16,
+                  "max_drawdown_pct": 54.22,
+                  "sharpe_ratio": -0.356,
+                  "accepted": 237,
+                  "candidates": 29513,
+                  "win_rate": 27.43,
+                  "avg_pnl_pct": 0.17,
+                  "max_positions_rejections": 29002
+                },
+                "rotate": {
+                  "total_return_pct": -37.89,
+                  "annualized_return_pct": -13.16,
+                  "max_drawdown_pct": 54.22,
+                  "sharpe_ratio": -0.356,
+                  "accepted": 237,
+                  "candidates": 29513,
+                  "win_rate": 27.43,
+                  "avg_pnl_pct": 0.17,
+                  "max_positions_rejections": 29002
+                }
+              },
+              "median": {
+                "annualized_return_pct": -13.16,
+                "max_drawdown_pct": 54.22,
+                "sharpe_ratio": -0.356,
+                "win_rate": 27.43,
+                "avg_pnl_pct": 0.17
+              }
+            }
+          }
+        },
+        "vol_high": {
+          "label": "放量倍数越大越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                },
+                "symbol_desc": {
+                  "total_return_pct": -61.28,
+                  "annualized_return_pct": -24.64,
+                  "max_drawdown_pct": 63.31,
+                  "sharpe_ratio": -0.475,
+                  "accepted": 159,
+                  "candidates": 29513,
+                  "win_rate": 19.5,
+                  "avg_pnl_pct": -1.93,
+                  "max_positions_rejections": 29263
+                },
+                "hash": {
+                  "total_return_pct": -42.4,
+                  "annualized_return_pct": -14.81,
+                  "max_drawdown_pct": 52.61,
+                  "sharpe_ratio": -0.33,
+                  "accepted": 133,
+                  "candidates": 29513,
+                  "win_rate": 24.81,
+                  "avg_pnl_pct": -0.51,
+                  "max_positions_rejections": 28724
+                },
+                "rotate": {
+                  "total_return_pct": -12.73,
+                  "annualized_return_pct": -3.15,
+                  "max_drawdown_pct": 45.51,
+                  "sharpe_ratio": 0.063,
+                  "accepted": 128,
+                  "candidates": 29513,
+                  "win_rate": 28.12,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 29133
+                }
+              },
+              "median": {
+                "annualized_return_pct": -8.98,
+                "max_drawdown_pct": 49.06,
+                "sharpe_ratio": -0.134,
+                "win_rate": 36.36,
+                "avg_pnl_pct": 1.88
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                },
+                "symbol_desc": {
+                  "total_return_pct": -53.3,
+                  "annualized_return_pct": -20.48,
+                  "max_drawdown_pct": 62.51,
+                  "sharpe_ratio": -0.469,
+                  "accepted": 262,
+                  "candidates": 29513,
+                  "win_rate": 23.28,
+                  "avg_pnl_pct": -0.75,
+                  "max_positions_rejections": 28382
+                },
+                "hash": {
+                  "total_return_pct": -29.26,
+                  "annualized_return_pct": -9.6,
+                  "max_drawdown_pct": 58.56,
+                  "sharpe_ratio": -0.195,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 25.89,
+                  "avg_pnl_pct": -0.53,
+                  "max_positions_rejections": 26628
+                },
+                "rotate": {
+                  "total_return_pct": 23.23,
+                  "annualized_return_pct": 7.3,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.409,
+                  "accepted": 211,
+                  "candidates": 29513,
+                  "win_rate": 30.81,
+                  "avg_pnl_pct": 0.82,
+                  "max_positions_rejections": 29035
+                }
+              },
+              "median": {
+                "annualized_return_pct": -3.53,
+                "max_drawdown_pct": 47.06,
+                "sharpe_ratio": 0.018,
+                "win_rate": 32.31,
+                "avg_pnl_pct": 0.43
+              }
+            }
+          }
+        },
+        "vol_low": {
+          "label": "放量倍数越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 62.08,
+                  "annualized_return_pct": 17.25,
+                  "max_drawdown_pct": 23.24,
+                  "sharpe_ratio": 0.786,
+                  "accepted": 110,
+                  "candidates": 29513,
+                  "win_rate": 36.36,
+                  "avg_pnl_pct": 1.88,
+                  "max_positions_rejections": 29380
+                },
+                "symbol_desc": {
+                  "total_return_pct": -61.28,
+                  "annualized_return_pct": -24.64,
+                  "max_drawdown_pct": 63.31,
+                  "sharpe_ratio": -0.475,
+                  "accepted": 159,
+                  "candidates": 29513,
+                  "win_rate": 19.5,
+                  "avg_pnl_pct": -1.93,
+                  "max_positions_rejections": 29263
+                },
+                "hash": {
+                  "total_return_pct": -42.4,
+                  "annualized_return_pct": -14.81,
+                  "max_drawdown_pct": 52.61,
+                  "sharpe_ratio": -0.33,
+                  "accepted": 133,
+                  "candidates": 29513,
+                  "win_rate": 24.81,
+                  "avg_pnl_pct": -0.51,
+                  "max_positions_rejections": 28724
+                },
+                "rotate": {
+                  "total_return_pct": -12.73,
+                  "annualized_return_pct": -3.15,
+                  "max_drawdown_pct": 45.51,
+                  "sharpe_ratio": 0.063,
+                  "accepted": 128,
+                  "candidates": 29513,
+                  "win_rate": 28.12,
+                  "avg_pnl_pct": -0.01,
+                  "max_positions_rejections": 29133
+                }
+              },
+              "median": {
+                "annualized_return_pct": -8.98,
+                "max_drawdown_pct": 49.06,
+                "sharpe_ratio": -0.134,
+                "win_rate": 36.36,
+                "avg_pnl_pct": 1.88
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 6.38,
+                  "annualized_return_pct": 2.54,
+                  "max_drawdown_pct": 31.19,
+                  "sharpe_ratio": 0.23,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 32.31,
+                  "avg_pnl_pct": 0.43,
+                  "max_positions_rejections": 29283
+                },
+                "symbol_desc": {
+                  "total_return_pct": -53.3,
+                  "annualized_return_pct": -20.48,
+                  "max_drawdown_pct": 62.51,
+                  "sharpe_ratio": -0.469,
+                  "accepted": 262,
+                  "candidates": 29513,
+                  "win_rate": 23.28,
+                  "avg_pnl_pct": -0.75,
+                  "max_positions_rejections": 28382
+                },
+                "hash": {
+                  "total_return_pct": -29.26,
+                  "annualized_return_pct": -9.6,
+                  "max_drawdown_pct": 58.56,
+                  "sharpe_ratio": -0.195,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 25.89,
+                  "avg_pnl_pct": -0.53,
+                  "max_positions_rejections": 26628
+                },
+                "rotate": {
+                  "total_return_pct": 23.23,
+                  "annualized_return_pct": 7.3,
+                  "max_drawdown_pct": 35.57,
+                  "sharpe_ratio": 0.409,
+                  "accepted": 211,
+                  "candidates": 29513,
+                  "win_rate": 30.81,
+                  "avg_pnl_pct": 0.82,
+                  "max_positions_rejections": 29035
+                }
+              },
+              "median": {
+                "annualized_return_pct": -3.53,
+                "max_drawdown_pct": 47.06,
+                "sharpe_ratio": 0.018,
+                "win_rate": 32.31,
+                "avg_pnl_pct": 0.43
+              }
+            }
+          }
+        },
+        "near_dist": {
+          "label": "距年线绝对值越小越买 (贴近年线)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 14.29,
+                  "annualized_return_pct": 5.26,
+                  "max_drawdown_pct": 36.72,
+                  "sharpe_ratio": 0.327,
+                  "accepted": 185,
+                  "candidates": 29513,
+                  "win_rate": 27.03,
+                  "avg_pnl_pct": 0.37,
+                  "max_positions_rejections": 29309
+                },
+                "symbol_desc": {
+                  "total_return_pct": -61.93,
+                  "annualized_return_pct": -25.04,
+                  "max_drawdown_pct": 63.35,
+                  "sharpe_ratio": -0.394,
+                  "accepted": 180,
+                  "candidates": 29513,
+                  "win_rate": 18.89,
+                  "avg_pnl_pct": -1.99,
+                  "max_positions_rejections": 29208
+                },
+                "hash": {
+                  "total_return_pct": -35.4,
+                  "annualized_return_pct": -11.74,
+                  "max_drawdown_pct": 50.38,
+                  "sharpe_ratio": -0.105,
+                  "accepted": 183,
+                  "candidates": 29513,
+                  "win_rate": 24.59,
+                  "avg_pnl_pct": -0.58,
+                  "max_positions_rejections": 29308
+                },
+                "rotate": {
+                  "total_return_pct": -59.61,
+                  "annualized_return_pct": -23.65,
+                  "max_drawdown_pct": 60.8,
+                  "sharpe_ratio": -0.426,
+                  "accepted": 182,
+                  "candidates": 29513,
+                  "win_rate": 23.08,
+                  "avg_pnl_pct": -1.0,
+                  "max_positions_rejections": 29265
+                }
+              },
+              "median": {
+                "annualized_return_pct": -17.7,
+                "max_drawdown_pct": 55.59,
+                "sharpe_ratio": -0.249,
+                "win_rate": 27.03,
+                "avg_pnl_pct": 0.37
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -8.49,
+                  "annualized_return_pct": -2.12,
+                  "max_drawdown_pct": 34.57,
+                  "sharpe_ratio": 0.103,
+                  "accepted": 280,
+                  "candidates": 29513,
+                  "win_rate": 26.79,
+                  "avg_pnl_pct": 0.06,
+                  "max_positions_rejections": 29199
+                },
+                "symbol_desc": {
+                  "total_return_pct": -66.3,
+                  "annualized_return_pct": -28.1,
+                  "max_drawdown_pct": 68.05,
+                  "sharpe_ratio": -0.625,
+                  "accepted": 304,
+                  "candidates": 29513,
+                  "win_rate": 20.07,
+                  "avg_pnl_pct": -1.6,
+                  "max_positions_rejections": 28594
+                },
+                "hash": {
+                  "total_return_pct": -56.98,
+                  "annualized_return_pct": -22.47,
+                  "max_drawdown_pct": 59.2,
+                  "sharpe_ratio": -0.532,
+                  "accepted": 291,
+                  "candidates": 29513,
+                  "win_rate": 22.34,
+                  "avg_pnl_pct": -1.38,
+                  "max_positions_rejections": 29083
+                },
+                "rotate": {
+                  "total_return_pct": -41.84,
+                  "annualized_return_pct": -14.9,
+                  "max_drawdown_pct": 44.84,
+                  "sharpe_ratio": -0.281,
+                  "accepted": 288,
+                  "candidates": 29513,
+                  "win_rate": 24.65,
+                  "avg_pnl_pct": -0.7,
+                  "max_positions_rejections": 29190
+                }
+              },
+              "median": {
+                "annualized_return_pct": -18.68,
+                "max_drawdown_pct": 52.02,
+                "sharpe_ratio": -0.407,
+                "win_rate": 26.79,
+                "avg_pnl_pct": 0.06
+              }
+            }
+          }
+        },
+        "below_line": {
+          "label": "越低于年线越买 (10.2 的那个因子)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -39.83,
+                  "annualized_return_pct": -13.65,
+                  "max_drawdown_pct": 57.76,
+                  "sharpe_ratio": -0.162,
+                  "accepted": 197,
+                  "candidates": 29513,
+                  "win_rate": 24.87,
+                  "avg_pnl_pct": -0.25,
+                  "max_positions_rejections": 29277
+                },
+                "symbol_desc": {
+                  "total_return_pct": -84.93,
+                  "annualized_return_pct": -43.68,
+                  "max_drawdown_pct": 87.75,
+                  "sharpe_ratio": -0.931,
+                  "accepted": 205,
+                  "candidates": 29513,
+                  "win_rate": 19.51,
+                  "avg_pnl_pct": -1.53,
+                  "max_positions_rejections": 29114
+                },
+                "hash": {
+                  "total_return_pct": -69.78,
+                  "annualized_return_pct": -30.19,
+                  "max_drawdown_pct": 75.19,
+                  "sharpe_ratio": -0.551,
+                  "accepted": 185,
+                  "candidates": 29513,
+                  "win_rate": 23.24,
+                  "avg_pnl_pct": -1.39,
+                  "max_positions_rejections": 28751
+                },
+                "rotate": {
+                  "total_return_pct": -56.58,
+                  "annualized_return_pct": -21.93,
+                  "max_drawdown_pct": 64.0,
+                  "sharpe_ratio": -0.363,
+                  "accepted": 195,
+                  "candidates": 29513,
+                  "win_rate": 26.15,
+                  "avg_pnl_pct": -0.25,
+                  "max_positions_rejections": 29217
+                }
+              },
+              "median": {
+                "annualized_return_pct": -26.06,
+                "max_drawdown_pct": 69.59,
+                "sharpe_ratio": -0.457,
+                "win_rate": 24.87,
+                "avg_pnl_pct": -0.25
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -27.27,
+                  "annualized_return_pct": -8.82,
+                  "max_drawdown_pct": 56.15,
+                  "sharpe_ratio": -0.107,
+                  "accepted": 317,
+                  "candidates": 29513,
+                  "win_rate": 24.92,
+                  "avg_pnl_pct": -0.33,
+                  "max_positions_rejections": 29161
+                },
+                "symbol_desc": {
+                  "total_return_pct": -74.72,
+                  "annualized_return_pct": -34.21,
+                  "max_drawdown_pct": 78.93,
+                  "sharpe_ratio": -0.794,
+                  "accepted": 297,
+                  "candidates": 29513,
+                  "win_rate": 20.54,
+                  "avg_pnl_pct": -1.68,
+                  "max_positions_rejections": 26711
+                },
+                "hash": {
+                  "total_return_pct": -58.03,
+                  "annualized_return_pct": -23.06,
+                  "max_drawdown_pct": 67.23,
+                  "sharpe_ratio": -0.497,
+                  "accepted": 320,
+                  "candidates": 29513,
+                  "win_rate": 24.06,
+                  "avg_pnl_pct": -1.11,
+                  "max_positions_rejections": 28267
+                },
+                "rotate": {
+                  "total_return_pct": -48.04,
+                  "annualized_return_pct": -17.81,
+                  "max_drawdown_pct": 57.39,
+                  "sharpe_ratio": -0.373,
+                  "accepted": 315,
+                  "candidates": 29513,
+                  "win_rate": 24.13,
+                  "avg_pnl_pct": -0.88,
+                  "max_positions_rejections": 29135
+                }
+              },
+              "median": {
+                "annualized_return_pct": -20.43,
+                "max_drawdown_pct": 62.31,
+                "sharpe_ratio": -0.435,
+                "win_rate": 24.92,
+                "avg_pnl_pct": -0.33
+              }
+            }
+          }
+        },
+        "ma_slope": {
+          "label": "年线越陡向上越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -75.32,
+                  "annualized_return_pct": -34.42,
+                  "max_drawdown_pct": 76.04,
+                  "sharpe_ratio": -0.557,
+                  "accepted": 255,
+                  "candidates": 29513,
+                  "win_rate": 21.57,
+                  "avg_pnl_pct": -1.26,
+                  "max_positions_rejections": 29164
+                },
+                "symbol_desc": {
+                  "total_return_pct": -75.32,
+                  "annualized_return_pct": -34.42,
+                  "max_drawdown_pct": 76.04,
+                  "sharpe_ratio": -0.557,
+                  "accepted": 255,
+                  "candidates": 29513,
+                  "win_rate": 21.57,
+                  "avg_pnl_pct": -1.26,
+                  "max_positions_rejections": 29164
+                },
+                "hash": {
+                  "total_return_pct": -75.32,
+                  "annualized_return_pct": -34.42,
+                  "max_drawdown_pct": 76.04,
+                  "sharpe_ratio": -0.557,
+                  "accepted": 255,
+                  "candidates": 29513,
+                  "win_rate": 21.57,
+                  "avg_pnl_pct": -1.26,
+                  "max_positions_rejections": 29164
+                },
+                "rotate": {
+                  "total_return_pct": -75.32,
+                  "annualized_return_pct": -34.42,
+                  "max_drawdown_pct": 76.04,
+                  "sharpe_ratio": -0.557,
+                  "accepted": 255,
+                  "candidates": 29513,
+                  "win_rate": 21.57,
+                  "avg_pnl_pct": -1.26,
+                  "max_positions_rejections": 29164
+                }
+              },
+              "median": {
+                "annualized_return_pct": -34.42,
+                "max_drawdown_pct": 76.04,
+                "sharpe_ratio": -0.557,
+                "win_rate": 21.57,
+                "avg_pnl_pct": -1.26
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -79.84,
+                  "annualized_return_pct": -38.65,
+                  "max_drawdown_pct": 80.89,
+                  "sharpe_ratio": -0.841,
+                  "accepted": 390,
+                  "candidates": 29513,
+                  "win_rate": 21.79,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 28070
+                },
+                "symbol_desc": {
+                  "total_return_pct": -79.84,
+                  "annualized_return_pct": -38.65,
+                  "max_drawdown_pct": 80.89,
+                  "sharpe_ratio": -0.841,
+                  "accepted": 390,
+                  "candidates": 29513,
+                  "win_rate": 21.79,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 28071
+                },
+                "hash": {
+                  "total_return_pct": -79.84,
+                  "annualized_return_pct": -38.65,
+                  "max_drawdown_pct": 80.89,
+                  "sharpe_ratio": -0.841,
+                  "accepted": 390,
+                  "candidates": 29513,
+                  "win_rate": 21.79,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 28070
+                },
+                "rotate": {
+                  "total_return_pct": -79.84,
+                  "annualized_return_pct": -38.65,
+                  "max_drawdown_pct": 80.89,
+                  "sharpe_ratio": -0.841,
+                  "accepted": 390,
+                  "candidates": 29513,
+                  "win_rate": 21.79,
+                  "avg_pnl_pct": -1.29,
+                  "max_positions_rejections": 28071
+                }
+              },
+              "median": {
+                "annualized_return_pct": -38.65,
+                "max_drawdown_pct": 80.89,
+                "sharpe_ratio": -0.841,
+                "win_rate": 21.79,
+                "avg_pnl_pct": -1.29
+              }
+            }
+          }
+        },
+        "recovery_60": {
+          "label": "距 60 日低点反弹越少越买 (更早介入)",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 37.91,
+                  "annualized_return_pct": 11.55,
+                  "max_drawdown_pct": 29.85,
+                  "sharpe_ratio": 0.605,
+                  "accepted": 94,
+                  "candidates": 29513,
+                  "win_rate": 35.11,
+                  "avg_pnl_pct": 1.31,
+                  "max_positions_rejections": 29392
+                },
+                "symbol_desc": {
+                  "total_return_pct": 38.14,
+                  "annualized_return_pct": 11.61,
+                  "max_drawdown_pct": 29.82,
+                  "sharpe_ratio": 0.61,
+                  "accepted": 94,
+                  "candidates": 29513,
+                  "win_rate": 35.11,
+                  "avg_pnl_pct": 1.31,
+                  "max_positions_rejections": 29392
+                },
+                "hash": {
+                  "total_return_pct": 39.68,
+                  "annualized_return_pct": 11.99,
+                  "max_drawdown_pct": 27.84,
+                  "sharpe_ratio": 0.627,
+                  "accepted": 93,
+                  "candidates": 29513,
+                  "win_rate": 36.56,
+                  "avg_pnl_pct": 1.45,
+                  "max_positions_rejections": 29392
+                },
+                "rotate": {
+                  "total_return_pct": 63.8,
+                  "annualized_return_pct": 17.63,
+                  "max_drawdown_pct": 20.51,
+                  "sharpe_ratio": 0.881,
+                  "accepted": 95,
+                  "candidates": 29513,
+                  "win_rate": 38.95,
+                  "avg_pnl_pct": 2.28,
+                  "max_positions_rejections": 29388
+                }
+              },
+              "median": {
+                "annualized_return_pct": 11.8,
+                "max_drawdown_pct": 28.83,
+                "sharpe_ratio": 0.619,
+                "win_rate": 35.11,
+                "avg_pnl_pct": 1.31
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 48.85,
+                  "annualized_return_pct": 13.74,
+                  "max_drawdown_pct": 26.05,
+                  "sharpe_ratio": 0.778,
+                  "accepted": 160,
+                  "candidates": 29513,
+                  "win_rate": 36.25,
+                  "avg_pnl_pct": 1.56,
+                  "max_positions_rejections": 29304
+                },
+                "symbol_desc": {
+                  "total_return_pct": 52.38,
+                  "annualized_return_pct": 14.57,
+                  "max_drawdown_pct": 27.99,
+                  "sharpe_ratio": 0.803,
+                  "accepted": 159,
+                  "candidates": 29513,
+                  "win_rate": 38.36,
+                  "avg_pnl_pct": 1.87,
+                  "max_positions_rejections": 29298
+                },
+                "hash": {
+                  "total_return_pct": 52.81,
+                  "annualized_return_pct": 14.67,
+                  "max_drawdown_pct": 27.53,
+                  "sharpe_ratio": 0.815,
+                  "accepted": 158,
+                  "candidates": 29513,
+                  "win_rate": 37.97,
+                  "avg_pnl_pct": 1.81,
+                  "max_positions_rejections": 29299
+                },
+                "rotate": {
+                  "total_return_pct": 67.01,
+                  "annualized_return_pct": 17.86,
+                  "max_drawdown_pct": 26.75,
+                  "sharpe_ratio": 0.98,
+                  "accepted": 158,
+                  "candidates": 29513,
+                  "win_rate": 39.24,
+                  "avg_pnl_pct": 2.26,
+                  "max_positions_rejections": 29298
+                }
+              },
+              "median": {
+                "annualized_return_pct": 14.62,
+                "max_drawdown_pct": 27.14,
+                "sharpe_ratio": 0.809,
+                "win_rate": 36.25,
+                "avg_pnl_pct": 1.56
+              }
+            }
+          }
+        },
+        "drawdown_120": {
+          "label": "距 120 日高点回撤越深越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -77.19,
+                  "annualized_return_pct": -36.0,
+                  "max_drawdown_pct": 79.2,
+                  "sharpe_ratio": -0.995,
+                  "accepted": 137,
+                  "candidates": 29513,
+                  "win_rate": 21.17,
+                  "avg_pnl_pct": -2.5,
+                  "max_positions_rejections": 28386
+                },
+                "symbol_desc": {
+                  "total_return_pct": -77.42,
+                  "annualized_return_pct": -36.2,
+                  "max_drawdown_pct": 79.53,
+                  "sharpe_ratio": -0.996,
+                  "accepted": 138,
+                  "candidates": 29513,
+                  "win_rate": 20.29,
+                  "avg_pnl_pct": -2.95,
+                  "max_positions_rejections": 28055
+                },
+                "hash": {
+                  "total_return_pct": -77.42,
+                  "annualized_return_pct": -36.2,
+                  "max_drawdown_pct": 79.53,
+                  "sharpe_ratio": -0.996,
+                  "accepted": 138,
+                  "candidates": 29513,
+                  "win_rate": 20.29,
+                  "avg_pnl_pct": -2.95,
+                  "max_positions_rejections": 28055
+                },
+                "rotate": {
+                  "total_return_pct": -77.32,
+                  "annualized_return_pct": -36.11,
+                  "max_drawdown_pct": 79.44,
+                  "sharpe_ratio": -0.994,
+                  "accepted": 137,
+                  "candidates": 29513,
+                  "win_rate": 20.44,
+                  "avg_pnl_pct": -2.69,
+                  "max_positions_rejections": 29225
+                }
+              },
+              "median": {
+                "annualized_return_pct": -36.16,
+                "max_drawdown_pct": 79.48,
+                "sharpe_ratio": -0.996,
+                "win_rate": 21.17,
+                "avg_pnl_pct": -2.5
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": -65.22,
+                  "annualized_return_pct": -27.39,
+                  "max_drawdown_pct": 67.21,
+                  "sharpe_ratio": -0.834,
+                  "accepted": 223,
+                  "candidates": 29513,
+                  "win_rate": 24.22,
+                  "avg_pnl_pct": -1.13,
+                  "max_positions_rejections": 28071
+                },
+                "symbol_desc": {
+                  "total_return_pct": -64.24,
+                  "annualized_return_pct": -26.77,
+                  "max_drawdown_pct": 66.1,
+                  "sharpe_ratio": -0.846,
+                  "accepted": 219,
+                  "candidates": 29513,
+                  "win_rate": 24.2,
+                  "avg_pnl_pct": -1.25,
+                  "max_positions_rejections": 28517
+                },
+                "hash": {
+                  "total_return_pct": -63.04,
+                  "annualized_return_pct": -26.02,
+                  "max_drawdown_pct": 64.94,
+                  "sharpe_ratio": -0.805,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 24.11,
+                  "avg_pnl_pct": -1.45,
+                  "max_positions_rejections": 29040
+                },
+                "rotate": {
+                  "total_return_pct": -63.9,
+                  "annualized_return_pct": -26.56,
+                  "max_drawdown_pct": 65.76,
+                  "sharpe_ratio": -0.822,
+                  "accepted": 230,
+                  "candidates": 29513,
+                  "win_rate": 23.91,
+                  "avg_pnl_pct": -1.16,
+                  "max_positions_rejections": 28950
+                }
+              },
+              "median": {
+                "annualized_return_pct": -26.66,
+                "max_drawdown_pct": 65.93,
+                "sharpe_ratio": -0.828,
+                "win_rate": 24.22,
+                "avg_pnl_pct": -1.13
+              }
+            }
+          }
+        },
+        "momentum_20": {
+          "label": "20 日涨幅越小越买",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 59.06,
+                  "annualized_return_pct": 16.57,
+                  "max_drawdown_pct": 21.79,
+                  "sharpe_ratio": 0.736,
+                  "accepted": 126,
+                  "candidates": 29513,
+                  "win_rate": 30.95,
+                  "avg_pnl_pct": 1.4,
+                  "max_positions_rejections": 29361
+                },
+                "symbol_desc": {
+                  "total_return_pct": 59.06,
+                  "annualized_return_pct": 16.57,
+                  "max_drawdown_pct": 21.79,
+                  "sharpe_ratio": 0.736,
+                  "accepted": 126,
+                  "candidates": 29513,
+                  "win_rate": 30.95,
+                  "avg_pnl_pct": 1.4,
+                  "max_positions_rejections": 29361
+                },
+                "hash": {
+                  "total_return_pct": 59.06,
+                  "annualized_return_pct": 16.57,
+                  "max_drawdown_pct": 21.79,
+                  "sharpe_ratio": 0.736,
+                  "accepted": 126,
+                  "candidates": 29513,
+                  "win_rate": 30.95,
+                  "avg_pnl_pct": 1.4,
+                  "max_positions_rejections": 29361
+                },
+                "rotate": {
+                  "total_return_pct": 59.06,
+                  "annualized_return_pct": 16.57,
+                  "max_drawdown_pct": 21.79,
+                  "sharpe_ratio": 0.736,
+                  "accepted": 126,
+                  "candidates": 29513,
+                  "win_rate": 30.95,
+                  "avg_pnl_pct": 1.4,
+                  "max_positions_rejections": 29361
+                }
+              },
+              "median": {
+                "annualized_return_pct": 16.57,
+                "max_drawdown_pct": 21.79,
+                "sharpe_ratio": 0.736,
+                "win_rate": 30.95,
+                "avg_pnl_pct": 1.4
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 41.33,
+                  "annualized_return_pct": 11.94,
+                  "max_drawdown_pct": 25.75,
+                  "sharpe_ratio": 0.608,
+                  "accepted": 203,
+                  "candidates": 29513,
+                  "win_rate": 31.03,
+                  "avg_pnl_pct": 1.04,
+                  "max_positions_rejections": 29268
+                },
+                "symbol_desc": {
+                  "total_return_pct": 41.33,
+                  "annualized_return_pct": 11.94,
+                  "max_drawdown_pct": 25.75,
+                  "sharpe_ratio": 0.608,
+                  "accepted": 203,
+                  "candidates": 29513,
+                  "win_rate": 31.03,
+                  "avg_pnl_pct": 1.04,
+                  "max_positions_rejections": 29268
+                },
+                "hash": {
+                  "total_return_pct": 41.33,
+                  "annualized_return_pct": 11.94,
+                  "max_drawdown_pct": 25.75,
+                  "sharpe_ratio": 0.608,
+                  "accepted": 203,
+                  "candidates": 29513,
+                  "win_rate": 31.03,
+                  "avg_pnl_pct": 1.04,
+                  "max_positions_rejections": 29268
+                },
+                "rotate": {
+                  "total_return_pct": 41.33,
+                  "annualized_return_pct": 11.94,
+                  "max_drawdown_pct": 25.75,
+                  "sharpe_ratio": 0.608,
+                  "accepted": 203,
+                  "candidates": 29513,
+                  "win_rate": 31.03,
+                  "avg_pnl_pct": 1.04,
+                  "max_positions_rejections": 29268
+                }
+              },
+              "median": {
+                "annualized_return_pct": 11.94,
+                "max_drawdown_pct": 25.75,
+                "sharpe_ratio": 0.608,
+                "win_rate": 31.03,
+                "avg_pnl_pct": 1.04
+              }
+            }
+          }
+        },
+        "oracle": {
+          "label": "【未来函数·上界】按已实现收益排序",
+          "by_slot": {
+            "3": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 1347.99,
+                  "annualized_return_pct": 130.54,
+                  "max_drawdown_pct": 11.4,
+                  "sharpe_ratio": 5.865,
+                  "accepted": 149,
+                  "candidates": 29513,
+                  "win_rate": 89.26,
+                  "avg_pnl_pct": 27.71,
+                  "max_positions_rejections": 29330
+                },
+                "symbol_desc": {
+                  "total_return_pct": 1349.94,
+                  "annualized_return_pct": 130.64,
+                  "max_drawdown_pct": 11.4,
+                  "sharpe_ratio": 5.908,
+                  "accepted": 146,
+                  "candidates": 29513,
+                  "win_rate": 91.1,
+                  "avg_pnl_pct": 28.36,
+                  "max_positions_rejections": 29333
+                },
+                "hash": {
+                  "total_return_pct": 1348.4,
+                  "annualized_return_pct": 130.56,
+                  "max_drawdown_pct": 11.4,
+                  "sharpe_ratio": 5.905,
+                  "accepted": 149,
+                  "candidates": 29513,
+                  "win_rate": 89.26,
+                  "avg_pnl_pct": 27.71,
+                  "max_positions_rejections": 29330
+                },
+                "rotate": {
+                  "total_return_pct": 1349.94,
+                  "annualized_return_pct": 130.64,
+                  "max_drawdown_pct": 11.4,
+                  "sharpe_ratio": 5.908,
+                  "accepted": 146,
+                  "candidates": 29513,
+                  "win_rate": 91.1,
+                  "avg_pnl_pct": 28.36,
+                  "max_positions_rejections": 29333
+                }
+              },
+              "median": {
+                "annualized_return_pct": 130.6,
+                "max_drawdown_pct": 11.4,
+                "sharpe_ratio": 5.907,
+                "win_rate": 89.26,
+                "avg_pnl_pct": 27.71
+              }
+            },
+            "5": {
+              "by_tie_break": {
+                "symbol_asc": {
+                  "total_return_pct": 1148.06,
+                  "annualized_return_pct": 119.31,
+                  "max_drawdown_pct": 13.62,
+                  "sharpe_ratio": 6.244,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 88.84,
+                  "avg_pnl_pct": 26.52,
+                  "max_positions_rejections": 29235
+                },
+                "symbol_desc": {
+                  "total_return_pct": 1148.64,
+                  "annualized_return_pct": 119.34,
+                  "max_drawdown_pct": 13.62,
+                  "sharpe_ratio": 6.292,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 88.84,
+                  "avg_pnl_pct": 26.52,
+                  "max_positions_rejections": 29236
+                },
+                "hash": {
+                  "total_return_pct": 1148.64,
+                  "annualized_return_pct": 119.34,
+                  "max_drawdown_pct": 13.62,
+                  "sharpe_ratio": 6.292,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 88.84,
+                  "avg_pnl_pct": 26.52,
+                  "max_positions_rejections": 29235
+                },
+                "rotate": {
+                  "total_return_pct": 1148.64,
+                  "annualized_return_pct": 119.34,
+                  "max_drawdown_pct": 13.62,
+                  "sharpe_ratio": 6.292,
+                  "accepted": 224,
+                  "candidates": 29513,
+                  "win_rate": 88.84,
+                  "avg_pnl_pct": 26.52,
+                  "max_positions_rejections": 29236
+                }
+              },
+              "median": {
+                "annualized_return_pct": 119.34,
+                "max_drawdown_pct": 13.62,
+                "sharpe_ratio": 6.292,
+                "win_rate": 88.84,
+                "avg_pnl_pct": 26.52
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -74,7 +74,7 @@ CAPITAL_SPLITS: tuple[tuple[tuple[str, float], ...], ...] = (
     (("diverge", 0.3), ("yearline", 0.7)),
     (("diverge", 0.5), ("yearline", 0.3), ("baseline", 0.2)),
 )
-RANK_FACTORS = ("near_line", "high_vol", "low_vol")  # 仅在"统一排序"里作为候选因子
+RANK_FACTORS = ("below_line", "high_vol", "low_vol")  # 仅在"统一排序"里作为候选因子
 
 
 def _types_for(pools: tuple[str, ...]) -> list[str]:
@@ -96,7 +96,8 @@ def _load_store(cache_dir: pathlib.Path) -> dict[str, list[dict[str, Any]]]:
 
 def _rank_score(trade: dict[str, Any], mode: str) -> float:
     """排名因子 (只用信号当日可见信息, 见 ranking_study 的结论)。"""
-    if mode == "near_line":
+    if mode == "below_line":
+        # 越**低于**年线越优先 (不是"越贴近"): 与 10.2 的 near_line 同一定义。
         close = float(trade.get("signal_close") or 0.0)
         ma_long = float(trade.get("ma_long") or 0.0)
         return -(close / ma_long - 1.0) if close > 0 and ma_long > 0 else 0.0
