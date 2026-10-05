@@ -671,6 +671,16 @@ class SignalStore:
             row = connection.execute("SELECT COUNT(*) AS count FROM signal_event").fetchone()
         return int(row["count"])
 
+    def exit_notification_key(self, symbol: str, strategy_id: str) -> str:
+        return f"exit_notify:{symbol}:{strategy_id}"
+
+    def last_exit_notification_day(self, symbol: str, strategy_id: str) -> str | None:
+        """读取上一次为该 (股票, 策略) 推送卖出提醒的交易日。"""
+        return self.get_state(self.exit_notification_key(symbol, strategy_id), None)
+
+    def mark_exit_notified(self, symbol: str, strategy_id: str, day: str) -> None:
+        self.set_state(self.exit_notification_key(symbol, strategy_id), day)
+
     def outbox_summary(self) -> dict[str, int]:
         """Return a lightweight summary of the outbox for the web console."""
         with self._connect() as connection:

@@ -36,6 +36,7 @@ if str(QUANT_ROOT) not in sys.path:
 
 from strategy.chan import analyze_chan
 from strategy.macd import calculate_macd, classify_zero_axis_zone, find_golden_cross_entries
+from strategy.macd_divergence import top_divergence_flags
 from strategy.market_gate import (
     calculate_strict_regime,
     calculate_trend_gate,
@@ -931,29 +932,9 @@ def _build_trend_exit_flags(
     slow = int(settings.get("macd_slow", 26))
     signal = int(settings.get("macd_signal", 9))
     macd = calculate_macd(closes, fast=fast, slow=slow, signal=signal)
-    histogram = macd["hist"].fillna(0.0).to_numpy(dtype=float)
-    close_values = closes.to_numpy(dtype=float)
-    flags = np.zeros(len(histogram), dtype=bool)
-    if len(histogram) >= 3:
-        positive = np.isfinite(histogram) & (histogram > 0)
-        changes = np.flatnonzero(np.diff(positive.astype(np.int8)) != 0) + 1
-        bounds = np.concatenate(([0], changes, [len(positive)]))
-        cycles: list[tuple[int, float, float]] = []
-        for run_start, run_stop in zip(bounds[:-1], bounds[1:]):
-            if not positive[run_start]:
-                continue
-            segment_hist = histogram[run_start:run_stop]
-            segment_close = close_values[run_start:run_stop]
-            area = float(segment_hist.sum())
-            if area <= 0 or not np.isfinite(segment_close).any():
-                continue
-            cycles.append((run_stop, area, float(np.nanmax(segment_close))))
-        for position in range(1, len(cycles)):
-            trigger, area, high = cycles[position]
-            _, prior_area, prior_high = cycles[position - 1]
-            if trigger >= len(flags):
-                break
-            flags[trigger] = bool(high > prior_high and area < prior_area)
+    # 顶背离算法由 strategy.macd_divergence 统一提供: 实盘退出提醒与回测必须
+    # 用同一套定义, 否则页面提示的卖点不是回测里验证过的那个卖点。
+    flags, _ = top_divergence_flags(macd["hist"], closes)
     return {
         "ma_long": closes.rolling(period, min_periods=period).mean().to_numpy(dtype=float),
         "top_divergence_flags": flags,

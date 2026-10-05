@@ -88,6 +88,26 @@ class SignalNotifier:
                 f"> {payload['risk_notice']}\n"
                 f"> event_id: `{payload['event_id']}`"
             )
+        if kind == "strategy_exit":
+            reasons = evidence.get("score_reasons", [])
+            cost = evidence.get("cost_price")
+            pnl = evidence.get("pnl_pct")
+            # 成本未知时不要印 0.000/+0.00%: 那是"算不出来", 不是"不亏不赚"。
+            cost_text = f"{float(cost):.3f}" if cost else "未知"
+            pnl_text = f"{float(pnl):+.2f}%" if pnl is not None else "未知"
+            return (
+                f"# 🔴 策略退出提醒\n\n"
+                f"> **{payload.get('name', '')} ({payload['symbol']})**\n\n"
+                f"- 策略：{'、'.join(evidence.get('strategy_names') or [evidence.get('strategy_name', '')])}\n"
+                f"- 现价：{payload['price']:.3f}\n"
+                f"- 成本价：{cost_text}\n"
+                f"- 浮动盈亏：{pnl_text}\n"
+                f"- 触发条件：{'；'.join(reasons) if reasons else '见结构化 evidence'}\n"
+                f"- 建仓日：{evidence.get('opened_on') or '未知'}\n"
+                f"- 确认时间：{payload['confirmed_at']}\n\n"
+                f"> {payload['risk_notice']}\n"
+                f"> event_id: `{payload['event_id']}`"
+            )
         signal_level = evidence.get("signal_level")
         if signal_level == "watch":
             side = "🟡 MACD 金叉预警"
@@ -196,6 +216,18 @@ class SignalNotifier:
                 f"确认: {('、'.join(confirmations) if confirmations else '暂无额外确认')}\n"
                 f"风险: {evidence.get('risk_text', '需结合趋势复核')}"
             )
+        elif kind == "strategy_exit":
+            title = f"🔴 策略退出 {payload.get('name', '')} {payload['symbol']}".strip()
+            reasons = evidence.get("score_reasons", [])
+            cost = evidence.get("cost_price")
+            pnl = evidence.get("pnl_pct")
+            cost_text = f"{float(cost):.3f} ({float(pnl):+.2f}%)" if cost and pnl is not None else "未知"
+            body = (
+                f"策略: {'、'.join(evidence.get('strategy_names') or [evidence.get('strategy_name', '')])}\n"
+                f"现价: {payload['price']:.3f}\n"
+                f"成本: {cost_text}\n"
+                f"触发: {('、'.join(reasons) if reasons else '见结构化 evidence')}"
+            )
         else:
             signal_level = evidence.get("signal_level")
             side = (
@@ -258,6 +290,8 @@ class SignalNotifier:
             subject_side = "AI自动解读"
         elif kind == "candidate":
             subject_side = "MACD金叉候选"
+        elif kind == "strategy_exit":
+            subject_side = "策略退出提醒"
         elif payload.get("evidence", {}).get("signal_level") == "watch":
             subject_side = "MACD金叉预警"
         elif payload.get("evidence", {}).get("signal_level") == "confirmation":

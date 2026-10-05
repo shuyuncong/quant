@@ -50,6 +50,15 @@ from utils.time_utils import now_shanghai
 
 logger = logging.getLogger(__name__)
 
+# 退出条件优先级: 数字越小越先作为提醒的主因 (止损最紧急, 止盈最不急)。
+EXIT_RULE_PRIORITY = {
+    "持仓成本止损": 0,
+    "已确认日线顶背离": 1,
+    "跌破年线": 2,
+    "持仓超时": 3,
+    "固定止盈": 4,
+}
+
 
 def _is_stale_data_error(message: str) -> bool:
     """Return True when the error means the symbol's daily bars are not
@@ -155,6 +164,11 @@ class SignalMonitor:
             self.account_equity = float(equity) if equity else None
         except (TypeError, ValueError):
             self.account_equity = None
+        # 归档分析模式(web 五页签)的上下文。默认 1 = 实时信号模式, 此时没有
+        # 持仓台账快照, 也不会有"退出条件"提醒。
+        self.analysis_version = 1
+        self.portfolio_context: dict[str, Any] = {}
+        self.analysis_cutoff: str | None = None
 
     def _evaluate_live_fundamental(
         self,
@@ -334,6 +348,94 @@ class SignalMonitor:
                 filtered_events.append(event)
         return filtered_events
 
+    def _exit_notification_events(
+        self,
+        analysis: dict[str, Any],
+        symbol: str,
+        name: str = "",
+    ) -> list[SignalEvent]:
+        """持仓触发了退出条件 -> 一条可推送的卖出提醒。
+
+        只在 analysis_version=2 的归档分析里有 sell_signal: 退出条件由
+        strategy.registry 结合持仓成本与建仓日算出来, 未持仓时不会产生提醒。
+        同一天同一只股票最多提醒一次 (跨策略合并为一条), 条件持续期间
+        每个交易日提醒一次, 直到你卖出或清仓。
+        """
+        holdings = {
+            str(row.get("symbol")): row
+            for row in (getattr(self, "portfolio_context", None) or {}).get("holdings", [])
+            if float(row.get("shares", 0) or 0) > 0
+        }
+        holding = holdings.get(symbol)
+        if not holding:
+            return []
+        alerts = [
+            strategy["sell_signal"]
+            for strategy in (analysis.get("strategies") or [])
+            if strategy.get("sell_signal")
+        ]
+        if not alerts:
+            return []
+        day = self._alert_day()
+        if self.store.last_exit_notification_day(symbol, "*") == day:
+            return []
+        primary = min(alerts, key=lambda item: EXIT_RULE_PRIORITY.get(item["primary_rule"], 99))
+        # 提醒是"我们算出来的判断", 不是行情事件: confirmed_at 取评估当天,
+        # 否则默认走 K 线时间戳(节假日前最后一个交易日)会被时效检查当成过期丢掉。
+        confirmed_at = self._alert_day()
+        price = float(primary["price"] or 0.0)
+        cost = float(holding.get("cost_price", 0) or 0)
+        shares = float(holding.get("shares", 0) or 0)
+        exit_modes = {
+            str(strategy.get("strategy_id")): str(strategy.get("exit_rule") or "")
+            for strategy in (analysis.get("strategies") or [])
+        }
+        event = SignalEvent(
+            symbol=symbol,
+            name=str(holding.get("name") or name or primary.get("name") or ""),
+            timeframe="1d",
+            signal_type=primary["signal_type"],
+            side="sell",
+            price=price,
+            structure_time=confirmed_at,
+            confirmed_at=confirmed_at,
+            score=0,
+            evidence={
+                "components": sorted({item for alert in alerts for item in alert["components"]}),
+                "score_reasons": list(dict.fromkeys(item for alert in alerts for item in alert["reasons"])),
+                "notification_kind": "strategy_exit",
+                "signal_level": "strong",
+                "actionable": True,
+                "execution_mode": "enabled",
+                "rules": sorted(
+                    {rule for alert in alerts for rule in alert["rules"]},
+                    key=lambda rule: EXIT_RULE_PRIORITY.get(rule, 99),
+                ),
+                "strategy_id": primary["strategy_id"],
+                "strategy_name": primary["strategy_name"],
+                "strategy_ids": sorted({alert["strategy_id"] for alert in alerts}),
+                # 同一条规则被多个策略同时标出时, 不挑一个"背锅": 全部列出来。
+                "strategy_names": sorted({alert["strategy_name"] for alert in alerts}),
+                "exit_mode": exit_modes.get(primary["strategy_id"], ""),
+                "cost_price": cost or None,
+                "pnl_pct": round((price / cost - 1) * 100, 2) if cost > 0 and price > 0 else None,
+                "opened_on": holding.get("opened_on"),
+                "shares": shares,
+                "as_of": primary.get("as_of"),
+                "note": "按持仓成本与建仓日计算的退出条件；条件持续期间每个交易日提醒一次。",
+            },
+        )
+        self.store.mark_exit_notified(symbol, "*", day)
+        return [event]
+
+    def _alert_day(self) -> str:
+        """提醒所属交易日: 归档/回放按 analysis_cutoff, 实盘按上海当天。"""
+        cutoff = getattr(self, "analysis_cutoff", None)
+        try:
+            return datetime.fromisoformat(str(cutoff)).date().isoformat()
+        except (TypeError, ValueError):
+            return now_shanghai().date().isoformat()
+
     def _save_report(self, prefix: str, report: dict[str, Any]) -> Path:
         timestamp = now_shanghai().strftime("%Y%m%d_%H%M%S")
         path = self.output_dir / f"{prefix}_{timestamp}.json"
@@ -503,6 +605,13 @@ class SignalMonitor:
                         resolve_min_confirmations(self.config),
                     )
                 if notify and self.push_trade_signal:
+                    if self.analysis_version == 2:
+                        # 有持仓时的退出提醒: 先落库去重, 再并入 event_objects 走闸门与投递。
+                        event_objects.extend(
+                            self._exit_notification_events(
+                                analysis, symbol, names.get(symbol, "")
+                            )
+                        )
                     if self.trading_limits.get("enabled", True) and event_objects:
                         event_objects, gate_blocked = self.trade_gate.filter_events(
                             event_objects, account_equity=self.account_equity

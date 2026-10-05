@@ -142,6 +142,53 @@ def _zero_axis_zone(dif: float, dea: float, close: float, tolerance: float) -> s
     return "below"
 
 
+def top_divergence_flags(
+    hist: pd.Series,
+    close: pd.Series,
+) -> tuple[np.ndarray, dict[int, dict[str, float]]]:
+    """正柱周期完成当根的顶背离标记 (与回测 _build_trend_exit_flags 同一套算法)。
+
+    返回 (flags, details): flags[i] 为 True 表示第 i 根"正柱周期刚走完",
+    且该周期最高价高于上一个正柱周期、正柱面积更小。
+    details[i] 给出该次触发的两组对比数值, 供提醒/页面展示。
+
+    回测与实盘共用这一个实现: 两套"顶背离"定义不一致时, 页面提示的卖点
+    和回测里验证过的卖点会是两回事。
+    """
+    histogram = pd.to_numeric(hist, errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    close_values = pd.to_numeric(close, errors="coerce").to_numpy(dtype=float)
+    flags = np.zeros(len(histogram), dtype=bool)
+    details: dict[int, dict[str, float]] = {}
+    if len(histogram) < 3:
+        return flags, details
+    positive = np.isfinite(histogram) & (histogram > 0)
+    changes = np.flatnonzero(np.diff(positive.astype(np.int8)) != 0) + 1
+    bounds = np.concatenate(([0], changes, [len(positive)]))
+    cycles: list[dict[str, float]] = []
+    for run_start, run_stop in zip(bounds[:-1], bounds[1:]):
+        if not positive[run_start]:
+            continue
+        segment_hist = histogram[run_start:run_stop]
+        segment_close = close_values[run_start:run_stop]
+        area = float(segment_hist.sum())
+        if area <= 0 or not np.isfinite(segment_close).any():
+            continue
+        cycles.append({"trigger": float(run_stop), "area": area,
+                       "high": float(np.nanmax(segment_close))})
+    for position in range(1, len(cycles)):
+        latest, prior = cycles[position], cycles[position - 1]
+        trigger = int(latest["trigger"])
+        if trigger >= len(flags):
+            break
+        if latest["high"] > prior["high"] and latest["area"] < prior["area"]:
+            flags[trigger] = True
+            details[trigger] = {
+                "prior_high": prior["high"], "latest_high": latest["high"],
+                "prior_area": prior["area"], "latest_area": latest["area"],
+            }
+    return flags, details
+
+
 def _completed_negative_cycles(
     hist: pd.Series,
     low: pd.Series,
