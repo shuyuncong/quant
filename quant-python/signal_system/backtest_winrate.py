@@ -2528,7 +2528,12 @@ def run_portfolio(
             if len(positions) >= max_positions:
                 reject(candidate, "max_positions")
                 continue
-            available_budget = min(initial_cash * position_size_pct, cash)
+            # 分批建仓: 候选可带 _tranche_weight 指定该批占"单只目标仓位"的比例;
+            # 未带(或为 1.0)时行为与原来完全一致 —— 单批 = initial_cash × position_size_pct。
+            tranche_weight = float(candidate.get("_tranche_weight") or 1.0)
+            available_budget = min(
+                initial_cash * position_size_pct * tranche_weight, cash
+            )
             quantity = _max_affordable_quantity(
                 float(candidate["entry_price"]),
                 available_budget,

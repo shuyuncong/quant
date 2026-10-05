@@ -45,7 +45,7 @@ MAX_DEFER = 3  # 涨停买不进时最多顺延几根 K 线
 COSTS_CACHE: dict[str, Any] = {}
 TIE_BREAKS = ("symbol_asc", "symbol_desc", "hash", "rotate")
 SLOT_OPTIONS = (3, 4, 5)
-TRANCHES = (1, 3, 5)  # 1 = 一次买满; 3/5 = 分批建仓 (每批 1/3 或 1/5)
+TRANCHES = (1, 2, 3, 5)  # 1=一次买满; 2=首日2/3+1/3; 3/5=等权分批
 
 
 def load_bars(symbols: set[str]) -> dict[str, pd.DataFrame]:
@@ -120,12 +120,22 @@ def build_fractional_trades(
     bars: dict[str, pd.DataFrame],
     slots: int,
     tranches: int,
+    weights: tuple[float, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    """把每笔 trade 拆成 tranches 笔等额子仓, 后续批次延后 TRANCHE_GAPS 天建仓。
+    """把每笔 trade 拆成 tranches 个子仓, 后续批次延后 TRANCHE_GAP 天建仓。
 
+    weights 为各批次的**资金权重** (和 = 1, 长度 = tranches); None = 用 _weights_for
+    的默认口径 (2 批 = 首日 2/3 + 5 个交易日后 1/3, N>=3 批 = 等权)。
+    注意: 默认值只能是这一处 —— 若这里用等权、而调用方用 2/3+1/3,
+    同一个"2 批"会出现两种口径, 结果不可比。
     子仓沿用原 trade 的出场日/出场价/出场原因 —— **卖出规则完全不变**,
-    变的只是"分几次把这一只的仓位建起来"。tranches=1 时必须与原 trade 完全一致。
+    变的只是"分几次、各按什么比例把这一只的仓位建起来"。
+    tranches=1 时必须与原 trade 完全一致。
     """
+    if weights is None:
+        weights = _weights_for(tranches)
+    if len(weights) != tranches:
+        raise ValueError(f"weights 长度 {len(weights)} 与批数 {tranches} 不符")
     out: list[dict[str, Any]] = []
     for trade in trades:
         symbol = str(trade["symbol"])
@@ -140,14 +150,35 @@ def build_fractional_trades(
         picks = _tranche_entry_indices(
             symbol, closed, dates, entry_day, exit_day, COSTS_CACHE, tranches
         )
+        built = len(picks)
+        if not built:
+            continue
+        # 未建成的批次**就这样不建** (快速止损的单子只用首批仓位承担亏损),
+        # 资金留在组合里给其它候选 —— 绝不能把权重摊到已建批次上,
+        # 否则"分批"会退化成"一次买满", 结论完全不同。
         for index, (_, price) in enumerate(picks):
             item = dict(trade)
             item["entry_price"] = price
             item["entry_day"] = dates[picks[index][0]].isoformat()
+            item["_tranche_weight"] = weights[index]
             # 引擎以 symbol 作为持仓主键; 同一只股票的多个批次必须各占一个槽位。
             item["symbol"] = symbol if index == 0 else f"{symbol}T{index}"
             out.append(item)
     return out
+
+
+def _weights_for(tranches: int) -> tuple[float, ...]:
+    """批次资金权重:
+
+    - 1 批: 一次买满。
+    - 2 批: **首日 2/3, +5 个交易日补 1/3** (温和折中, 用户要求加测的这一档)。
+    - N>=3 批: 等权 1/N (1/3 × 3 或 1/5 × 5)。
+    """
+    if tranches <= 1:
+        return (1.0,)
+    if tranches == 2:
+        return (2.0 / 3.0, 1.0 / 3.0)
+    return tuple(1.0 / tranches for _ in range(tranches))
 
 
 def run_variant(
@@ -158,17 +189,22 @@ def run_variant(
     tie_break: str,
     costs: dict[str, Any],
 ) -> dict[str, Any]:
-    """把分批后的候选放进组合: 每个子仓独立、等额买入。"""
-    prepared = build_fractional_trades(trades, bars, slots, tranches)
-    # 每个子仓独立买一份: 单批金额 = 1/(只数 × 批数), 槽位数 = 只数 × 批数。
-    # 只数=3、批数=3 时单批 1/9 (2.78 万), 三批合起来正好是一只 8.33 万的仓位。
+    """把分批后的候选放进组合。
+
+    单批买 "初始资金 × (1/只数) × 该批权重" (权重经 _tranche_weight 传给引擎)。
+    槽位数按**最小批次**放大 (1/min_weight),
+    否则 1/3 那种小批次会在满仓时被 max_positions 挡住 -> 资金闲置。
+    """
+    weights = _weights_for(tranches)
+    prepared = build_fractional_trades(trades, bars, slots, tranches, weights)
+    min_weight = min(weights)
     result = bt.run_portfolio(
         prepared,
         costs,
         {
             "initial_cash": CASH,
-            "max_positions": slots * tranches,
-            "position_size_pct": 1.0 / (slots * tranches),
+            "max_positions": int(round(slots / min_weight)),
+            "position_size_pct": 1.0 / slots,
             "lot_size": LOT,
             "score_mode": "P0",
             "tie_break": tie_break,
@@ -229,7 +265,7 @@ def main() -> int:
                 "hold": slots,
                 "tranches": tranches,
                 "per_position_pct": round(100.0 / slots, 2),
-                "per_tranche_pct": round(100.0 / slots / tranches, 2),
+                "per_tranche_weights": [round(value, 4) for value in _weights_for(tranches)],
                 "by_tie_break": rows,
                 "median": {
                     "annualized_return_pct": round(st.median(anns), 2),
@@ -251,13 +287,13 @@ def main() -> int:
 def _print(report: dict[str, Any]) -> None:
     print(f"本金 {report['cash']:.0f}, 买入信号 = 零轴+底背离, 卖出 = fixed, "
           f"分批间隔 {report['tranche_gap']} 交易日")
-    print(f"\n{'组合':<16} {'每只占比':>8} {'每批占比':>8} {'年化(中位)':>10} "
+    print(f"\n{'组合':<16} {'每只占比':>8} {'批次权重':>12} {'年化(中位)':>10} "
           f"{'回撤(中位)':>10} {'夏普(中位)':>10} {'收益/回撤':>9} {'成交':>6} {'平均持仓':>8}")
     for label, payload in report["variants"].items():
         med = payload["median"]
         any_row = next(iter(payload["by_tie_break"].values()))
         print(
-            f"{label:<16} {payload['per_position_pct']:>7.2f}% {payload['per_tranche_pct']:>7.2f}% "
+            f"{label:<16} {payload['per_position_pct']:>7.2f}% {str(payload['per_tranche_weights']):>12} "
             f"{med['annualized_return_pct']:>10} {med['max_drawdown_pct']:>10} "
             f"{med['sharpe_ratio']:>10} {med['return_over_drawdown']:>9} "
             f"{any_row['accepted']:>6} {any_row['average_positions']:>8}"

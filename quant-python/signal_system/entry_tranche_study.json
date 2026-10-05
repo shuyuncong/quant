@@ -13,7 +13,9 @@
       "hold": 3,
       "tranches": 1,
       "per_position_pct": 33.33,
-      "per_tranche_pct": 33.33,
+      "per_tranche_weights": [
+        1.0
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 91.08,
@@ -67,11 +69,76 @@
         "return_over_drawdown": 1.613
       }
     },
+    "hold3_buy2": {
+      "hold": 3,
+      "tranches": 2,
+      "per_position_pct": 33.33,
+      "per_tranche_weights": [
+        0.6667,
+        0.3333
+      ],
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 78.8,
+          "annualized_return_pct": 32.05,
+          "max_drawdown_pct": 16.69,
+          "sharpe_ratio": 1.342,
+          "accepted": 180,
+          "candidates": 984,
+          "win_rate": 42.78,
+          "average_positions": 7.2211,
+          "position_capacity_utilization_pct": 80.23
+        },
+        "symbol_desc": {
+          "total_return_pct": 41.0,
+          "annualized_return_pct": 17.61,
+          "max_drawdown_pct": 17.53,
+          "sharpe_ratio": 0.813,
+          "accepted": 183,
+          "candidates": 984,
+          "win_rate": 36.07,
+          "average_positions": 7.0243,
+          "position_capacity_utilization_pct": 78.05
+        },
+        "hash": {
+          "total_return_pct": 52.1,
+          "annualized_return_pct": 22.04,
+          "max_drawdown_pct": 17.55,
+          "sharpe_ratio": 0.989,
+          "accepted": 185,
+          "candidates": 984,
+          "win_rate": 37.3,
+          "average_positions": 7.1562,
+          "position_capacity_utilization_pct": 79.51
+        },
+        "rotate": {
+          "total_return_pct": 38.83,
+          "annualized_return_pct": 16.72,
+          "max_drawdown_pct": 17.54,
+          "sharpe_ratio": 0.784,
+          "accepted": 181,
+          "candidates": 984,
+          "win_rate": 38.12,
+          "average_positions": 7.2454,
+          "position_capacity_utilization_pct": 80.5
+        }
+      },
+      "median": {
+        "annualized_return_pct": 19.82,
+        "max_drawdown_pct": 17.54,
+        "sharpe_ratio": 0.901,
+        "return_over_drawdown": 1.131
+      }
+    },
     "hold3_buy3": {
       "hold": 3,
       "tranches": 3,
       "per_position_pct": 33.33,
-      "per_tranche_pct": 11.11,
+      "per_tranche_weights": [
+        0.3333,
+        0.3333,
+        0.3333
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 42.12,
@@ -129,7 +196,13 @@
       "hold": 3,
       "tranches": 5,
       "per_position_pct": 33.33,
-      "per_tranche_pct": 6.67,
+      "per_tranche_weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 41.82,
@@ -187,7 +260,9 @@
       "hold": 4,
       "tranches": 1,
       "per_position_pct": 25.0,
-      "per_tranche_pct": 25.0,
+      "per_tranche_weights": [
+        1.0
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 98.01,
@@ -241,11 +316,76 @@
         "return_over_drawdown": 1.722
       }
     },
+    "hold4_buy2": {
+      "hold": 4,
+      "tranches": 2,
+      "per_position_pct": 25.0,
+      "per_tranche_weights": [
+        0.6667,
+        0.3333
+      ],
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 61.94,
+          "annualized_return_pct": 26.0,
+          "max_drawdown_pct": 14.15,
+          "sharpe_ratio": 1.203,
+          "accepted": 223,
+          "candidates": 984,
+          "win_rate": 41.26,
+          "average_positions": 8.8519,
+          "position_capacity_utilization_pct": 73.77
+        },
+        "symbol_desc": {
+          "total_return_pct": 28.65,
+          "annualized_return_pct": 12.62,
+          "max_drawdown_pct": 16.44,
+          "sharpe_ratio": 0.648,
+          "accepted": 231,
+          "candidates": 984,
+          "win_rate": 38.53,
+          "average_positions": 8.8114,
+          "position_capacity_utilization_pct": 73.43
+        },
+        "hash": {
+          "total_return_pct": 39.88,
+          "annualized_return_pct": 17.31,
+          "max_drawdown_pct": 16.86,
+          "sharpe_ratio": 0.866,
+          "accepted": 236,
+          "candidates": 984,
+          "win_rate": 38.56,
+          "average_positions": 9.2252,
+          "position_capacity_utilization_pct": 76.88
+        },
+        "rotate": {
+          "total_return_pct": 36.16,
+          "annualized_return_pct": 15.78,
+          "max_drawdown_pct": 17.42,
+          "sharpe_ratio": 0.802,
+          "accepted": 225,
+          "candidates": 984,
+          "win_rate": 39.11,
+          "average_positions": 9.1318,
+          "position_capacity_utilization_pct": 76.1
+        }
+      },
+      "median": {
+        "annualized_return_pct": 16.54,
+        "max_drawdown_pct": 16.65,
+        "sharpe_ratio": 0.834,
+        "return_over_drawdown": 0.994
+      }
+    },
     "hold4_buy3": {
       "hold": 4,
       "tranches": 3,
       "per_position_pct": 25.0,
-      "per_tranche_pct": 8.33,
+      "per_tranche_weights": [
+        0.3333,
+        0.3333,
+        0.3333
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 33.64,
@@ -303,7 +443,13 @@
       "hold": 4,
       "tranches": 5,
       "per_position_pct": 25.0,
-      "per_tranche_pct": 5.0,
+      "per_tranche_weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 35.4,
@@ -361,7 +507,9 @@
       "hold": 5,
       "tranches": 1,
       "per_position_pct": 20.0,
-      "per_tranche_pct": 20.0,
+      "per_tranche_weights": [
+        1.0
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 58.29,
@@ -415,11 +563,76 @@
         "return_over_drawdown": 1.535
       }
     },
+    "hold5_buy2": {
+      "hold": 5,
+      "tranches": 2,
+      "per_position_pct": 20.0,
+      "per_tranche_weights": [
+        0.6667,
+        0.3333
+      ],
+      "by_tie_break": {
+        "symbol_asc": {
+          "total_return_pct": 44.28,
+          "annualized_return_pct": 19.2,
+          "max_drawdown_pct": 14.31,
+          "sharpe_ratio": 0.976,
+          "accepted": 277,
+          "candidates": 984,
+          "win_rate": 39.35,
+          "average_positions": 10.783,
+          "position_capacity_utilization_pct": 71.89
+        },
+        "symbol_desc": {
+          "total_return_pct": 35.17,
+          "annualized_return_pct": 15.46,
+          "max_drawdown_pct": 17.06,
+          "sharpe_ratio": 0.806,
+          "accepted": 287,
+          "candidates": 984,
+          "win_rate": 38.68,
+          "average_positions": 10.8682,
+          "position_capacity_utilization_pct": 72.45
+        },
+        "hash": {
+          "total_return_pct": 45.41,
+          "annualized_return_pct": 19.65,
+          "max_drawdown_pct": 15.4,
+          "sharpe_ratio": 0.999,
+          "accepted": 282,
+          "candidates": 984,
+          "win_rate": 39.36,
+          "average_positions": 11.0,
+          "position_capacity_utilization_pct": 73.33
+        },
+        "rotate": {
+          "total_return_pct": 34.99,
+          "annualized_return_pct": 15.39,
+          "max_drawdown_pct": 17.4,
+          "sharpe_ratio": 0.819,
+          "accepted": 274,
+          "candidates": 984,
+          "win_rate": 40.51,
+          "average_positions": 11.1562,
+          "position_capacity_utilization_pct": 74.37
+        }
+      },
+      "median": {
+        "annualized_return_pct": 17.33,
+        "max_drawdown_pct": 16.23,
+        "sharpe_ratio": 0.897,
+        "return_over_drawdown": 1.068
+      }
+    },
     "hold5_buy3": {
       "hold": 5,
       "tranches": 3,
       "per_position_pct": 20.0,
-      "per_tranche_pct": 6.67,
+      "per_tranche_weights": [
+        0.3333,
+        0.3333,
+        0.3333
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 39.07,
@@ -477,7 +690,13 @@
       "hold": 5,
       "tranches": 5,
       "per_position_pct": 20.0,
-      "per_tranche_pct": 4.0,
+      "per_tranche_weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ],
       "by_tie_break": {
         "symbol_asc": {
           "total_return_pct": 46.7,

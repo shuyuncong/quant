@@ -108,6 +108,27 @@ class TrancheBuildTests(unittest.TestCase):
         built = ets.build_fractional_trades([self._trade(symbol="999999")], self.bars, 4, 3)
         self.assertEqual(built, [])
 
+    def test_two_tranche_weights_are_two_thirds_then_one_third(self):
+        """加测档: 首日买 2/3, +5 个交易日补 1/3 (不是等权 1/2)。"""
+        self.assertEqual(ets._weights_for(2), (2.0 / 3.0, 1.0 / 3.0))
+        self.assertEqual(ets._weights_for(1), (1.0,))
+        self.assertEqual(ets._weights_for(3), (1 / 3, 1 / 3, 1 / 3))
+        built = ets.build_fractional_trades([self._trade()], self.bars, 4, 2)
+        self.assertEqual(len(built), 2)
+        self.assertAlmostEqual(built[0]["_tranche_weight"], 2.0 / 3.0)
+        self.assertAlmostEqual(built[1]["_tranche_weight"], 1.0 / 3.0)
+        # 权重之和 = 1 (一只股票的总仓位不因分批而改变)。
+        self.assertAlmostEqual(sum(item["_tranche_weight"] for item in built), 1.0)
+
+    def test_unbuilt_tranches_leave_capital_unused(self):
+        """未建成的批次不摊到已建批次上 (否则分批会退化成一次买满)。"""
+        built = ets.build_fractional_trades(
+            [self._trade(exit_day="2025-01-08")], self.bars, 4, 3
+        )
+        self.assertEqual(len(built), 1)
+        # 只建了首批 -> 权重就是 1/3, 不是被放大到 1.0。
+        self.assertAlmostEqual(built[0]["_tranche_weight"], 1.0 / 3.0)
+
 
 class TrancheCacheBasisTests(unittest.TestCase):
     """口径护栏: 必须用前复权缓存, 否则买入价与引擎不一致。"""
