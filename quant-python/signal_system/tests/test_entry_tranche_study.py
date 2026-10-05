@@ -130,6 +130,52 @@ class TrancheBuildTests(unittest.TestCase):
         self.assertAlmostEqual(built[0]["_tranche_weight"], 1.0 / 3.0)
 
 
+class GridReportTests(unittest.TestCase):
+    """只数 × 分批数 网格: 缺格子必须显示 "-", 不能崩也不能错位。"""
+
+    def test_grid_renders_every_cell_and_tolerates_missing(self):
+        import io
+        from contextlib import redirect_stdout
+
+        def variant(ann: float, dd: float, sharpe: float) -> dict:
+            return {"median": {"annualized_return_pct": ann, "max_drawdown_pct": dd, "sharpe_ratio": sharpe}}
+
+        report = {
+            "slots": [1, 2, 3],
+            "tranches": [1, 3],
+            "variants": {
+                "hold1_buy1": variant(48.0, 20.0, 1.9),
+                "hold2_buy1": variant(39.8, 17.32, 1.445),
+                "hold2_buy3": variant(23.65, 14.96, 1.082),
+                "hold3_buy1": variant(25.64, 15.89, 1.118),
+                "hold3_buy3": variant(18.14, 15.13, 0.934),
+            },
+        }
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            ets._print_grid(report)
+        text = buffer.getvalue()
+        # 三个标题都在
+        self.assertIn("年化收益", text)
+        self.assertIn("夏普", text)
+        self.assertIn("最大回撤", text)
+        # 缺 hold1_buy3 -> 必须出现占位符而不是异常
+        self.assertIn("-", text)
+        # 数值必须落在正确的行上 (只数 2 的买满档是 39.80)
+        line_two = next(line for line in text.splitlines() if line.strip().startswith("2 "))
+        self.assertIn("39.80", line_two)
+        self.assertIn("23.65", line_two)
+
+    def test_grid_is_a_noop_without_ranges(self):
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            ets._print_grid({"variants": {}})
+        self.assertEqual(buffer.getvalue(), "")
+
+
 class TrancheCacheBasisTests(unittest.TestCase):
     """口径护栏: 必须用前复权缓存, 否则买入价与引擎不一致。"""
 

@@ -233,6 +233,14 @@ def main() -> int:
     parser.add_argument("--config", default=str(BASE_DIR / "config" / "config.yaml"))
     parser.add_argument("--cache", default=str(BASE_DIR / "rankcache" / "diverge.pkl"))
     parser.add_argument("--out", default=str(BASE_DIR / "entry_tranche_study.json"))
+    parser.add_argument(
+        "--slots-list", default=",".join(str(item) for item in SLOT_OPTIONS),
+        help="只数 (仓位上限) 列表, 如 1,2,...,10",
+    )
+    parser.add_argument(
+        "--tranches-list", default=",".join(str(item) for item in TRANCHES),
+        help="分批数列表; 1=一次买满, 2=2/3+1/3, N>=3=等权",
+    )
     args = parser.parse_args()
 
     config = load_config(str(pathlib.Path(args.config).expanduser().resolve()))
@@ -250,8 +258,12 @@ def main() -> int:
         "tie_breaks": list(TIE_BREAKS),
         "variants": {},
     }
-    for slots in SLOT_OPTIONS:
-        for tranches in TRANCHES:
+    slots_list = [int(item) for item in args.slots_list.split(",") if item.strip()]
+    tranches_list = [int(item) for item in args.tranches_list.split(",") if item.strip()]
+    report["slots"] = slots_list
+    report["tranches"] = tranches_list
+    for slots in slots_list:
+        for tranches in tranches_list:
             label = f"hold{slots}_buy{tranches}"
             rows: dict[str, Any] = {}
             for tie_break in TIE_BREAKS:
@@ -279,9 +291,36 @@ def main() -> int:
     pathlib.Path(args.out).write_text(
         json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
+    _print_grid(report)
     _print(report)
     print(f"\nwritten: {args.out}")
     return 0
+
+
+def _print_grid(report: dict[str, Any]) -> None:
+    """只数 × 分批数 的二维网格 —— 一眼看出"几只最合适、要不要分批"。"""
+    slots_list = report.get("slots") or []
+    tranches_list = report.get("tranches") or []
+    if not slots_list or not tranches_list:
+        return
+
+    def cell(slots: int, tranches: int, key: str) -> str:
+        payload = report["variants"].get(f"hold{slots}_buy{tranches}")
+        if not payload:
+            return "-"
+        value = payload["median"][key]
+        return f"{value:.2f}" if key != "sharpe_ratio" else f"{value:.3f}"
+
+    for key, title in (
+        ("annualized_return_pct", "年化收益 % (中位, 4 种排序)"),
+        ("sharpe_ratio", "夏普 (中位, 4 种排序)"),
+        ("max_drawdown_pct", "最大回撤 % (中位, 4 种排序)"),
+    ):
+        header = "  ".join(f"{('买满' if item == 1 else f'{item}批'):>8}" for item in tranches_list)
+        print(f"\n{title}\n{'只数':>5}  {header}")
+        for slots in slots_list:
+            cells = "  ".join(f"{cell(slots, item, key):>8}" for item in tranches_list)
+            print(f"{slots:>5}  {cells}")
 
 
 def _print(report: dict[str, Any]) -> None:
