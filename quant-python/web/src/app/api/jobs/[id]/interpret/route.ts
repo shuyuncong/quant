@@ -4,8 +4,10 @@ import { addNote, addOperationLog, getJob, listNotesByJob } from "@/lib/db";
 import { interpretReportWithFallback, pickChatModel, extractStandpoints } from "@/lib/llm";
 import {
   buildHoldingsContext,
+  historyCompleteFromJobPayload,
   holdingsFromJobPayload,
   totalCapitalFromJobPayload,
+  tradesFromJobPayload,
 } from "@/lib/holdings-context";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,9 +56,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       );
     }
     const report = fs.readFileSync(full, "utf8");
-    const holdings = holdingsFromJobPayload(job.payload);
-    const totalCapital = totalCapitalFromJobPayload(job.payload);
-    const context = buildHoldingsContext(report, holdings, totalCapital);
+    const context = buildHoldingsContext(report, {
+      holdings: holdingsFromJobPayload(job.payload),
+      trades: tradesFromJobPayload(job.payload),
+      totalCapital: totalCapitalFromJobPayload(job.payload),
+      historyComplete: historyCompleteFromJobPayload(job.payload),
+    });
     const content = await interpretReportWithFallback(report, context);
     const standpoints = extractStandpoints(content.content);
     const noteId = await addNote({

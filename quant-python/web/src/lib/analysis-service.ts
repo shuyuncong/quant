@@ -39,12 +39,21 @@ export async function resolveAnalysisSymbols(scope: AnalysisScope, portfolio: Aw
   return [...new Set(symbols.map(normalizeSymbol))].filter(Boolean);
 }
 
-function contextForSymbol(snapshot: Record<string, unknown>, symbol: string) {
+/** 把账户快照裁到单只股票，并标出快照是否真的存在（empty ≠ absent）。 */
+export function contextForSymbol(snapshot: Record<string, unknown>, symbol: string) {
   const holdings = (snapshot.holdings ?? []) as { symbol: string; total_amount?: number }[];
+  // context_available=false 时 holdings/trades 必须读作"未知"而不是"零"：
+  // 空快照（任务没带 portfolio_context）会产出 holdings.length === 0，
+  // 模型看到 account_holdings_count: 0 会当成"账户确实没有持仓"。
+  const contextAvailable = Array.isArray(snapshot.holdings) || Array.isArray(snapshot.trades);
   return { ...snapshot, holdings: holdings.filter(row => row.symbol === symbol),
     trades: ((snapshot.trades ?? []) as { symbol: string }[]).filter(row => row.symbol === symbol),
     account_holdings_cost: holdings.reduce((sum, row) => sum + Number(row.total_amount ?? 0), 0),
-    account_holdings_count: holdings.length };
+    account_holdings_count: holdings.length,
+    account_context_available: contextAvailable,
+    account_context_note: contextAvailable
+      ? "account_* 为账户全部持仓口径（不只本次这一只）。"
+      : "本次任务未附带持仓快照，account_* 与 holdings/trades 均为未知，不要当成账户空仓。" };
 }
 
 export async function getAnalysis(id: number): Promise<AnalysisRecord | null> {

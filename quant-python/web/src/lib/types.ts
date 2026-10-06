@@ -85,3 +85,24 @@ export interface HoldingRow {
   created_at: string;
   updated_at: string;
 }
+
+/** 一笔已登记成交（quant.holding_trades 的一行；portfolioSnapshot 每股最多取最近 50 笔）。 */
+export interface HoldingTradeRow {
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  fees: number;
+  amount: number;
+  realized_pnl: number;
+  traded_at: string;
+}
+
+/** 持仓/成交上下文：把"没有数据"和"确实是零"分开，避免模型把 0 当成事实。 */
+export interface PortfolioContextInput {
+  holdings: HoldingRow[];
+  /** null / 省略 = 本次没附带成交记录（不是"一笔没成交"）；[] = 确实没登记过成交。 */
+  trades?: HoldingTradeRow[] | null;
+  totalCapital?: number;
+  historyComplete?: boolean;
+}

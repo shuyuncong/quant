@@ -19,8 +19,10 @@ import { interpretReportWithFallback, pickChatModel, extractStandpoints } from "
 import { signalSystemDir } from "./paths";
 import {
   buildHoldingsContext,
+  historyCompleteFromJobPayload,
   holdingsFromJobPayload,
   totalCapitalFromJobPayload,
+  tradesFromJobPayload,
 } from "./holdings-context";
 
 export type JobKind =
@@ -88,9 +90,12 @@ async function autoInterpret(
       const full = resolveReportPath(resultPath);
       const reportText = fs.readFileSync(full, "utf8");
       const parentPayload = (await getJob(parentJobId))?.payload;
-      const holdings = holdingsFromJobPayload(parentPayload);
-      const totalCapital = totalCapitalFromJobPayload(parentPayload);
-      const context = buildHoldingsContext(reportText, holdings, totalCapital);
+      const context = buildHoldingsContext(reportText, {
+        holdings: holdingsFromJobPayload(parentPayload),
+        trades: tradesFromJobPayload(parentPayload),
+        totalCapital: totalCapitalFromJobPayload(parentPayload),
+        historyComplete: historyCompleteFromJobPayload(parentPayload),
+      });
       const interpreted = await interpretReportWithFallback(reportText, context);
       content = interpreted.content;
       modelName = interpreted.model.name;
