@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import { shouldAutoInterpret } from "../jobs";
 
 describe("shouldAutoInterpret", () => {
-  it("always interprets user-triggered kinds", () => {
-    expect(shouldAutoInterpret("analyze", undefined)).toBe(true);
+  it("interprets the kinds that do not produce an AI conclusion themselves", () => {
     expect(shouldAutoInterpret("scan", { completed_round: false, new_events: 0 })).toBe(true);
-    expect(shouldAutoInterpret("monitor-once", { new_events: 0 })).toBe(true);
+  });
+
+  it("does not re-interpret kinds whose own pipeline already wrote a note and pushed", () => {
+    // analyze / monitor-once / monitor-cycle 走五页签批次：自己写 note 并推送。
+    // 再起子任务解读就是同一份内容读第二遍、再推一条一模一样的消息。
+    expect(shouldAutoInterpret("analyze", undefined)).toBe(false);
+    expect(shouldAutoInterpret("monitor-once", { new_events: 0 })).toBe(false);
+    expect(shouldAutoInterpret("monitor-once", { new_events: 5 })).toBe(false);
+    expect(shouldAutoInterpret("monitor-cycle", { new_events: 1 })).toBe(false);
   });
 
   it("interprets daily-scan only after the full round completes", () => {
@@ -13,11 +20,6 @@ describe("shouldAutoInterpret", () => {
     expect(shouldAutoInterpret("daily-scan", { completed_round: false, candidate_count: 3 })).toBe(false);
     expect(shouldAutoInterpret("daily-scan", { completed_round: true, candidate_count: 0 })).toBe(false);
     expect(shouldAutoInterpret("daily-scan", undefined)).toBe(false);
-  });
-
-  it("keeps monitor-cycle interpretation gated on new events", () => {
-    expect(shouldAutoInterpret("monitor-cycle", { new_events: 1 })).toBe(true);
-    expect(shouldAutoInterpret("monitor-cycle", { new_events: 0 })).toBe(false);
   });
 
   it("never auto-interprets the yearline research scan", () => {

@@ -8,8 +8,6 @@ import {
   createJob,
   findNoteByJobAndResult,
   getJob,
-  getTotalCapital,
-  listHoldings,
   listRecoverableJobs,
   updateJob,
   updateJobPayload,
@@ -34,22 +32,15 @@ export type JobKind =
   | "test-notify"
   | "dispatch-outbox";
 
-// job kinds that produce a report file worth interpreting
+// 需要单独起一份 AI 解读的任务。
+//
+// 只列"自己不产出 AI 结论"的 kind：analyze / monitor-once / monitor-cycle 走五页签
+// 批次，会自己写出 technical + synthesis 并落一条 note，再无条件起子任务解读就是
+// 同一份内容读第二遍、再推一条一模一样的消息（实测每个 analyze 任务推两次）。
+// scan / daily-scan 的"汇总"是候选数统计而不是 AI 结论，所以仍然需要这一步。
 const AUTO_INTERPRET_KINDS: JobKind[] = [
-  "analyze",
   "scan",
   "daily-scan",
-  "monitor-once",
-  "monitor-cycle",
-];
-
-// job kinds whose reports may reference the user's holdings; attach them for AI interpretation.
-const PORTFOLIO_KINDS: JobKind[] = [
-  "analyze",
-  "scan",
-  "daily-scan",
-  "monitor-once",
-  "monitor-cycle",
 ];
 
 function resolveReportPath(resultPath: string): string {
@@ -60,6 +51,8 @@ interface InterpretationPayload {
   parent_job_id: number;
   result_path: string;
   notification_at: string;
+  /** 父任务是否要求推送。历史任务是 true（那时无条件推送），缺省按 true 处理。 */
+  notify?: boolean;
 }
 
 const activeInterpretationJobs = new Set<number>();
@@ -69,7 +62,8 @@ async function autoInterpret(
   interpretationJobId: number,
   parentJobId: number,
   resultPath: string,
-  notificationAt: string
+  notificationAt: string,
+  notify: boolean
 ): Promise<void> {
   const existingNote = await findNoteByJobAndResult(parentJobId, resultPath);
   const profile = existingNote ? null : await pickChatModel();
@@ -118,6 +112,7 @@ async function autoInterpret(
           (standpoints.length > 0 ? `\n操作主张：${standpoints.join("；")}` : ""),
       });
     }
+    if (!notify) return;
     const pushOutcome = await runBridge(
       "notify-summary",
       {
@@ -162,7 +157,8 @@ async function executeInterpretationJob(jobId: number, payload: InterpretationPa
       jobId,
       payload.parent_job_id,
       payload.result_path,
-      payload.notification_at
+      payload.notification_at,
+      payload.notify !== false
     );
     await updateJob(jobId, {
       status: "success",
@@ -180,7 +176,7 @@ async function executeInterpretationJob(jobId: number, payload: InterpretationPa
   }
 }
 
-async function createInterpretationJob(parentJobId: number, resultPath: string): Promise<{
+async function createInterpretationJob(parentJobId: number, resultPath: string, notify: boolean): Promise<{
   jobId: number;
   payload: InterpretationPayload;
 }> {
@@ -188,6 +184,7 @@ async function createInterpretationJob(parentJobId: number, resultPath: string):
     parent_job_id: parentJobId,
     result_path: resultPath,
     notification_at: nowIso().replace(" ", "T"),
+    notify,
   };
   const jobId = await createJob("interpret-report", payload);
   return { jobId, payload };
@@ -202,6 +199,7 @@ export async function resumeInterpretationJobs(): Promise<void> {
         parent_job_id: Number(raw.parent_job_id),
         result_path: String(raw.result_path),
         notification_at: String(raw.notification_at || job.created_at.replace(" ", "T")),
+        notify: raw.notify,
       });
     } catch (error) {
       await updateJob(job.id, {
@@ -284,11 +282,6 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
     const { startAnalysisBatch } = await import("./analysis-service");
     return startAnalysisBatch(kind, payload);
   }
-  if (PORTFOLIO_KINDS.includes(kind)) {
-    // 报告任务统一携带用户持仓与账户总资金，供引擎报告和 AI 解读（含调度器触发的任务）参考。
-    payload.holdings = await listHoldings();
-    payload.total_capital = await getTotalCapital();
-  }
   const jobId = await createJob(kind, payload);
   await updateJob(jobId, { status: "running", started_at: nowIso() });
   if (kind === "analyze" && Array.isArray(payload.symbols) && payload.symbols.length > 0) {
@@ -318,7 +311,7 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
         // exit between these writes can then be recovered by the scheduler.
         const interpretation =
           resultPath && shouldAutoInterpret(kind, report)
-            ? await createInterpretationJob(jobId, resultPath)
+            ? await createInterpretationJob(jobId, resultPath, payload.notify !== false)
             : null;
         await updateJob(jobId, {
           status: "success",

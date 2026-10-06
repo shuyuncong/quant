@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createJob, getJob, getDb, updateJob, updateJobPayload, addOperationLog } from "./db";
 import { buildOverrides, freezeEngineConfig } from "./config";
+import { portfolioSnapshot } from "./portfolio";
 import type { PoolClient } from "pg";
 import { runBridge } from "./bridge";
 import { STRATEGIES, type StrategyId } from "./analysis-types";
@@ -9,7 +10,10 @@ import { signalSystemDir } from "./paths";
 import { nowIso } from "./time";
 const running = new Set<number>();
 export async function startScanBatch(kind: string, input: Record<string, unknown>): Promise<number> {
-  const payload = { ...input, scan_version: 2, frozen_overrides: await freezeEngineConfig(), strategies: input.scan_kind && input.scan_kind !== "all" ? [input.scan_kind] : STRATEGIES.map(row => row.id), progress: {} };
+  // 与 analyze 批次一致地带上账户快照：AI 解读读的是 portfolio_context，
+  // 只写顶层 holdings 会让解读看不到持仓（历史 bug）。
+  const payload = { ...input, scan_version: 2, portfolio_context: await portfolioSnapshot(),
+    frozen_overrides: await freezeEngineConfig(), strategies: input.scan_kind && input.scan_kind !== "all" ? [input.scan_kind] : STRATEGIES.map(row => row.id), progress: {} };
   const id = typeof input.existing_job_id === "number" ? input.existing_job_id : await createJob(kind, payload);
   if (input.existing_job_id) await updateJobPayload(id, payload);
   void executeScanBatch(id).catch(async error => { await updateJob(id, { status: "failed", error: String(error), finished_at: nowIso() }); });
