@@ -331,12 +331,12 @@ export default function ModelsPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] sm:max-w-lg flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="shrink-0 border-b p-4 pr-12">
             <DialogTitle>{editingId ? "编辑模型" : "新增模型"}</DialogTitle>
             <DialogDescription>OpenAI 兼容接口配置，支持任意 base_url + model + api_key。</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="model-protocol">接口协议</Label>
               <select id="model-protocol" aria-describedby="model-protocol-help" value={form.protocol}
@@ -395,7 +395,7 @@ export default function ModelsPage() {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 m-0 border-t bg-muted/50 p-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
             <Button onClick={() => void save()}>保存</Button>
           </DialogFooter>
