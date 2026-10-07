@@ -233,5 +233,7 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
 - **资源**：默认 `cpus: ${BACKTEST_CPUS:-1.0}`、`mem_limit: ${BACKTEST_MEMORY_LIMIT:-2g}`；Python 侧固定 `OMP/OPENBLAS/MKL_NUM_THREADS=1`。全市场任务内存不足时任务会失败但输入检查点在 `output/backtests/<uuid>/inputs` 保留，调大上限后重试即可（不得靠缩减股票范围“完成”任务）。
 - **本地运行**（开发调试）：在 `quant-python/web` 执行 `npm run backtest:worker`，需要 `BACKTEST_ENABLED=1`；非 production 环境会先校验 `DATABASE_URL` 指向本机库，避免误连生产。
 - **耗时**：串行节流抓取自建行情源时约 2~8 秒/只，全市场（当前在市约 5500 只）准备阶段需要数小时；进度写在 `output/backtests/<uuid>/progress.json` 的 `stage/processed/total/excluded`，`inputs/prepared.json` 每 25 只落盘一次，重启不会重复抓取已完成的股票。
+- **资源实测**：全市场 5572 只（纳入 4852、58 个交易日）完整回放峰值 RSS 约 **0.7 GiB**，磁盘冻结输入约 162 MiB/任务。回放是单线程，增核不缩短单个任务；区间更长/持仓更多时内存上升，故线上建议 `BACKTEST_MEMORY_LIMIT=3g`、`BACKTEST_CPUS=4.0`（4 核机器留突发余量）。
+- **可复现性**：同一冻结输入重跑（含中断恢复后）产出完全一致的样本、指标与成交明细（已用全市场任务实测：4852 只纳入、三策略 11/12/13 笔交易、五指标逐项相同）。
 - **报告口径**：报告含 `universe`（总数=纳入+排除）、`effective_start/effective_end`（请求区间内的真实交易日）、每策略 `metrics/equity_curve/trades/rejected/warnings`，以及只含规则（不含密钥）的 `config_snapshot`。旧版本地回测任务会被标记失败并提示新建，不会被静默重跑。
 - **鉴权**：回测是计算与行情抓取入口，公网部署必须置于 Nginx Basic Auth、来源 IP 限制等之后；页面本身没有登录。
