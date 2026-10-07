@@ -37,13 +37,27 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useRouter } from "next/navigation";
 import {
   CandidateTable,
   type DivergenceCandidateRow,
   type MacdCandidateRow,
   type YearlineCandidateRow,
 } from "@/components/candidate-table";
-import { CheckCircle2, FileImage, FileText, Filter, Plus, RefreshCw, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  FileImage,
+  FileText,
+  Filter,
+  Loader2,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 
 interface PoolRow {
   symbol: string;
@@ -142,6 +156,7 @@ const POOL_LABEL: Record<PoolType, string> = {
 };
 
 export function PoolPanel() {
+  const router = useRouter();
   const [pool, setPool] = useState<PoolRow[]>([]);
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [newSymbol, setNewSymbol] = useState("");
@@ -157,6 +172,73 @@ export function PoolPanel() {
   });
   const [expiredOpen, setExpiredOpen] = useState(false);
   const [scanning, setScanning] = useState<string | null>(null);
+  const [analyzingSymbol, setAnalyzingSymbol] = useState<string | null>(null);
+  const [analyzingAll, setAnalyzingAll] = useState(false);
+  const [searchFilter, setSearchFilter] = useState("");
+
+  const triggerAnalyze = async (symbol: string, name?: string) => {
+    setAnalyzingSymbol(symbol);
+    try {
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "analyze",
+          symbols: [symbol],
+          notify: true,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        jobId?: number;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "启动分析失败");
+      toast.success(`已为 ${name || symbol} 启动分析任务 #${data.jobId}`, {
+        action: {
+          label: "查看结果",
+          onClick: () => router.push("/results"),
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "启动分析失败");
+    } finally {
+      setAnalyzingSymbol(null);
+    }
+  };
+
+  const triggerAnalyzeAll = async () => {
+    if (pool.length === 0) return;
+    setAnalyzingAll(true);
+    try {
+      const symbols = pool.map((item) => item.symbol);
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "analyze",
+          symbols,
+          notify: true,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        jobId?: number;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "启动批量分析失败");
+      toast.success(`已为自选池全部 ${symbols.length} 只股票启动分析 #${data.jobId}`, {
+        action: {
+          label: "查看进度",
+          onClick: () => router.push("/results"),
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "启动批量分析失败");
+    } finally {
+      setAnalyzingAll(false);
+    }
+  };
 
   const loadPool = useCallback(async (type: PoolType) => {
     const response = await fetch(`/api/candidates?pool_type=${type}`).catch(() => null);
@@ -434,41 +516,100 @@ export function PoolPanel() {
     }
   };
 
+  const filteredPool = pool.filter((item) => {
+    if (!searchFilter.trim()) return true;
+    const q = searchFilter.trim().toLowerCase();
+    return (
+      item.symbol.toLowerCase().includes(q) ||
+      (item.name && item.name.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">股票池</h2>
-          <p className="text-sm text-muted-foreground">文本导入解析后需确认；图片导入由视觉模型识别，识别结果同样先确认再入库。</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={openTextImport}><FileText className="size-4" /> 文本导入</Button>
-          <Button onClick={openImageImport}><FileImage className="size-4" /> 图片导入</Button>
+          <h2 className="text-lg font-semibold">股票池与选股</h2>
+          <p className="text-sm text-muted-foreground">管理自选标的与指标候选池；支持一键发起五标签多策略分析与截图/文本导入。</p>
         </div>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>手动添加</CardTitle>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <CardTitle>我的自选股票池</CardTitle>
+              <Badge variant="secondary" className="font-mono text-xs">
+                {pool.length} 只
+              </Badge>
+            </div>
+            <CardDescription className="mt-1">
+              手动维护自选标的；分析任务可直接调用自选池，亦可在此快速发起分析。
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              disabled={pool.length === 0 || analyzingAll}
+              onClick={() => void triggerAnalyzeAll()}
+              className="gap-1.5"
+            >
+              {analyzingAll ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="size-3.5" />
+              )}
+              一键分析全部自选
+            </Button>
+            <Button variant="outline" size="sm" onClick={openTextImport} className="gap-1.5">
+              <FileText className="size-3.5" /> 文本导入
+            </Button>
+            <Button variant="outline" size="sm" onClick={openImageImport} className="gap-1.5">
+              <FileImage className="size-3.5" /> 图片识别
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="flex items-end gap-3">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label>股票代码</Label>
-            <Input value={newSymbol} onChange={(event) => setNewSymbol(event.target.value)} placeholder="600036 或 600036.SH" />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <Label>名称（可选）</Label>
-            <Input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="招商银行" />
-          </div>
-          <Button onClick={() => void addSymbol()}><Plus className="size-4" /> 添加</Button>
-        </CardContent>
-      </Card>
+        <CardContent className="space-y-4">
+          {/* 紧凑型快速添加与搜索过滤工具条 */}
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void addSymbol();
+              }}
+              className="flex flex-1 flex-wrap items-center gap-2"
+            >
+              <Input
+                value={newSymbol}
+                onChange={(e) => setNewSymbol(e.target.value)}
+                placeholder="代码 (如 600036)"
+                className="h-8.5 w-36 bg-background text-xs font-mono"
+              />
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="名称 (可选，如 招商银行)"
+                className="h-8.5 w-40 bg-background text-xs"
+              />
+              <Button type="submit" size="sm" variant="secondary" className="h-8.5 text-xs gap-1">
+                <Plus className="size-3.5" /> 加入自选
+              </Button>
+            </form>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>股票池（{pool.length} 只）</CardTitle>
-        </CardHeader>
-        <CardContent>
+            {pool.length > 3 && (
+              <div className="flex items-center gap-1.5">
+                <Search className="size-3.5 text-muted-foreground" />
+                <Input
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="过滤代码 / 名称..."
+                  className="h-8.5 w-36 bg-background text-xs"
+                />
+              </div>
+            )}
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -476,27 +617,68 @@ export function PoolPanel() {
                 <TableHead>名称</TableHead>
                 <TableHead>来源</TableHead>
                 <TableHead>添加时间</TableHead>
-                <TableHead className="w-20">操作</TableHead>
+                <TableHead className="w-36 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pool.map((item) => (
-                <TableRow key={item.symbol}>
-                  <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
-                  <TableCell>{item.name || "-"}</TableCell>
-                  <TableCell><Badge variant="outline">{item.source}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{item.created_at}</TableCell>
+              {filteredPool.map((item) => (
+                <TableRow key={item.symbol} className="hover:bg-muted/40">
+                  <TableCell className="font-mono text-xs font-semibold">{item.symbol}</TableCell>
+                  <TableCell className="font-medium text-sm">{item.name || "-"}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => void removeSymbol(item.symbol)}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        item.source === "image"
+                          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                          : item.source === "text"
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {item.source === "image"
+                        ? "截图识别"
+                        : item.source === "text"
+                        ? "文本导入"
+                        : item.source === "manual"
+                        ? "手动添加"
+                        : item.source}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.created_at}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={analyzingSymbol === item.symbol}
+                        onClick={() => void triggerAnalyze(item.symbol, item.name)}
+                        className="h-7 px-2.5 text-xs gap-1 hover:border-primary hover:text-primary"
+                        title="发起五标签多策略分析"
+                      >
+                        {analyzingSymbol === item.symbol ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Play className="size-3" />
+                        )}
+                        分析
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void removeSymbol(item.symbol)}
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        title="从股票池删除"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
-              {pool.length === 0 && (
+              {filteredPool.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    股票池为空
+                  <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                    {pool.length === 0 ? "自选股票池为空，可使用上方工具栏添加或导入" : "未找到匹配股票"}
                   </TableCell>
                 </TableRow>
               )}
@@ -551,6 +733,8 @@ export function PoolPanel() {
                 variant="macd"
                 rows={poolData.macd_zero_axis?.candidates ?? []}
                 emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+                onAnalyze={triggerAnalyze}
+                analyzingSymbol={analyzingSymbol}
               />
               <div className="mt-6 rounded-lg border border-amber-200/70 bg-amber-50/60 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -572,6 +756,8 @@ export function PoolPanel() {
                   variant="macd-observed"
                   rows={observedData.candidates}
                   emptyText="暂无 0 轴上方或附近的观察候选"
+                  onAnalyze={triggerAnalyze}
+                  analyzingSymbol={analyzingSymbol}
                 />
               </div>
             </TabsContent>
@@ -600,6 +786,8 @@ export function PoolPanel() {
                 variant="macd-divergence"
                 rows={poolData.macd_divergence?.candidates ?? []}
                 emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+                onAnalyze={triggerAnalyze}
+                analyzingSymbol={analyzingSymbol}
               />
               <div className="mt-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">最近一次筛选漏斗</span>
@@ -652,6 +840,8 @@ export function PoolPanel() {
                 variant="yearline"
                 rows={poolData.yearline_pullback?.candidates ?? []}
                 emptyText="暂无候选，点击「筛选自选池」或「全市场筛选」生成"
+                onAnalyze={triggerAnalyze}
+                analyzingSymbol={analyzingSymbol}
               />
             </TabsContent>
           </CardContent>

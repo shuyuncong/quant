@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Plus, RefreshCw, Trash2, Wallet, X } from "lucide-react";
+import { Coins, Pencil, PieChart, Plus, RefreshCw, ShieldCheck, Trash2, Wallet, X } from "lucide-react";
 import { HoldingTradeDialog, HoldingTradeHistory } from "@/components/holding-trade-dialog";
 
 interface HoldingRow {
@@ -214,36 +214,104 @@ export function HoldingsPanel() {
         </p>
       </div>
 
+      {/* 顶部资产概览驾驶舱 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>账户总资金</span>
+            <Wallet className="size-4 opacity-70" />
+          </div>
+          <div className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
+            ¥{savedCapital > 0 ? fmtMoney(savedCapital) : "未设置"}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {savedCapital > 0 ? "已设基准资金" : "建议配置以计算仓位比例"}
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>持仓总市值</span>
+            <Coins className="size-4 text-rose-500 opacity-80" />
+          </div>
+          <div className="mt-2 text-xl font-bold tracking-tight text-rose-600 dark:text-rose-400 sm:text-2xl">
+            ¥{fmtMoney(totalAmount)}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            共 {holdings.length} 只在持标的
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>可用现金（预估）</span>
+            <ShieldCheck className="size-4 opacity-70" />
+          </div>
+          <div className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
+            {savedCapital > 0 ? `¥${fmtMoney(Math.max(0, savedCapital - totalAmount))}` : "—"}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {savedCapital > 0 && savedCapital < totalAmount ? "⚠️ 已超过设定总资金" : "可支配风险缓冲"}
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>总仓位比例</span>
+            <PieChart className="size-4 opacity-70" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-xl font-bold tracking-tight sm:text-2xl">
+              {capitalPct ? `${capitalPct}%` : "—"}
+            </span>
+            {capitalPct && (
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${
+                  Number(capitalPct) > 75
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600"
+                    : Number(capitalPct) > 30
+                    ? "border-primary/20 bg-primary/5 text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {Number(capitalPct) > 75 ? "重仓" : Number(capitalPct) > 30 ? "适中" : "轻仓"}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            AI 解读将参考集中度建议
+          </p>
+        </div>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wallet className="size-4" />
-            账户总资金
-          </CardTitle>
-          <CardDescription>
-            用于计算持仓占总仓位比例；AI 解读会以此判断仓位集中度并给出加减仓金额建议。
-          </CardDescription>
+        <CardHeader className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <Wallet className="size-4" /> 资金配置与仓位基准
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {savedCapital > 0 ? `当前配置: ¥${fmtMoney(savedCapital)}` : "未配置总资金"}
+            </span>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex w-56 flex-col gap-1.5">
-              <Label htmlFor="h-capital">总资金（元）</Label>
+        <CardContent className="px-4 pt-0 pb-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="h-capital" className="shrink-0 text-xs">设定总资金（元）</Label>
               <Input
                 id="h-capital"
-                placeholder="100000"
+                className="h-8 w-44 font-mono text-xs"
+                placeholder="例如 100000"
                 inputMode="decimal"
                 value={capitalInput}
                 onChange={(event) => setCapitalInput(event.target.value)}
               />
             </div>
-            <Button onClick={() => void saveCapital()} disabled={savingCapital}>
-              <Wallet className="size-4" />
-              {savingCapital ? "保存中..." : "保存"}
+            <Button size="sm" className="h-8 text-xs" onClick={() => void saveCapital()} disabled={savingCapital}>
+              {savingCapital ? "保存中..." : "更新总资金"}
             </Button>
-            <p className="text-sm text-muted-foreground">
-              当前总持仓 {fmtMoney(totalAmount)} 元
-              {capitalPct && savedCapital > 0 ? `，占账户总资金 ${capitalPct}%` : ""}
-            </p>
           </div>
         </CardContent>
       </Card>

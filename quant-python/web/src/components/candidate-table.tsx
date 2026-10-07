@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -15,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Loader2, Play } from "lucide-react";
 
 export type CandidateVariant = "macd" | "macd-observed" | "yearline" | "macd-divergence";
 
@@ -88,6 +90,8 @@ interface CandidateTableProps {
     MacdCandidateRow | YearlineCandidateRow | DivergenceCandidateRow
   >;
   emptyText?: string;
+  onAnalyze?: (symbol: string, name?: string) => void;
+  analyzingSymbol?: string | null;
 }
 
 function fmt(value: number | undefined, digits = 2): string {
@@ -104,6 +108,8 @@ export function CandidateTable({
   variant,
   rows,
   emptyText = "暂无候选",
+  onAnalyze,
+  analyzingSymbol,
 }: CandidateTableProps) {
   if (variant === "macd" || variant === "macd-observed") {
     const macdRows = rows as MacdCandidateRow[];
@@ -119,12 +125,13 @@ export function CandidateTable({
             {!observed && <TableHead>确认条件</TableHead>}
             <TableHead>确认时间</TableHead>
             <TableHead>零轴距离</TableHead>
+            {onAnalyze && <TableHead className="w-20 text-right">操作</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {macdRows.map((item) => (
-            <TableRow key={item.symbol}>
-              <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
+            <TableRow key={item.symbol} className="hover:bg-muted/40">
+              <TableCell className="font-mono text-xs font-semibold">{item.symbol}</TableCell>
               <TableCell>{item.name || "-"}</TableCell>
               <TableCell>
                 <Badge
@@ -161,11 +168,30 @@ export function CandidateTable({
               <TableCell className="text-xs text-muted-foreground">
                 {item.zero_distance != null ? item.zero_distance.toFixed(5) : "-"}
               </TableCell>
+              {onAnalyze && (
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 hover:border-primary hover:text-primary"
+                    disabled={analyzingSymbol === item.symbol}
+                    onClick={() => onAnalyze(item.symbol, item.name)}
+                    title="发起五标签多策略分析"
+                  >
+                    {analyzingSymbol === item.symbol ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Play className="size-3" />
+                    )}
+                    分析
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))}
           {macdRows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={observed ? 6 : 7} className="text-center text-muted-foreground">
+              <TableCell colSpan={(observed ? 6 : 7) + (onAnalyze ? 1 : 0)} className="text-center text-muted-foreground">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -189,12 +215,13 @@ export function CandidateTable({
             <TableHead>量比</TableHead>
             <TableHead>年线偏离</TableHead>
             <TableHead>命中条件</TableHead>
+            {onAnalyze && <TableHead className="w-20 text-right">操作</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {divergenceRows.map((item) => (
-            <TableRow key={item.symbol}>
-              <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
+            <TableRow key={item.symbol} className="hover:bg-muted/40">
+              <TableCell className="font-mono text-xs font-semibold">{item.symbol}</TableCell>
               <TableCell>{item.name || "-"}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {item.signal_date || "-"}
@@ -241,11 +268,30 @@ export function CandidateTable({
               <TableCell className="max-w-64 text-xs">
                 {item.conditions?.length ? item.conditions.join("、") : "-"}
               </TableCell>
+              {onAnalyze && (
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 hover:border-primary hover:text-primary"
+                    disabled={analyzingSymbol === item.symbol}
+                    onClick={() => onAnalyze(item.symbol, item.name)}
+                    title="发起五标签多策略分析"
+                  >
+                    {analyzingSymbol === item.symbol ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Play className="size-3" />
+                    )}
+                    分析
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))}
           {divergenceRows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground">
+              <TableCell colSpan={8 + (onAnalyze ? 1 : 0)} className="text-center text-muted-foreground">
                 {emptyText}
               </TableCell>
             </TableRow>
@@ -271,12 +317,13 @@ export function CandidateTable({
           <TableHead>量比</TableHead>
           <TableHead>信号类型</TableHead>
           <TableHead>研究止损</TableHead>
+          {onAnalyze && <TableHead className="w-20 text-right">操作</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
         {yearlineRows.map((item) => (
-          <TableRow key={item.symbol}>
-            <TableCell className="font-mono text-xs">{item.symbol}</TableCell>
+          <TableRow key={item.symbol} className="hover:bg-muted/40">
+            <TableCell className="font-mono text-xs font-semibold">{item.symbol}</TableCell>
             <TableCell>{item.name || "-"}</TableCell>
             <TableCell className="text-xs text-muted-foreground">
               {item.signal_date || "-"}
@@ -311,11 +358,30 @@ export function CandidateTable({
                 </Tooltip>
               </TooltipProvider>
             </TableCell>
+            {onAnalyze && (
+              <TableCell className="text-right">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1 hover:border-primary hover:text-primary"
+                  disabled={analyzingSymbol === item.symbol}
+                  onClick={() => onAnalyze(item.symbol, item.name)}
+                  title="发起五标签多策略分析"
+                >
+                  {analyzingSymbol === item.symbol ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Play className="size-3" />
+                  )}
+                  分析
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         ))}
         {yearlineRows.length === 0 && (
           <TableRow>
-            <TableCell colSpan={11} className="text-center text-muted-foreground">
+            <TableCell colSpan={11 + (onAnalyze ? 1 : 0)} className="text-center text-muted-foreground">
               {emptyText}
             </TableCell>
           </TableRow>

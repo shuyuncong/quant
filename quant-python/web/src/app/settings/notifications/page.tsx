@@ -13,7 +13,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { BellRing, Save, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  BellRing,
+  CheckCircle2,
+  Copy,
+  Info,
+  Mail,
+  MessageSquare,
+  Save,
+  Send,
+  Smartphone,
+  Webhook,
+} from "lucide-react";
 
 interface NotificationForm {
   wechat_enabled: boolean;
@@ -57,8 +70,19 @@ const DEFAULT_FORM: NotificationForm = {
   push_ai_analysis: true,
 };
 
+const ENV_VARIABLES = [
+  "WECHAT_WEBHOOK_URL",
+  "SIGNAL_WEBHOOK_URL",
+  "SIGNAL_WEBHOOK_AUTH",
+  "SIGNAL_EMAIL_SENDER",
+  "SIGNAL_EMAIL_PASSWORD",
+  "SIGNAL_EMAIL_RECEIVER",
+  "SIGNAL_BARK_DEVICE_KEY",
+];
+
 export default function NotificationsPage() {
   const [form, setForm] = useState<NotificationForm>(DEFAULT_FORM);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -91,11 +115,12 @@ export default function NotificationsPage() {
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载推送配置失败");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -130,8 +155,12 @@ export default function NotificationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const data = (await response.json().catch(() => ({}))) as { error?: string; errors?: string[] };
-      if (!response.ok) throw new Error(data.error || (data.errors ?? []).join("；") || "保存失败");
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        errors?: string[];
+      };
+      if (!response.ok)
+        throw new Error(data.error || (data.errors ?? []).join("；") || "保存失败");
       toast.success("推送配置已保存");
       void load();
     } catch (error) {
@@ -149,7 +178,10 @@ export default function NotificationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "test-notify", notify: true }),
       });
-      const data = (await response.json().catch(() => ({}))) as { error?: string; jobId?: number };
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        jobId?: number;
+      };
       if (!response.ok) throw new Error(data.error || "启动测试通知失败");
       toast.success(`测试通知任务已启动 #${data.jobId}`);
     } catch (error) {
@@ -159,159 +191,405 @@ export default function NotificationsPage() {
     }
   };
 
-  const channelCard = (
-    title: string,
-    description: string,
-    enabled: boolean,
-    onEnabled: (value: boolean) => void,
-    fields: React.ReactNode
-  ) => (
-    <Card>
-      <CardHeader>
+  const copyEnvVar = (name: string) => {
+    navigator.clipboard.writeText(name);
+    toast.success(`已复制环境变量名: ${name}`);
+  };
+
+  const enabledCount = [
+    form.wechat_enabled,
+    form.webhook_enabled,
+    form.email_enabled,
+    form.bark_enabled,
+  ].filter(Boolean).length;
+
+  if (loading) {
+    return (
+      <div className="flex max-w-4xl flex-col gap-6">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{title}</CardTitle>
-          <Switch checked={enabled} onCheckedChange={onEnabled} />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-36" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-24" />
+          </div>
         </div>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      {enabled && <CardContent className="flex flex-col gap-3">{fields}</CardContent>}
-    </Card>
-  );
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <div className="flex items-center justify-between">
+    <div className="flex max-w-4xl flex-col gap-6">
+      {/* 顶部标题与控制栏 */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">推送配置</h1>
-          <p className="text-sm text-muted-foreground">
-            密钥可填在页面，也可通过环境变量提供（环境变量优先）。密钥回显一律脱敏。
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold tracking-tight">推送通知配置</h1>
+            <Badge
+              variant={enabledCount > 0 ? "default" : "secondary"}
+              className="px-2.5 py-0.5 text-xs font-medium"
+            >
+              {enabledCount > 0 ? `${enabledCount} 个通道已启用` : "未启用推送通道"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            设置交易信号、全市场候选池及 AI 解读的即时通知通道。密钥回显自动脱敏。
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" onClick={() => void test()} disabled={testing}>
-            <Send className="size-4" /> {testing ? "启动中..." : "发送测试通知"}
+            <Send className="mr-1.5 size-4" />
+            {testing ? "测试中..." : "测试发送"}
           </Button>
           <Button onClick={() => void save()} disabled={saving}>
-            <Save className="size-4" /> {saving ? "保存中..." : "保存配置"}
+            <Save className="mr-1.5 size-4" />
+            {saving ? "保存中..." : "保存配置"}
           </Button>
         </div>
       </div>
 
-      {channelCard(
-        "企业微信",
-        "通过群机器人 Webhook 推送 Markdown 信号卡片。",
-        form.wechat_enabled,
-        (value) => set("wechat_enabled", value),
-        <>
-          <div className="flex flex-col gap-1.5">
-            <Label>Webhook URL</Label>
-            <Input
-              value={form.wechat_webhook_url}
-              onChange={(event) => set("wechat_webhook_url", event.target.value)}
-              placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
-            />
-          </div>
-        </>
-      )}
+      {/* 渠道卡片网格 */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* 企业微信机器人 */}
+        <Card
+          className={`transition-colors ${
+            form.wechat_enabled ? "border-primary/40 bg-card shadow-sm" : "bg-muted/10 opacity-90"
+          }`}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                  <MessageSquare className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">企业微信群机器人</CardTitle>
+                  <CardDescription className="text-xs">
+                    推送 Markdown 富文本卡片与交易指令
+                  </CardDescription>
+                </div>
+              </div>
+              <Switch
+                checked={form.wechat_enabled}
+                onCheckedChange={(val) => set("wechat_enabled", val)}
+              />
+            </div>
+          </CardHeader>
+          {form.wechat_enabled && (
+            <CardContent className="space-y-3 pt-0 text-sm">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">群机器人 Webhook URL</Label>
+                <Input
+                  className="font-mono text-xs"
+                  value={form.wechat_webhook_url}
+                  onChange={(e) => set("wechat_webhook_url", e.target.value)}
+                  placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                支持 @所有人，在企微群设置中添加机器人即可获取 Webhook 地址。
+              </p>
+            </CardContent>
+          )}
+        </Card>
 
-      {channelCard(
-        "通用 Webhook",
-        "POST JSON 到自定义地址，支持自定义请求头。",
-        form.webhook_enabled,
-        (value) => set("webhook_enabled", value),
-        <>
-          <div className="flex flex-col gap-1.5">
-            <Label>URL</Label>
-            <Input value={form.webhook_url} onChange={(event) => set("webhook_url", event.target.value)} placeholder="https://example.com/hook" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Authorization（可选）</Label>
-            <Input value={form.webhook_auth} onChange={(event) => set("webhook_auth", event.target.value)} placeholder="Bearer xxx" />
-          </div>
-        </>
-      )}
+        {/* 通用 Webhook */}
+        <Card
+          className={`transition-colors ${
+            form.webhook_enabled ? "border-primary/40 bg-card shadow-sm" : "bg-muted/10 opacity-90"
+          }`}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400">
+                  <Webhook className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">自定义 Webhook</CardTitle>
+                  <CardDescription className="text-xs">
+                    POST JSON 格式到自定义服务端点
+                  </CardDescription>
+                </div>
+              </div>
+              <Switch
+                checked={form.webhook_enabled}
+                onCheckedChange={(val) => set("webhook_enabled", val)}
+              />
+            </div>
+          </CardHeader>
+          {form.webhook_enabled && (
+            <CardContent className="space-y-3 pt-0 text-sm">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">目标 Endpoint URL</Label>
+                <Input
+                  className="font-mono text-xs"
+                  value={form.webhook_url}
+                  onChange={(e) => set("webhook_url", e.target.value)}
+                  placeholder="https://api.yourdomain.com/trading/hook"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">Authorization 请求头（可选）</Label>
+                <Input
+                  className="font-mono text-xs"
+                  value={form.webhook_auth}
+                  onChange={(e) => set("webhook_auth", e.target.value)}
+                  placeholder="Bearer your-secret-token"
+                />
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
-      {channelCard(
-        "邮件",
-        "通过 SMTP 发送信号邮件（SSL）。",
-        form.email_enabled,
-        (value) => set("email_enabled", value),
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>SMTP 服务器</Label>
-              <Input value={form.smtp_server} onChange={(event) => set("smtp_server", event.target.value)} placeholder="smtp.qq.com" />
+        {/* Bark (iOS) */}
+        <Card
+          className={`transition-colors ${
+            form.bark_enabled ? "border-primary/40 bg-card shadow-sm" : "bg-muted/10 opacity-90"
+          }`}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+                  <Smartphone className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">Bark (iOS 移动推送)</CardTitle>
+                  <CardDescription className="text-xs">
+                    即时推送至 iPhone / iPad 锁屏
+                  </CardDescription>
+                </div>
+              </div>
+              <Switch
+                checked={form.bark_enabled}
+                onCheckedChange={(val) => set("bark_enabled", val)}
+              />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>端口</Label>
-              <Input type="number" value={form.smtp_port} onChange={(event) => set("smtp_port", event.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>发件人</Label>
-              <Input value={form.email_sender} onChange={(event) => set("email_sender", event.target.value)} placeholder="you@qq.com" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>SMTP 密码/授权码</Label>
-              <Input type="password" value={form.email_password} onChange={(event) => set("email_password", event.target.value)} placeholder="****" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>收件人</Label>
-              <Input value={form.email_receiver} onChange={(event) => set("email_receiver", event.target.value)} placeholder="you@qq.com" />
-            </div>
-          </div>
-        </>
-      )}
+          </CardHeader>
+          {form.bark_enabled && (
+            <CardContent className="space-y-3 pt-0 text-sm">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">Bark 服务端地址</Label>
+                <Input
+                  className="font-mono text-xs"
+                  value={form.bark_url}
+                  onChange={(e) => set("bark_url", e.target.value)}
+                  placeholder="https://api.day.app/push"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">设备 Key (Device Key)</Label>
+                <Input
+                  className="font-mono text-xs"
+                  value={form.bark_device_key}
+                  onChange={(e) => set("bark_device_key", e.target.value)}
+                  placeholder="填入 Bark App 首页展示的密钥"
+                />
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
-      {channelCard(
-        "Bark（iOS）",
-        "推送到 iPhone 的 Bark App（官方服务器 api.day.app）。",
-        form.bark_enabled,
-        (value) => set("bark_enabled", value),
-        <>
-          <div className="flex flex-col gap-1.5">
-            <Label>服务器 URL</Label>
-            <Input value={form.bark_url} onChange={(event) => set("bark_url", event.target.value)} placeholder="https://api.day.app/push" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Device Key</Label>
-            <Input value={form.bark_device_key} onChange={(event) => set("bark_device_key", event.target.value)} placeholder="Bark App 首页的 device key" />
-          </div>
-        </>
-      )}
+        {/* 邮件 SMTP */}
+        <Card
+          className={`transition-colors ${
+            form.email_enabled ? "border-primary/40 bg-card shadow-sm" : "bg-muted/10 opacity-90"
+          }`}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+                  <Mail className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">邮件 (SMTP 推送)</CardTitle>
+                  <CardDescription className="text-xs">
+                    发送详尽交易日报与买卖提醒
+                  </CardDescription>
+                </div>
+              </div>
+              <Switch
+                checked={form.email_enabled}
+                onCheckedChange={(val) => set("email_enabled", val)}
+              />
+            </div>
+          </CardHeader>
+          {form.email_enabled && (
+            <CardContent className="space-y-3 pt-0 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2 flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">SMTP 服务器</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={form.smtp_server}
+                    onChange={(e) => set("smtp_server", e.target.value)}
+                    placeholder="smtp.qq.com / smtp.163.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">端口</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    type="number"
+                    value={form.smtp_port}
+                    onChange={(e) => set("smtp_port", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">发件人邮箱</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={form.email_sender}
+                    onChange={(e) => set("email_sender", e.target.value)}
+                    placeholder="sender@example.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">SMTP 授权码</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    type="password"
+                    value={form.email_password}
+                    onChange={(e) => set("email_password", e.target.value)}
+                    placeholder="****"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs text-muted-foreground">收件人邮箱</Label>
+                <Input
+                  className="h-8 text-xs"
+                  value={form.email_receiver}
+                  onChange={(e) => set("email_receiver", e.target.value)}
+                  placeholder="receiver@example.com"
+                />
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      </div>
 
+      {/* 推送触发事件与全局配置 */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">通用</CardTitle>
-          <CardDescription>控制推送内容和请求超时。</CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <BellRing className="size-4 text-primary" />
+            <CardTitle className="text-base font-semibold">通知策略与触发事件</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            精准控制各类策略分析结果是否向上述通道推送
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div><Label>缠论交易信号</Label><p className="text-xs text-muted-foreground">推送一、二、三类买卖点及强共振标记。</p></div>
-            <Switch checked={form.push_trade_signal} onCheckedChange={(value) => set("push_trade_signal", value)} />
+        <CardContent className="space-y-4">
+          <div className="divide-y rounded-lg border">
+            <div className="flex items-center justify-between p-3.5 transition-colors hover:bg-muted/30">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">缠论交易信号</span>
+                  <Badge variant="outline" className="text-[10px]">即时</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  监测到一买、二买、三买、顶背驰离场及强共振信号时触发推送。
+                </p>
+              </div>
+              <Switch
+                checked={form.push_trade_signal}
+                onCheckedChange={(val) => set("push_trade_signal", val)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 transition-colors hover:bg-muted/30">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">MACD 金叉候选池汇总</span>
+                  <Badge variant="outline" className="text-[10px]">汇总</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  盘后或每日定时扫描完成后发送一份候选标的汇总清单，避免逐股刷屏。
+                </p>
+              </div>
+              <Switch
+                checked={form.push_candidate_pool}
+                onCheckedChange={(val) => set("push_candidate_pool", val)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 transition-colors hover:bg-muted/30">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">AI 自动解读完成摘要</span>
+                  <Badge variant="outline" className="text-[10px]">智能</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  多模型解读保存后自动提取核心操作建议并推送，完整分析留存报告面板。
+                </p>
+              </div>
+              <Switch
+                checked={form.push_ai_analysis}
+                onCheckedChange={(val) => set("push_ai_analysis", val)}
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-between border-b pb-3">
-            <div><Label>MACD 金叉候选</Label><p className="text-xs text-muted-foreground">每日扫描完成后推送一条汇总（候选股列表），不逐股推送。</p></div>
-            <Switch checked={form.push_candidate_pool} onCheckedChange={(value) => set("push_candidate_pool", value)} />
-          </div>
-          <div className="flex items-center justify-between border-b pb-3">
-            <div><Label>AI 自动解读</Label><p className="text-xs text-muted-foreground">保存解读后再推送摘要；完整内容保留在解读页。</p></div>
-            <Switch checked={form.push_ai_analysis} onCheckedChange={(value) => set("push_ai_analysis", value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>请求超时（秒）</Label>
-            <Input
-              type="number"
-              className="w-32"
-              value={form.timeout_seconds}
-              onChange={(event) => set("timeout_seconds", event.target.value)}
-            />
+
+          <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
+            <div>
+              <Label className="text-sm font-medium">请求超时时间</Label>
+              <p className="text-xs text-muted-foreground">各推送通道 HTTP 请求最大等待时限</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                className="w-20 font-mono text-center text-sm"
+                value={form.timeout_seconds}
+                onChange={(e) => set("timeout_seconds", e.target.value)}
+                min={1}
+                max={60}
+              />
+              <span className="text-xs text-muted-foreground">秒</span>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <BellRing className="size-4" />
-        环境变量（可选）：WECHAT_WEBHOOK_URL、SIGNAL_WEBHOOK_URL、SIGNAL_WEBHOOK_AUTH、SIGNAL_EMAIL_SENDER、SIGNAL_EMAIL_PASSWORD、SIGNAL_EMAIL_RECEIVER、SIGNAL_BARK_DEVICE_KEY
+      {/* 环境变量提示卡片 */}
+      <div className="rounded-xl border border-muted bg-muted/20 p-4">
+        <div className="flex items-start gap-2.5">
+          <Info className="mt-0.5 size-4 text-muted-foreground shrink-0" />
+          <div className="space-y-2 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">
+              支持环境变量优先覆盖（安全规范）
+            </p>
+            <p>
+              如在生产部署中无需通过前端明文保存密码密钥，可直接在服务端环境变量中提供，系统将自动优先取用：
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {ENV_VARIABLES.map((env) => (
+                <button
+                  key={env}
+                  type="button"
+                  onClick={() => copyEnvVar(env)}
+                  className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  title="点击复制"
+                >
+                  {env}
+                  <Copy className="size-2.5 opacity-50" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

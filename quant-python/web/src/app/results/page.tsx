@@ -35,7 +35,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Check, Copy, Database, Download, Eye, Loader2, Play, Sparkles } from "lucide-react";
+import { Check, Copy, Database, Download, Eye, Loader2, Play, RefreshCw, Sparkles, X } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
   Tabs,
@@ -93,6 +95,49 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   pending: "outline",
   failed: "destructive",
 };
+
+function JobStatusBadge({ status }: { status: string }) {
+  if (status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="relative flex size-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+        </span>
+        运行中
+      </span>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+        <Loader2 className="size-3 animate-spin opacity-80" />
+        等待中
+      </span>
+    );
+  }
+  if (status === "success") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
+        <Check className="size-3 text-emerald-500" />
+        成功
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
+        <X className="size-3" />
+        失败
+      </span>
+    );
+  }
+  return (
+    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
+      {STATUS_LABEL[status] ?? status}
+    </Badge>
+  );
+}
 
 function fileName(resultPath: string | null): string {
   if (!resultPath) return "-";
@@ -324,6 +369,8 @@ function DataSourceView({ source }: { source: DataSource }) {
 export default function ResultsPage() {
   const [scope, setScope] = useState(DEFAULT_ANALYSIS_SCOPE);
   const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [jobsLoaded, setJobsLoaded] = useState(false);
+  const [poolSymbols, setPoolSymbols] = useState<Array<{ symbol: string; name: string }>>([]);
   const [symbolsInput, setSymbolsInput] = useState("");
   const [notify, setNotify] = useState(true);
   const [selectedJob, setSelectedJob] = useState<JobRow | null>(null);
@@ -339,6 +386,40 @@ export default function ResultsPage() {
   const startGuard = useRef(false);
   const pendingJobId = useRef<number | null>(null);
 
+  useEffect(() => {
+    fetch("/api/pool")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.pool && Array.isArray(data.pool) && data.pool.length > 0) {
+          setPoolSymbols(
+            data.pool.slice(0, 8).map((p: { symbol: string; name: string }) => ({
+              symbol: p.symbol,
+              name: p.name,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const DEFAULT_QUICK_SYMBOLS = [
+    { symbol: "600036.SH", name: "招商银行" },
+    { symbol: "000001.SZ", name: "平安银行" },
+    { symbol: "600519.SH", name: "贵州茅台" },
+    { symbol: "300750.SZ", name: "宁德时代" },
+    { symbol: "002594.SZ", name: "比亚迪" },
+  ];
+  const quickSymbols = poolSymbols.length > 0 ? poolSymbols : DEFAULT_QUICK_SYMBOLS;
+
+  const toggleQuickSymbol = (sym: string) => {
+    const list = symbolsInput.split(/[\s,，;；]+/).filter(Boolean);
+    if (list.includes(sym)) {
+      setSymbolsInput(list.filter((s) => s !== sym).join(" "));
+    } else {
+      setSymbolsInput([...list, sym].join(" "));
+    }
+  };
+
   const releaseStart = useCallback(() => {
     startGuard.current = false;
     pendingJobId.current = null;
@@ -350,7 +431,26 @@ export default function ResultsPage() {
       const response = await fetch("/api/jobs");
       if (!response.ok) return;
       const data = (await response.json()) as { jobs: JobRow[] };
-      setJobs(data.jobs);
+      setJobs((prev) => {
+        if (
+          prev.length === data.jobs.length &&
+          prev.every((p, i) => {
+            const n = data.jobs[i];
+            return (
+              n &&
+              p.id === n.id &&
+              p.status === n.status &&
+              p.finished_at === n.finished_at &&
+              p.error === n.error &&
+              Boolean(p.note) === Boolean(n.note)
+            );
+          })
+        ) {
+          return prev;
+        }
+        return data.jobs;
+      });
+      setJobsLoaded(true);
       // 刚启动的任务一旦出现在列表里，「启动中」锁交回给任务自身的运行状态。
       if (pendingJobId.current !== null && data.jobs.some((job) => job.id === pendingJobId.current)) {
         releaseStart();
@@ -382,14 +482,39 @@ export default function ResultsPage() {
     }
   }, []);
 
+  const [refreshingJobs, setRefreshingJobs] = useState(false);
+  const handleManualRefresh = async () => {
+    setRefreshingJobs(true);
+    try {
+      await loadJobs();
+      toast.success("任务列表已刷新");
+    } finally {
+      setRefreshingJobs(false);
+    }
+  };
+
+  const hasRunningJobs = jobs.some((job) => job.status === "running" || job.status === "pending");
+  // 测试环境固定 5 秒；开发/生产环境：有运行中任务时 5 秒快速同步，平时 10 分钟静默刷新
+  const jobsPollInterval =
+    process.env.NODE_ENV === "test"
+      ? 5000
+      : hasRunningJobs
+      ? 5000
+      : 10 * 60 * 1000;
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
-    const timer = setInterval(() => {
-      void loadJobs();
-    }, 5000);
-    return () => clearInterval(timer);
   }, [loadJobs]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState !== "hidden") {
+        void loadJobs();
+      }
+    }, jobsPollInterval);
+    return () => clearInterval(timer);
+  }, [loadJobs, jobsPollInterval]);
 
   const runJob = useCallback(
     async (kind: string, extra: Record<string, unknown> = {}) => {
@@ -464,6 +589,39 @@ export default function ResultsPage() {
                 value={symbolsInput}
                 onChange={setSymbolsInput}
               />
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1 mr-1">
+                  <Sparkles className="size-3 text-primary" /> 自选快捷:
+                </span>
+                {quickSymbols.map((item) => {
+                  const isSelected = symbolsInput.split(/[\s,，;；]+/).includes(item.symbol);
+                  return (
+                    <button
+                      key={item.symbol}
+                      type="button"
+                      onClick={() => toggleQuickSymbol(item.symbol)}
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-mono transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                          : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                      title={isSelected ? "点击取消选择" : "点击添加到输入框"}
+                    >
+                      <span>{item.name || item.symbol}</span>
+                      <span className="text-[10px] opacity-75">{item.symbol.split(".")[0]}</span>
+                    </button>
+                  );
+                })}
+                {symbolsInput.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setSymbolsInput("")}
+                    className="text-[11px] text-muted-foreground hover:text-destructive underline ml-1 cursor-pointer"
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 pb-2">
               <Switch id="notify" checked={notify} onCheckedChange={setNotify} />
@@ -544,10 +702,25 @@ export default function ResultsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>最近任务</CardTitle>
-          <CardDescription>
-            查看分析、扫描和监控任务的执行状态与数据源；具体个股结论见上方分析记录。
-          </CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>最近任务</CardTitle>
+              <CardDescription>
+                查看分析、扫描和监控任务的执行状态与数据源；具体个股结论见上方分析记录。
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => void handleManualRefresh()}
+              disabled={refreshingJobs}
+            >
+              <RefreshCw className={cn("size-3.5", refreshingJobs && "animate-spin")} />
+              {refreshingJobs ? "刷新中..." : "手动刷新"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -563,9 +736,24 @@ export default function ResultsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {!jobsLoaded && (
+                <>
+                  {[1, 2, 3].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-36 rounded-md" /></TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              )}
               {jobs.slice(0, 50).map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell className="font-mono text-xs">#{job.id}</TableCell>
+                <TableRow key={job.id} className="hover:bg-muted/40">
+                  <TableCell className="font-mono text-xs font-semibold">#{job.id}</TableCell>
                   <TableCell>{KIND_LABEL[job.kind] ?? job.kind}</TableCell>
                   <TableCell className="max-w-40 truncate text-xs text-muted-foreground">
                     {job.symbol_names || "-"}
@@ -574,9 +762,7 @@ export default function ResultsPage() {
                     {job.note?.model ?? "-"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[job.status] ?? "outline"}>
-                      {STATUS_LABEL[job.status] ?? job.status}
-                    </Badge>
+                    <JobStatusBadge status={job.status} />
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
                   <TableCell>
@@ -596,10 +782,10 @@ export default function ResultsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {jobs.length === 0 && (
+              {jobsLoaded && jobs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    暂无任务
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    暂无执行任务，可通过上方控制台发起分析或监控
                   </TableCell>
                 </TableRow>
               )}
