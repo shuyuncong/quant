@@ -219,6 +219,33 @@ class ResearchBacktestReplayTests(unittest.TestCase):
         self.assertEqual(loose["trades"], [])
         self.assertEqual(loose["open_positions"], 1)
 
+    def test_strategy_override_controls_intraday_and_t_plus_one_exits(self):
+        days = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = bars(days, price=100.0)
+        frame.loc[272:, ["open", "high", "low", "close"]] = [94.0, 95.0, 93.0, 94.0]
+        symbol = "600000.SH"
+        signals = {symbol: {key: set() for key in STRATEGIES}}
+        signals[symbol]["macd_zero_axis"] = {270}
+        calendar = days[269:276]
+        config = {"backtest": {"price_limit_model": "none", "chan_zero_axis": {"max_holding_bars": 250}},
+                  "risk": {"stop_loss_pct": .08, "stop_profit_pct": .30,
+                           "strategy_stop_loss_pct": {"macd_zero_axis": .05, "macd_divergence": .12}}}
+        frozen = json.dumps(config, sort_keys=True)
+        result = replay({symbol: frame}, signals, calendar, config, self.options(calendar[0]), "macd_zero_axis")
+        self.assertEqual([(trade["exit_day"], trade["exit_price"]) for trade in result["trades"]], [(days[272], 94.0)])
+
+        # Entry-day close breaches the strategy stop, but not the global stop.
+        # T+1 defers the exit to the next opening even if price has recovered.
+        frame.loc[272:, ["open", "high", "low", "close"]] = 100.0
+        frame.loc[271, ["low", "close"]] = 94.0
+        deferred = replay({symbol: frame}, signals, calendar, config, self.options(calendar[0]), "macd_zero_axis")
+        self.assertEqual([(trade["exit_day"], trade["exit_price"]) for trade in deferred["trades"]], [(days[272], 100.0)])
+        config["risk"]["strategy_stop_loss_pct"]["macd_zero_axis"] = None
+        inherited = replay({symbol: frame}, signals, calendar, config, self.options(calendar[0]), "macd_zero_axis")
+        self.assertEqual(inherited["trades"], [])
+        config["risk"]["strategy_stop_loss_pct"]["macd_zero_axis"] = .05
+        self.assertEqual(json.dumps(config, sort_keys=True), frozen)
+
 
 class PrepareBacktestInputsTests(unittest.TestCase):
     def setUp(self):
@@ -333,6 +360,23 @@ class PrepareBacktestInputsTests(unittest.TestCase):
         written = json.loads((self.output_dir / "inputs" / "rules.json").read_text(encoding="utf-8"))
         self.assertEqual(set(written), {"risk"})
         self.assertNotIn("secret", (self.output_dir / "inputs" / "rules.json").read_text(encoding="utf-8"))
+
+    def test_rules_snapshot_keeps_null_overrides_and_ignores_later_mutation(self):
+        provider = FakeProvider(market_listing(), {"600000.SH": self.history_for("600000.SH")})
+        overrides = {"macd_zero_axis": None, "yearline_pullback": 0.06, "macd_divergence": 0.12}
+        config = {"market_data": {"request_interval_seconds": 0},
+                  "risk": {"stop_loss_pct": .08, "strategy_stop_loss_pct": dict(overrides)}}
+        with patch.object(rb, "AkshareDailyProvider", lambda config=None: provider):
+            prepared = prepare_backtest_inputs(config, self.options())
+        # The task's own snapshot keeps every override value, including the explicit null.
+        self.assertEqual(prepared["config_snapshot"]["risk"]["strategy_stop_loss_pct"], overrides)
+        self.assertIsNone(prepared["config_snapshot"]["risk"]["strategy_stop_loss_pct"]["macd_zero_axis"])
+        written = json.loads((self.output_dir / "inputs" / "rules.json").read_text(encoding="utf-8"))
+        self.assertEqual(written["risk"]["strategy_stop_loss_pct"], overrides)
+        # Mutating the caller's config after freezing must not reach the frozen rules file.
+        config["risk"]["strategy_stop_loss_pct"]["macd_divergence"] = 0.3
+        self.assertEqual(prepared["config_snapshot"]["risk"]["strategy_stop_loss_pct"], overrides)
+        self.assertEqual(json.loads((self.output_dir / "inputs" / "rules.json").read_text(encoding="utf-8"))["risk"]["strategy_stop_loss_pct"], overrides)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,11 @@ export interface StrategyResult {
   sell_conditions: StrategyCondition[];
   reference_price: number | null;
   exit_rule: string;
+  stop_loss?: {
+    pct: number;
+    source: "strategy" | "global" | "default";
+    strategy_id: StrategyId | null;
+  };
   warnings: string[];
   parameters: Record<string, unknown>;
 }

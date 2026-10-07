@@ -237,3 +237,11 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
 - **可复现性**：同一冻结输入重跑（含中断恢复后）产出完全一致的样本、指标与成交明细（已用全市场任务实测：4852 只纳入、三策略 11/12/13 笔交易、五指标逐项相同）。
 - **报告口径**：报告含 `universe`（总数=纳入+排除）、`effective_start/effective_end`（请求区间内的真实交易日）、每策略 `metrics/equity_curve/trades/rejected/warnings`，以及只含规则（不含密钥）的 `config_snapshot`。旧版本地回测任务会被标记失败并提示新建，不会被静默重跑。
 - **鉴权**：回测是计算与行情抓取入口，公网部署必须置于 Nginx Basic Auth、来源 IP 限制等之后；页面本身没有登录。
+
+### 按策略配置止损
+
+- 在 `/settings/strategies` 设置全局默认及三策略独立值。止损 UI 使用百分比（`6` = 6%），API/配置使用小数（`0.06`）；默认三个策略均继承现有全局值，无需 SQL 迁移或回填设置。
+- 覆盖键为 `risk.strategy_stop_loss_pct.macd_zero_axis`、`risk.strategy_stop_loss_pct.yearline_pullback`、`risk.strategy_stop_loss_pct.macd_divergence`。通过 `PUT /api/config/strategies` 写入数值启用覆盖，写入 `null` 恢复继承并屏蔽 YAML 的独立值。合法比例为 `0.001`～`0.99`；非法更新返回 422，不应把清除操作改为写 0。
+- 策略独立值优先于全局值，缺失/空覆盖继承全局，未配置全局时以 8% 兜底。实际持仓未明确归属策略时仍用全局；当前持仓页面没有归属编辑项，不自动改动已有持仓。详见 [三策略独立止损说明](../quant-python/signal_system/README.md#三策略独立止损2026-10-07)。
+- 新任务冻结提交时的规则；已有任务不读取后来修改的值，已完成报告保持不变。策略版本 `2026-10-07.1` 会使旧信号检查点失效；恢复中的任务可能重算信号，但复用原冻结行情和参数，不需要重新抓取已有输入。
+

@@ -23,7 +23,69 @@ STRATEGIES = {
     "yearline_pullback": "年线趋势",
     "macd_divergence": "零轴＋底背离",
 }
-VERSION = "2026-10-05.1"
+VERSION = "2026-10-07.1"
+# Risk defaults live here so a missing YAML value can never leave a position without a stop.
+DEFAULT_STOP_LOSS_PCT = 0.08
+STOP_LOSS_FLOOR = 0.001
+STOP_LOSS_CEIL = 0.99
+
+
+def _finite_fraction(value: Any, key: str) -> float:
+    """Return a finite int/float, rejecting strings, bools, NaN and infinity.
+
+    Range is checked by the caller.  A quoted YAML value or a stray boolean is a
+    type error here on purpose: it must not be silently coerced into a risk level.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{key} 必须是数值，实际为 {value!r}")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{key} 必须是有限数值，实际为 {value!r}")
+    return number
+
+
+def stop_owner(strategy_id: str | None, holding: dict | None) -> str | None:
+    """Which strategy owns the stop, never inferred from signals or from the assessed strategy.
+
+    A held position is attributed to ``holding["strategy_id"]`` alone: an unknown owner
+    reads as None so the global stop is used instead of borrowing the stop of whichever
+    strategy happens to be under assessment.  Without a position the decision is
+    hypothetical, so the strategy being assessed owns the stop.
+    """
+    if holding and float(holding.get("shares", 0) or 0) > 0:
+        owner = holding.get("strategy_id")
+        return owner if owner in STRATEGIES else None
+    return strategy_id if strategy_id in STRATEGIES else None
+
+
+def resolve_stop_loss(config: dict, strategy_id: str | None = None,
+                      holding: dict | None = None) -> tuple[float, str, str | None]:
+    """Resolve one stop loss: owning strategy override > global risk > built-in default.
+
+    A missing global falls back to ``DEFAULT_STOP_LOSS_PCT``; a *malformed* non-null global
+    or strategy override raises ``ValueError`` instead, because a typo must not silently
+    change the risk a position is carried under.  A missing or explicitly null override
+    inherits the global stop.  ``source`` names the winning layer and the third value is
+    the owning strategy (None when no override applies), so a report can explain the stop.
+    """
+    risk = config.get("risk") or {}
+    owner = stop_owner(strategy_id, holding)
+    overrides = risk.get("strategy_stop_loss_pct")
+    if overrides is not None and not isinstance(overrides, dict):
+        raise ValueError(f"risk.strategy_stop_loss_pct 必须是对象或 null，实际为 {overrides!r}")
+    raw = overrides.get(owner) if overrides is not None and owner is not None else None
+    if raw is not None:
+        value = _finite_fraction(raw, f"risk.strategy_stop_loss_pct.{owner}")
+        if not STOP_LOSS_FLOOR <= value <= STOP_LOSS_CEIL:
+            raise ValueError(f"risk.strategy_stop_loss_pct.{owner} 必须位于 {STOP_LOSS_FLOOR}..{STOP_LOSS_CEIL}，实际为 {raw!r}")
+        return value, "strategy", owner
+    configured = risk.get("stop_loss_pct")
+    if configured is None:
+        return DEFAULT_STOP_LOSS_PCT, "default", None
+    value = _finite_fraction(configured, "risk.stop_loss_pct")
+    if not STOP_LOSS_FLOOR <= value <= STOP_LOSS_CEIL:
+        raise ValueError(f"risk.stop_loss_pct 必须位于 {STOP_LOSS_FLOOR}..{STOP_LOSS_CEIL}，实际为 {configured!r}")
+    return value, "global", None
 
 
 def condition(name, actual, expected, met):
@@ -34,13 +96,15 @@ def condition(name, actual, expected, met):
     return {"name": name, "actual": actual, "expected": expected, "met": None if met is None else bool(met)}
 
 
-def rule_parameters(config: dict, strategy_id: str) -> dict:
+def rule_parameters(config: dict, strategy_id: str, holding: dict | None = None) -> dict:
     signal = config.get("signal_strategy", {})
+    pct, source, _ = resolve_stop_loss(config, strategy_id, holding)
     return {
         "macd": signal.get("macd", {}),
         "min_confirmations": resolve_min_confirmations(config),
         "divergence": resolve_divergence_config(config),
         "risk": config.get("risk", {}),
+        "stop_loss": {"pct": pct, "source": source},
         "exit_rules": config.get("backtest", {}).get("exit_rules", {}),
         "max_holding_bars": config.get("backtest", {}).get("chan_zero_axis", {}).get("max_holding_bars", 40),
         "execution_policy": resolve_signal_execution_policy(config),
@@ -48,14 +112,16 @@ def rule_parameters(config: dict, strategy_id: str) -> dict:
     }
 
 
-def exit_parameters(config: dict, strategy_id: str) -> dict:
+def exit_parameters(config: dict, strategy_id: str, holding: dict | None = None) -> dict:
     risk = config.get("risk", {})
     settings = config.get("backtest", {})
     rules = settings.get("exit_rules", {})
     signal_type = "macd_divergence_bottom" if strategy_id == "macd_divergence" else strategy_id
     scope = rules.get("apply_to_signal_types", [])
     trend = rules.get("mode") == "divergence_trend" and (not scope or signal_type in scope)
-    return {"mode": "divergence_trend" if trend else "fixed", "stop_loss_pct": float(risk.get("stop_loss_pct", 0.08)),
+    stop_loss_pct, stop_loss_source, stop_loss_owner = resolve_stop_loss(config, strategy_id, holding)
+    return {"mode": "divergence_trend" if trend else "fixed", "stop_loss_pct": stop_loss_pct,
+            "stop_loss_source": stop_loss_source, "stop_loss_owner": stop_loss_owner,
             "take_profit_pct": None if trend else float(risk.get("stop_profit_pct", 0.30)),
             "ma_long_period": int(rules.get("ma_long_period", 250)),
             "max_holding_bars": int(settings.get("chan_zero_axis", {}).get("max_holding_bars", 40)),
@@ -64,11 +130,13 @@ def exit_parameters(config: dict, strategy_id: str) -> dict:
 
 
 def evaluate_exits(frame: pd.DataFrame, config: dict, strategy_id: str, holding: dict | None) -> tuple[list[dict], bool | None]:
-    rules = exit_parameters(config, strategy_id)
+    rules = exit_parameters(config, strategy_id, holding)
     current = float(frame["close"].iloc[-1]) if not frame.empty else None
     held = bool(holding and float(holding.get("shares", 0)) > 0)
     cost = float(holding.get("cost_price", 0)) if held else 0
     cost_known = cost > 0 and current is not None
+    # The rule name stays the machine-matched "持仓成本止损"; which stop applied is
+    # exposed in the structured stop_loss metadata instead of the display string.
     conditions = [condition("持仓成本止损", current, f"成本价 × {1-rules['stop_loss_pct']:.4f}" + (f" = {cost*(1-rules['stop_loss_pct']):.3f}" if cost_known else "（成本未知）"), current <= cost*(1-rules["stop_loss_pct"]) if cost_known else None)]
     if rules["take_profit_pct"] is not None:
         conditions.append(condition("固定止盈", current, f"成本价 × {1+rules['take_profit_pct']:.4f}" + (f" = {cost*(1+rules['take_profit_pct']):.3f}" if cost_known else "（成本未知）"), current >= cost*(1+rules["take_profit_pct"]) if cost_known else None))
@@ -135,13 +203,15 @@ def evaluate_strategies(raw: pd.DataFrame, config: dict, holding: dict | None = 
     for strategy_id, name in STRATEGIES.items():
         if strategy_ids is not None and strategy_id not in strategy_ids:
             continue
-        parameters = rule_parameters(config, strategy_id)
+        parameters = rule_parameters(config, strategy_id, holding)
+        exit_rules = exit_parameters(config, strategy_id, holding)
         fingerprint = hashlib.sha256(json.dumps(parameters, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
         item: dict[str, Any] = {"strategy_id": strategy_id, "name": name, "version": f"{VERSION}:{fingerprint}",
             "status": "ok", "as_of": str(frame["datetime"].iloc[-1]) if len(frame) else None,
             "buy": False, "sell": None, "buy_conditions": [], "sell_conditions": [],
             "reference_price": float(frame["close"].iloc[-1]) if len(frame) else None,
-            "exit_rule": exit_parameters(config, strategy_id)["mode"], "warnings": [], "parameters": parameters}
+            "exit_rule": exit_rules["mode"], "stop_loss": {"pct": exit_rules["stop_loss_pct"], "source": exit_rules["stop_loss_source"], "strategy_id": exit_rules["stop_loss_owner"]},
+            "warnings": [], "parameters": parameters}
         try:
             minimum = 60 if strategy_id == "macd_zero_axis" else 270
             if len(frame) < minimum:

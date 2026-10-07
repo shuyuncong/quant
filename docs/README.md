@@ -19,6 +19,9 @@
 - Oracle Cloud 部署指南：`docs/DEPLOY-ORACLE.md`
   - 服务器落地部署（Docker Compose + Nginx 反代 + HTTPS + rclone 备份）；通用部署见 `quant-python/DEPLOY.md`
 
+- [三策略止损敏感性回测归档](2026-10-07-三策略止损敏感性回测归档.md)
+  - 2024 年上半年、独立资金 25 万元、1%～10% 止损的 30 组结果；附完整 JSON、CSV、参数快照与复现边界
+
 ---
 
 ## 推荐阅读顺序

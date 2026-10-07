@@ -157,7 +157,7 @@ export async function executeAnalysisBatch(jobId: number) {
           analysis_version: 2, analysis_cutoff: payload.analysis_cutoff, portfolio_context: portfolio, overrides }, { timeoutMs: 600_000 });
         const report = (outcome.data as { report?: Record<string, unknown> } | undefined)?.report ?? {};
         const stock = ((report.results ?? []) as Record<string, unknown>[])[0] ?? { symbol, status: "error", error: outcome.error ?? "无分析数据" };
-        const strategies = (stock.strategies ?? STRATEGIES.map(strategy => ({ strategy_id: strategy.id, name: strategy.name, version: "2026-10-05.1", status: "error", buy: false, sell: null, as_of: null, reference_price: null, buy_conditions: [], sell_conditions: [], exit_rule: "unknown", parameters: {}, warnings: [String(stock.error ?? "无策略数据")] }))) as StrategyResult[];
+        const strategies = (stock.strategies ?? STRATEGIES.map(strategy => ({ strategy_id: strategy.id, name: strategy.name, version: "2026-10-07.1", status: "error", buy: false, sell: null, as_of: null, reference_price: null, buy_conditions: [], sell_conditions: [], exit_rule: "unknown", parameters: {}, warnings: [String(stock.error ?? "无策略数据")] }))) as StrategyResult[];
         const document: AnalysisDocument = { schema_version: 2, symbol, name: String(stock.name ?? ""),
           as_of: String(payload.analysis_cutoff), snapshot_hash: createHash("sha256").update(JSON.stringify({ stock, portfolio: contextForSymbol(portfolio, symbol) })).digest("hex"),
           report: { ...report, results: [stock] }, portfolio: contextForSymbol(portfolio, symbol), strategies,

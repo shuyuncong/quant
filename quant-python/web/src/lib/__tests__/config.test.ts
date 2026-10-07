@@ -107,3 +107,85 @@ describe("validateSection", () => {
     expect(errors.some((item) => item.includes("enabled/observe_only/disabled"))).toBe(true);
   });
 });
+
+describe("validateSection per-strategy stop loss overrides", () => {
+  it("normalizes numeric and numeric-string overrides to numbers", () => {
+    const { ok, errors, normalized } = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": 0.05,
+      "risk.strategy_stop_loss_pct.yearline_pullback": "0.012",
+      "risk.strategy_stop_loss_pct.macd_divergence": "0.99",
+    });
+    expect(errors).toEqual([]);
+    expect(ok).toBe(true);
+    expect(normalized["risk.strategy_stop_loss_pct.macd_zero_axis"]).toBe(0.05);
+    expect(normalized["risk.strategy_stop_loss_pct.yearline_pullback"]).toBe(0.012);
+    expect(normalized["risk.strategy_stop_loss_pct.macd_divergence"]).toBe(0.99);
+  });
+
+  it("keeps an explicit null as null so the override masks any YAML value", () => {
+    const { ok, errors, normalized } = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": null,
+      "risk.strategy_stop_loss_pct.yearline_pullback": null,
+      "risk.strategy_stop_loss_pct.macd_divergence": null,
+    });
+    expect(errors).toEqual([]);
+    expect(ok).toBe(true);
+    expect(normalized["risk.strategy_stop_loss_pct.macd_zero_axis"]).toBeNull();
+    expect(normalized["risk.strategy_stop_loss_pct.yearline_pullback"]).toBeNull();
+    expect(normalized["risk.strategy_stop_loss_pct.macd_divergence"]).toBeNull();
+  });
+
+  it("treats a missing override as untouched and never writes a value", () => {
+    const { ok, normalized } = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": undefined,
+    });
+    expect(ok).toBe(true);
+    expect("risk.strategy_stop_loss_pct.macd_zero_axis" in normalized).toBe(false);
+  });
+
+  it("rejects blank, boolean, object, NaN and out-of-range overrides", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": "",
+      "risk.strategy_stop_loss_pct.yearline_pullback": true,
+      "risk.strategy_stop_loss_pct.macd_divergence": { value: 0.05 },
+    });
+    expect(ok).toBe(false);
+    expect(errors.some((item) => item.includes("macd_zero_axis"))).toBe(true);
+    expect(errors.some((item) => item.includes("yearline_pullback"))).toBe(true);
+    expect(errors.some((item) => item.includes("macd_divergence"))).toBe(true);
+
+    const ranges = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": Number.NaN,
+      "risk.strategy_stop_loss_pct.yearline_pullback": 0,
+      "risk.strategy_stop_loss_pct.macd_divergence": 1,
+    });
+    expect(ranges.ok).toBe(false);
+    expect(ranges.errors).toHaveLength(3);
+
+    const arrays = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": [0.05],
+    });
+    expect(arrays.ok).toBe(false);
+  });
+
+  it("never accepts null for the global stop loss", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "risk.stop_loss_pct": null,
+    });
+    expect(ok).toBe(false);
+    expect(errors.some((item) => item.includes("risk.stop_loss_pct"))).toBe(true);
+  });
+
+  it("preserves existing unrelated validation alongside overrides", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "risk.strategy_stop_loss_pct.macd_zero_axis": null,
+      "stock_pool.missing_data_policy": "ignore",
+      "monitor.daily_scan_time": "15:30",
+      "foo.bar": 1,
+    });
+    expect(ok).toBe(false);
+    expect(errors.some((item) => item.includes("未知配置项: foo.bar"))).toBe(true);
+    expect(errors.some((item) => item.includes("reject/allow"))).toBe(true);
+    expect(errors.some((item) => item.includes("未知配置项: monitor.daily_scan_time"))).toBe(true);
+  });
+});

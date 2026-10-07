@@ -187,6 +187,13 @@ DEFAULT_CONFIG = {
     },
     "risk": {
         "stop_loss_pct": 0.08,
+        # 与 config.yaml 同构: 显式列出三策略并置 null 表示继承全局止损。
+        # 这样修改 stop_loss_pct 时三策略随之变化, 而不是被硬编码的 0.08 遮蔽。
+        "strategy_stop_loss_pct": {
+            "macd_zero_axis": None,
+            "yearline_pullback": None,
+            "macd_divergence": None,
+        },
         "stop_profit_pct": 0.30,
         "long_holding_days_threshold": 40,
         "long_holding_stop_loss_multiplier": 1.25,

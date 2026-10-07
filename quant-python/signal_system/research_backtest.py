@@ -3,7 +3,8 @@
 Market data is fetched through the configured daily provider for the requested
 window, frozen under ``output_dir/inputs`` on first run, and reused on retry so
 a resumed task compares exactly the same sample.  No signal store, notification
-or real holdings writes happen here.
+or real holdings writes happen here. Each strategy is replayed independently
+under its own resolved stop loss.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import json
 import math
 import os
 import time
+from copy import deepcopy
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -78,7 +80,9 @@ def file_sha256(path: Path) -> str:
 
 def _snapshot_config(config: dict) -> dict:
     """Persist only engine rules: credentials and connection details never reach disk."""
-    return {key: config[key] for key in CONFIG_KEYS if key in config}
+    # Deep copy so a later mutation of the live config (e.g. an override merge) cannot
+    # change the fingerprint or the snapshot a retry compares against.
+    return deepcopy({key: config[key] for key in CONFIG_KEYS if key in config})
 
 
 def _public_options(options: dict) -> dict:
@@ -499,7 +503,10 @@ def replay(histories: dict[str, pd.DataFrame], signals: dict[str, dict[str, set[
                 elif take is not None and float(row.high) >= take:
                     if sell(symbol, index, max(float(row.open), take), "take_profit", day, "intraday"):
                         continue
-            checks, _ = evaluate_exits(frame.iloc[:index + 1], config, strategy, {"shares": position["quantity"], "cost_price": position["entry_price"], "opened_on": position["entry_day"]})
+            # Attribute the synthetic holding to the replay strategy so a real holding's
+            # strategy override applies here; without the tag the stop would fall back to
+            # the global one and silently neutralize the backtest.
+            checks, _ = evaluate_exits(frame.iloc[:index + 1], config, strategy, {"shares": position["quantity"], "cost_price": position["entry_price"], "opened_on": position["entry_day"], "strategy_id": strategy})
             triggers = [check["name"] for check in checks if check["met"] is True]
             if triggers:
                 position["pending_exit"] = " / ".join(triggers)

@@ -158,6 +158,8 @@ interface FieldDef {
   integer?: boolean;
   enum?: string[];
   optional?: boolean;
+  /** Explicit null is meaningful: it means "inherit the global setting" and must be persisted as null. */
+  nullable?: boolean;
 }
 
 const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
@@ -167,6 +169,9 @@ const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
   "macd_divergence.long_ma_slope_window": { type: "number", min: 1, max: 250, integer: true },
   "macd_divergence.min_macd_segment_bars": { type: "number", min: 1, max: 50, integer: true },
   "risk.stop_loss_pct": { type: "number", min: 0.001, max: 0.99 },
+  "risk.strategy_stop_loss_pct.macd_zero_axis": { type: "number", min: 0.001, max: 0.99, nullable: true },
+  "risk.strategy_stop_loss_pct.yearline_pullback": { type: "number", min: 0.001, max: 0.99, nullable: true },
+  "risk.strategy_stop_loss_pct.macd_divergence": { type: "number", min: 0.001, max: 0.99, nullable: true },
   "risk.stop_profit_pct": { type: "number", min: 0.001, max: 10 },
   "backtest.chan_zero_axis.max_holding_bars": { type: "number", min: 1, max: 2000, integer: true },
   "signal_strategy.chan.min_bi_bars": { type: "number", min: 2 },
@@ -241,6 +246,32 @@ export function validateSection(
     const def = schema[key];
     if (!def) {
       errors.push(`未知配置项: ${key}`);
+      continue;
+    }
+    if (def.nullable) {
+      // 策略级止损覆盖值：null 表示继承全局设置（必须落库为 null 以屏蔽 YAML 覆盖），
+      // 其它值按严格数值校验，空串/布尔/对象/NaN/越界一律拒绝。
+      if (raw === undefined) continue; // 未提供：保持现有设置
+      if (raw === null) {
+        normalized[key] = null;
+        continue;
+      }
+      if (typeof raw === "boolean" || typeof raw === "object") {
+        errors.push(`${key} 必须是数字或 null`);
+        continue;
+      }
+      if (typeof raw === "string" && !raw.trim()) {
+        errors.push(`${key} 不能为空`);
+        continue;
+      }
+      const value = Number(raw);
+      if (!Number.isFinite(value)) {
+        errors.push(`${key} 必须是数字或 null`);
+        continue;
+      }
+      if (def.min !== undefined && value < def.min) errors.push(`${key} 不能小于 ${def.min}`);
+      if (def.max !== undefined && value > def.max) errors.push(`${key} 不能大于 ${def.max}`);
+      normalized[key] = value;
       continue;
     }
     if (raw === undefined || raw === null || raw === "") {
