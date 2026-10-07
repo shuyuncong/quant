@@ -141,7 +141,7 @@ const POOL_LABEL: Record<PoolType, string> = {
   macd_divergence: "零轴+底背离",
 };
 
-export default function PoolPage() {
+export function PoolPanel() {
   const [pool, setPool] = useState<PoolRow[]>([]);
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [newSymbol, setNewSymbol] = useState("");
@@ -438,7 +438,7 @@ export default function PoolPage() {
     <div className="flex max-w-4xl flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">股票池</h1>
+          <h2 className="text-lg font-semibold">股票池</h2>
           <p className="text-sm text-muted-foreground">文本导入解析后需确认；图片导入由视觉模型识别，识别结果同样先确认再入库。</p>
         </div>
         <div className="flex gap-2">

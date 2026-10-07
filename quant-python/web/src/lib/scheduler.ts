@@ -161,8 +161,6 @@ async function tick(): Promise<void> {
     await runScheduleTick(rows, calendar, shanghaiNow());
     const { resumeScanBatches } = await import("./scan-service");
     await resumeScanBatches();
-    const { resumeBacktests } = await import("./backtest-service");
-    await resumeBacktests();
     const { resumeAnalysisBatches } = await import("./analysis-service");
     await resumeAnalysisBatches();
   } catch (error) {

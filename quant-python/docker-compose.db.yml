@@ -34,6 +34,14 @@ services:
       - default
       - internal
 
+  quant-backtest:
+    environment:
+      DATABASE_URL: "postgresql://quant_app:${PG_APP_PASSWORD:?PG_APP_PASSWORD must be set}@quant-db:5432/quant"
+      DATABASE_SSL_MODE: "disable"
+    networks:
+      - default
+      - internal
+
 networks:
   internal:
     internal: true

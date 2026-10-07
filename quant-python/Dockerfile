@@ -6,6 +6,8 @@ WORKDIR /app
 
 # 国内网络可覆盖为镜像源：docker compose 中 build.args.NPM_REGISTRY=https://registry.npmmirror.com
 ARG NPM_REGISTRY=https://registry.npmjs.org
+# 同理可覆盖 pip 源：docker compose 中 build.args.PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
@@ -17,13 +19,14 @@ RUN cd web && npm run build
 
 # ---- runtime stage: Node (web + scheduler) + Python (signal engine) ----
 FROM node:22-bookworm-slim AS runtime
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip python3-venv ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+    && /opt/venv/bin/pip install --no-cache-dir --index-url $PIP_INDEX_URL --upgrade pip
 
 ENV NODE_ENV=production
 ENV TZ=Asia/Shanghai
@@ -38,7 +41,7 @@ COPY core /app/core
 
 ENV PYTHONPATH=/app
 
-RUN /opt/venv/bin/pip install --no-cache-dir -r /app/signal_system/requirements.txt \
+RUN /opt/venv/bin/pip install --no-cache-dir --index-url $PIP_INDEX_URL -r /app/signal_system/requirements-akshare.txt \
     && mkdir -p /app/data \
     /app/signal_system/output \
     /app/signal_system/cache \

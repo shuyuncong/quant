@@ -67,13 +67,13 @@ const STEPS = [
 ];
 
 const CONFIG_PAGES = [
-  { page: "策略配置", path: "/strategies", purpose: "缠论参数、MACD 参数、扫描范围（自选/全市场）、监控周期" },
-  { page: "推送配置", path: "/notifications", purpose: "Bark、企业微信、邮件、Webhook 开关与密钥" },
-  { page: "模型配置", path: "/models", purpose: "LLM 接口（地址/模型/Key/代理），用于 AI 解读与图片识别" },
-  { page: "定时任务", path: "/schedule", purpose: "每日扫描时间、盘中监控间隔/固定时点、是否仅交易日" },
-  { page: "股票池", path: "/pool", purpose: "自选股导入、指标股票池（候选）查看与手动筛选" },
-  { page: "我的持仓", path: "/holdings", purpose: "手动维护持仓（代码/名称/份额/持仓价/总金额），分析时携带" },
-  { page: "操作日志", path: "/logs", purpose: "任务执行、AI 解读等操作记录，报错原因可直接查看" },
+  { page: "策略配置", path: "/settings/strategies", purpose: "缠论参数、MACD 与底背离参数、止损止盈、扫描范围（自选/全市场）、监控周期" },
+  { page: "推送配置", path: "/settings/notifications", purpose: "Bark、企业微信、邮件、Webhook 开关与密钥" },
+  { page: "模型配置", path: "/settings/models", purpose: "LLM 接口（地址/模型/Key/代理），用于 AI 解读与图片识别" },
+  { page: "定时任务", path: "/settings/schedule", purpose: "每日扫描时间、盘中监控间隔/固定时点、是否仅交易日" },
+  { page: "股票与持仓", path: "/assets?tab=pool", purpose: "股票池：自选股导入、指标股票池（候选）查看与手动筛选" },
+  { page: "股票与持仓", path: "/assets?tab=holdings", purpose: "我的持仓：手动维护持仓（代码/名称/份额/持仓价/总金额），分析时携带" },
+  { page: "操作日志", path: "/settings/logs", purpose: "任务执行、AI 解读等操作记录，报错原因可直接查看" },
 ];
 
 const DATA_STORES = [

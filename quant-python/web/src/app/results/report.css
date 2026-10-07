@@ -17,7 +17,7 @@
 .stock-report-page .report-stock-header { border-top: 3px solid var(--report-blue); padding-top: 24px; }
 .stock-report-page .report-section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 20px; }
 .stock-report-page .report-section-heading h3 { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; }
-.stock-report-page .report-section-heading h3 > span { color: var(--report-blue); font: 500 12px var(--font-geist-mono), monospace; border-left: 3px solid var(--report-blue); padding-left: 10px; }
+.stock-report-page .report-section-heading h3 > span { color: var(--report-blue); font: 500 12px var(--font-mono), monospace; border-left: 3px solid var(--report-blue); padding-left: 10px; }
 .stock-report-page .report-summary-line { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; padding: 12px 14px; border-radius: 6px; color: var(--report-blue); background: color-mix(in srgb, var(--report-blue) 7%, transparent); font-size: 13px; line-height: 1.7; }
 .stock-report-page .report-summary-line > svg { margin-top: 3px; }
 .stock-report-page .report-state { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 18px; background: var(--card); }

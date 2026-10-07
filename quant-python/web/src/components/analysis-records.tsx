@@ -25,7 +25,8 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
       if (version !== requestVersion.current) return;
       if (!response.ok) throw new Error(result.error ?? "读取分析记录失败");
       setRecords(result.records); setTotal(result.total); setError(""); setLoaded(true);
-      setOpen(current => current ?? result.records[0]?.id ?? null);
+      // Reports stay collapsed until the user opens one: an empty selection is not a request to auto-expand.
+      setOpen(current => (current !== null && result.records.some((record: AnalysisRecord) => record.id === current) ? current : null));
     } catch (err) { if (version === requestVersion.current) setError(err instanceof Error ? err.message : "读取失败"); }
   }, [page, jobId, query]);
   useEffect(() => {
@@ -39,7 +40,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
   };
   if (loaded && !total && fallback) return <>{fallback}</>;
   return <section className="space-y-3" aria-label="个股分析记录">
-    {!jobId && <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold">个股分析记录</h2><form className="flex gap-2" onSubmit={event => { event.preventDefault(); setQuery(symbol.trim()); setPage(1); }}><Input aria-label="按股票代码查询报告" className="w-40" placeholder="股票代码" value={symbol} onChange={event => setSymbol(event.target.value)} /><Button type="submit" variant="outline">查询</Button></form></div>}
+    {!jobId && <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-base font-semibold">个股分析记录</h2><p className="text-xs text-muted-foreground">按股票查看历次分析报告；一次任务可生成多条记录。</p></div><form className="flex gap-2" onSubmit={event => { event.preventDefault(); setQuery(symbol.trim()); setPage(1); setOpen(null); }}><Input aria-label="按股票代码查询报告" className="w-40" placeholder="股票代码" value={symbol} onChange={event => setSymbol(event.target.value)} /><Button type="submit" variant="outline">查询</Button></form></div>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {!records.length && <p className="rounded border p-6 text-sm text-muted-foreground">{loaded ? "暂无个股报告。运行分析后，每只股票会生成一条包含五个页签的记录。" : "正在加载分析记录…"}</p>}
     {records.map(record => <article key={record.id} className="rounded-lg border bg-card"><button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 p-3 text-left hover:bg-muted/40" aria-expanded={open === record.id} onClick={() => setOpen(open === record.id ? null : record.id)}><span className="font-medium">{record.name || record.symbol} <span className="text-xs font-normal text-muted-foreground">{record.name ? record.symbol : ""} · 任务 #{record.job_id}</span></span><span className="text-xs text-muted-foreground">{record.created_at} · {record.status === "success" ? "已完成" : record.status === "partial_failed" ? "部分阶段失败" : "生成中"} · {open === record.id ? "收起" : "展开"}</span></button>{open === record.id && <div className="border-t p-4"><FiveTabAnalysis document={record.document} onRetry={() => void retry(record.id)} /></div>}</article>)}

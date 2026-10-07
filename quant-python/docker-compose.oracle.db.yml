@@ -45,6 +45,15 @@ services:
       - default
       - internal
 
+  # 覆盖主 compose 的 quant-backtest：连接自建库，与 quant-web 同权限
+  quant-backtest:
+    environment:
+      DATABASE_URL: "postgresql://quant_app:${PG_APP_PASSWORD:?PG_APP_PASSWORD must be set}@quant-db:5432/quant"
+      DATABASE_SSL_MODE: "disable"
+    networks:
+      - default
+      - internal
+
 networks:
   # 独立内部网络：quant-db 只加入 internal，不加入 default 对外网络
   internal:

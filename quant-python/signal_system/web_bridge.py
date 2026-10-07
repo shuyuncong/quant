@@ -640,10 +640,9 @@ COMMANDS = {
 
 
 def _cmd_research_backtest(config_path: str, payload: dict[str, Any]) -> int:
-    from research_backtest import assert_local_research, run_local_backtest
-    assert_local_research()
+    from research_backtest import run_backtest
     config = _load_effective_config(config_path, payload.get("overrides"))
-    return _emit({"report": run_local_backtest(config, payload["options"])})
+    return _emit({"report": run_backtest(config, payload["options"])})
 
 
 COMMANDS["research-backtest"] = _cmd_research_backtest

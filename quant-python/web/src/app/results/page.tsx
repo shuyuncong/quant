@@ -546,7 +546,7 @@ export default function ResultsPage() {
         <CardHeader>
           <CardTitle>最近任务</CardTitle>
           <CardDescription>
-            新分析任务按股票生成五页签报告；历史报告继续保留。任务状态每 5 秒刷新。
+            查看分析、扫描和监控任务的执行状态与数据源；具体个股结论见上方分析记录。
           </CardDescription>
         </CardHeader>
         <CardContent>

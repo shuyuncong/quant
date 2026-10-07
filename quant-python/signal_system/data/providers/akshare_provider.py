@@ -39,8 +39,18 @@ class AkshareDailyProvider(BaseMarketDataProvider):
         self._index_cache: dict[tuple[str, str, str], pd.DataFrame] = {}
         self._financial_cache: dict[str, Optional[Dict]] = {}
 
-    def get_stock_list(self, exchange: str = "", list_status: str = "L") -> pd.DataFrame:
-        """Return the active A-share stock list in internal ts_code format."""
+    def get_stock_list(
+        self,
+        exchange: str = "",
+        list_status: str = "L",
+        *,
+        include_special: bool = False,
+    ) -> pd.DataFrame:
+        """Return the active A-share stock list in internal ts_code format.
+
+        ``include_special`` keeps names flagged ST or 退 (used by historical
+        replays, where today's name is not the historical listing state).
+        """
         ak = self._get_akshare()
         if ak is None:
             return pd.DataFrame()
@@ -55,7 +65,7 @@ class AkshareDailyProvider(BaseMarketDataProvider):
             stock_list["ts_code"] = stock_list["symbol"].map(normalize_ts_code)
 
             # Keep the default active universe clean by dropping ST and delisting names.
-            if "name" in stock_list.columns:
+            if not include_special and "name" in stock_list.columns:
                 stock_list = stock_list[
                     ~stock_list["name"].astype(str).str.contains("ST|退", na=False)
                 ]

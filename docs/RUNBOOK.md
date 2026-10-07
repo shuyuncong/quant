@@ -4,6 +4,7 @@
 - 怎么跑日常扫描
 - 怎么跑固定输入基线回测
 - 怎么看回测和报告输出
+- 怎么开线上三策略回测（含独立 worker）
 
 ## 1. 环境准备
 
@@ -221,3 +222,16 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
 python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --group quality_midcap_20
 python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --group all
 ```
+
+## 4. 线上三策略回测（quant-backtest worker）
+
+页面 `/backtest` 的“个股回测 / 全市场回测”由独立的 `quant-backtest` 容器消费：
+
+- **提交**：`POST /api/backtests` 只做校验并写入 `quant.jobs`（kind=backtest），立即返回 202；不拉行情、不等待回放。
+- **开关**：`BACKTEST_ENABLED=1` 才允许新任务与重试；未开启时接口返回 503“线上回测未启用（BACKTEST_ENABLED=1）”，历史报告仍可查看。改环境后需重启 `quant-web` 与 `quant-backtest`。
+- **执行**：worker 用 `pg_try_advisory_lock(920005)` 保证同一时刻只有一个消费者；一次一项按 id 升序执行，不依赖 web 的调度器或交易日历。中断（重启/信号）会保留 running，下一任 worker 自动恢复同一任务与冻结输入。
+- **资源**：默认 `cpus: ${BACKTEST_CPUS:-1.0}`、`mem_limit: ${BACKTEST_MEMORY_LIMIT:-2g}`；Python 侧固定 `OMP/OPENBLAS/MKL_NUM_THREADS=1`。全市场任务内存不足时任务会失败但输入检查点在 `output/backtests/<uuid>/inputs` 保留，调大上限后重试即可（不得靠缩减股票范围“完成”任务）。
+- **本地运行**（开发调试）：在 `quant-python/web` 执行 `npm run backtest:worker`，需要 `BACKTEST_ENABLED=1`；非 production 环境会先校验 `DATABASE_URL` 指向本机库，避免误连生产。
+- **耗时**：串行节流抓取自建行情源时约 2~8 秒/只，全市场（当前在市约 5500 只）准备阶段需要数小时；进度写在 `output/backtests/<uuid>/progress.json` 的 `stage/processed/total/excluded`，`inputs/prepared.json` 每 25 只落盘一次，重启不会重复抓取已完成的股票。
+- **报告口径**：报告含 `universe`（总数=纳入+排除）、`effective_start/effective_end`（请求区间内的真实交易日）、每策略 `metrics/equity_curve/trades/rejected/warnings`，以及只含规则（不含密钥）的 `config_snapshot`。旧版本地回测任务会被标记失败并提示新建，不会被静默重跑。
+- **鉴权**：回测是计算与行情抓取入口，公网部署必须置于 Nginx Basic Auth、来源 IP 限制等之后；页面本身没有登录。

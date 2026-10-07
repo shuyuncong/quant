@@ -50,7 +50,7 @@ function fmtMoney(value: number): string {
   return value.toFixed(2);
 }
 
-export default function HoldingsPage() {
+export function HoldingsPanel() {
   const [trade, setTrade] = useState<{ holding: HoldingRow; action: "buy" | "sell" | "close" } | null>(null);
   const [tradeRevision, setTradeRevision] = useState(0);
   const [holdings, setHoldings] = useState<HoldingRow[]>([]);
@@ -208,7 +208,7 @@ export default function HoldingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold">我的持仓</h1>
+        <h2 className="text-lg font-semibold">我的持仓</h2>
         <p className="text-sm text-muted-foreground">
           手动维护持仓信息与账户总资金；分析任务（个股/扫描/监控）与 AI 解读会带上相关持仓与仓位占比，供分析参考。
         </p>

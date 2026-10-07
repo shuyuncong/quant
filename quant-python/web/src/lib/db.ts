@@ -582,7 +582,7 @@ export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobW
        WHERE job_id = j.id
        ORDER BY id DESC LIMIT 1
      ) n ON true
-     WHERE j.kind <> 'interpret-report'
+     WHERE j.kind NOT IN ('interpret-report', 'backtest')
      ORDER BY j.id DESC LIMIT $1`,
     [limit],
   );

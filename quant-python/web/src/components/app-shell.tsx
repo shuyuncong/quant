@@ -1,40 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  Activity,
-  BarChart3,
-  Bell,
-  BrainCircuit,
-  Clock3,
-  Database,
-  Menu,
-  ScrollText,
-  Wallet,
-  Workflow,
-  X,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Menu, X } from "lucide-react";
+import { getPageLabel, NavLinks } from "@/components/nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
-
-const navItems = [
-  { href: "/results", label: "个股分析", icon: BarChart3 },
-  { href: "/strategies", label: "策略配置", icon: Activity },
-  { href: "/notifications", label: "推送配置", icon: Bell },
-  { href: "/models", label: "模型配置", icon: BrainCircuit },
-  { href: "/schedule", label: "定时任务", icon: Clock3 },
-  { href: "/pool", label: "股票池", icon: Database },
-  { href: "/holdings", label: "我的持仓", icon: Wallet },
-  { href: "/logs", label: "操作日志", icon: ScrollText },
-  { href: "/workflow", label: "流程说明", icon: Workflow },
-];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const currentPage = navItems.find((item) => pathname.startsWith(item.href));
+  const currentPageLabel = getPageLabel(pathname);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -44,29 +19,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [mobileNavOpen]);
-
-  const navigation = (onNavigate?: () => void) => (
-    <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex h-8 items-center gap-2 rounded px-2 text-[13px] text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              active && "bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground md:flex-row">
@@ -82,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Menu className="size-4" />
         </button>
         <span className="min-w-0 truncate text-sm font-semibold">
-          {currentPage?.label ?? "量化学习"}
+          {currentPageLabel}
         </span>
         </div>
         <ThemeToggle />
@@ -92,7 +44,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-4">
           <span className="text-sm font-semibold tracking-wide">量化学习</span>
         </div>
-        {navigation()}
+        <div className="flex-1 overflow-y-auto p-2">
+          <NavLinks />
+        </div>
         <div className="flex items-center justify-between gap-2 border-t border-sidebar-border p-2 pl-3">
           <span className="min-w-0 text-[12px] leading-tight text-muted-foreground">
             量化信号仅供研究，不构成投资建议
@@ -124,7 +78,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <X className="size-4" />
               </button>
             </div>
-            {navigation(() => setMobileNavOpen(false))}
+            <div className="flex-1 overflow-y-auto p-2">
+              <NavLinks onNavigate={() => setMobileNavOpen(false)} />
+            </div>
             <div className="border-t border-sidebar-border p-3 text-[12px] text-muted-foreground">
               量化信号仅供研究，不构成投资建议
             </div>

@@ -251,6 +251,7 @@ docker compose up -d --build
 ## 常见问题
 
 - **服务器只有 `python3` 没有 `python`**：已支持，设置 `PYTHON_BIN=python3`，Docker 镜像已内置。
-- **使用 akshare / tushare 行情源**：默认 `provider: auto` 不需要它们；如需切换，在 Dockerfile 中追加安装 `signal_system/requirements-akshare.txt` 或 `requirements-tushare.txt` 后重新构建。
-- **访问控制**：当前页面还没有登录密码，公网部署前务必用 Nginx Basic Auth、防火墙或后续加入的登录功能保护。
+- **使用 akshare / tushare 行情源**：默认 `provider: auto` 不需要它们；镜像已内置 akshare（`signal_system/requirements-akshare.txt`），如需 tushare 则在 Dockerfile 中追加 `requirements-tushare.txt` 后重新构建。
+- **回测**：`quant-backtest` 容器是回测的独立消费者，默认 `BACKTEST_ENABLED=0`（接口返回“线上回测未启用”）。显式设置 `BACKTEST_ENABLED=1` 并重启 `quant-web`、`quant-backtest` 后才会执行新任务；已在页面提交的历史任务仍可查看。全市场回测按 `BACKTEST_CPUS`（默认 1.0）/`BACKTEST_MEMORY_LIMIT`（默认 2g）限制资源。
+- **访问控制**：当前页面还没有登录密码，公网部署前务必用 Nginx Basic Auth、防火墙或后续加入的登录功能保护。回测是计算与行情抓取入口，绝不能在无鉴权的情况下直接暴露公网。
 - **端口**：默认 3111，改端口请同步修改 `docker-compose.yml` 的 `ports` 或 `npm start` 参数。

@@ -30,6 +30,7 @@ services:
       SIGNAL_EMAIL_PASSWORD: "${SIGNAL_EMAIL_PASSWORD:-}"
       SIGNAL_EMAIL_RECEIVER: "${SIGNAL_EMAIL_RECEIVER:-}"
       SIGNAL_BARK_DEVICE_KEY: "${SIGNAL_BARK_DEVICE_KEY:-}"
+      BACKTEST_ENABLED: "${BACKTEST_ENABLED:-0}"
     volumes:
       # Web 控制台数据库（模型/策略/推送/定时/股票池等全部配置）
       - /opt/docker/quant/data:/app/data
@@ -41,3 +42,35 @@ services:
       # 行情缓存与日志（可清空，丢失后会自动重建）
       - /opt/docker/quant/cache:/app/signal_system/cache
       - /opt/docker/quant/logs:/app/signal_system/logs
+
+  # 全市场回测的独立消费者：单独进程执行，不占用 web 的调度器与分析/扫描锁。
+  quant-backtest:
+    image: quant-web:latest
+    container_name: quant-backtest
+    working_dir: /app/web
+    command: ["npm", "run", "backtest:worker"]
+    init: true
+    restart: unless-stopped
+    # 镜像自带的是 HTTP 健康检查，worker 不监听端口，必须显式关闭。
+    healthcheck:
+      disable: true
+    cpus: "${BACKTEST_CPUS:-1.0}"
+    mem_limit: "${BACKTEST_MEMORY_LIMIT:-2g}"
+    environment:
+      TZ: Asia/Shanghai
+      PYTHON_BIN: /opt/venv/bin/python
+      WEB_DATA_DIR: /app/data
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL must be set}"
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
+      TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
+      BACKTEST_ENABLED: "${BACKTEST_ENABLED:-0}"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    volumes:
+      # 与 web 共用同一 output 目录，保证报告路径在两个容器内一致。
+      - /opt/docker/quant/output:/app/signal_system/output
+      # 独立缓存与日志：不挂实盘 state，也不与 web 的扫描缓存互抢。
+      - /opt/docker/quant/backtest-cache:/app/signal_system/cache
+      - /opt/docker/quant/backtest-logs:/app/signal_system/logs
