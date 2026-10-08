@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -15,16 +15,13 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Clock,
   History,
   LineChart,
   Play,
   RotateCcw,
-  Shield,
   Sparkles,
   TrendingDown,
   TrendingUp,
-  Trophy,
 } from "lucide-react";
 
 interface CurvePoint {
@@ -49,6 +46,7 @@ interface BacktestResult {
     exit_reason: string;
   }>;
   rejected: Array<{ symbol: string; date: string; reason: string }>;
+  open_positions?: number;
   warnings?: string[];
 }
 
@@ -80,9 +78,15 @@ interface Progress {
 
 const COLORS = ["#2563eb", "#9333ea", "#d97706"];
 const DASHES = ["", "8 4", "2 4"];
+// 「收益」「回撤」「胜率」三个标签在指标表与对比摘要里各出现一次，抽成常量避免两处措辞漂移。
+const TOTAL_RETURN_LABEL = "本样本区间收益";
+const ANNUALIZED_LABEL = "年化收益率（折年估算）";
+const DRAWDOWN_LABEL = "最大回撤（跌幅幅度）";
+
 const METRIC_COLUMNS = [
-  { key: "annualized_return_pct", name: "年化收益率", percent: true },
-  { key: "max_drawdown_pct", name: "最大回撤", percent: true },
+  { key: "total_return_pct", name: TOTAL_RETURN_LABEL, percent: true },
+  { key: "annualized_return_pct", name: ANNUALIZED_LABEL, percent: true },
+  { key: "max_drawdown_pct", name: DRAWDOWN_LABEL, percent: true },
   { key: "sharpe_ratio", name: "夏普比率", percent: false },
   { key: "payoff_ratio", name: "盈亏比", percent: false },
   { key: "win_rate_pct", name: "胜率", percent: true },
@@ -111,6 +115,31 @@ function getYtdDateString(): string {
   return `${date.getFullYear()}-01-01`;
 }
 
+type Comparable = { value: number; result: BacktestResult };
+
+const MISSING_REASON: Record<string, string> = {
+  total_return_pct: "样本权益序列缺失，无法计算区间总收益",
+  annualized_return_pct: "样本区间过短或期末权益非正，无法折年估算",
+  max_drawdown_pct: "样本权益序列缺失，无法计算最大回撤",
+  sharpe_ratio: "样本净值波动为 0 或有效点数不足，无法计算夏普比率",
+  payoff_ratio: "缺少同时存在的盈利与亏损平仓交易，无法计算盈亏比",
+  win_rate_pct: "本样本没有已平仓交易，无法计算胜率",
+};
+
+/** 缺失/非有限值一律不可比：NaN、Infinity 也算「不可计算」，绝不能被排序当成 0。 */
+function finiteMetric(result: BacktestResult, key: string): number | null {
+  const value = result.metrics[key];
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** 收益类文本统一带符号：正数才加 +，负数只留一个 −，舍入到 0 时不出现 -0.00。 */
+function signedNumberText(value: number, digits = 2): string {
+  const rounded = Number(value.toFixed(digits));
+  const normalized = rounded === 0 ? 0 : rounded;
+  return `${normalized > 0 ? "+" : ""}${normalized.toFixed(digits)}`;
+}
+
 function MetricValue({
   metricKey,
   value,
@@ -122,26 +151,79 @@ function MetricValue({
   percent: boolean;
   integer?: boolean;
 }) {
-  if (value === null || value === undefined) return <span className="text-muted-foreground">N/A</span>;
-  const numStr = value.toFixed(integer ? 0 : 2);
-  const text = `${numStr}${percent ? "%" : ""}`;
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return (
+      <span
+        className="text-muted-foreground"
+        title={MISSING_REASON[metricKey] ?? "该指标在当前样本下不可计算"}
+      >
+        不可计算
+      </span>
+    );
+  }
+  const suffix = percent ? "%" : "";
 
-  if (metricKey === "annualized_return_pct") {
-    if (value > 0) return <span className="font-semibold text-rose-600 dark:text-rose-400">+{text}</span>;
-    if (value < 0) return <span className="font-semibold text-emerald-600 dark:text-emerald-400">{text}</span>;
+  if (metricKey === "total_return_pct" || metricKey === "annualized_return_pct") {
+    const rounded = Number(value.toFixed(2));
+    const text = `${signedNumberText(value)}${suffix}`;
+    if (rounded > 0) return <span className="font-semibold text-rose-600 dark:text-rose-400">{text}</span>;
+    if (rounded < 0) return <span className="font-semibold text-emerald-600 dark:text-emerald-400">{text}</span>;
     return <span className="text-muted-foreground">{text}</span>;
   }
+  // 最大回撤是「跌幅幅度」：非负、不带负号；即使拿到负值输入也只展示幅值，避免 -0.00%。
   if (metricKey === "max_drawdown_pct") {
-    return <span className="font-medium text-emerald-600 dark:text-emerald-400">-{text}</span>;
+    return (
+      <span
+        className="font-medium text-emerald-600 dark:text-emerald-400"
+        title="回撤幅度（%，非负，越小越好）"
+      >
+        {Math.abs(value).toFixed(2)}
+        {suffix}
+      </span>
+    );
   }
-  if (metricKey === "win_rate_pct") {
-    if (value >= 50) return <span className="font-semibold text-rose-600 dark:text-rose-400">{text}</span>;
-    return <span className="text-muted-foreground">{text}</span>;
+  // 胜率与盈亏比只呈现数值，不因 >50% 或 >1.5 就自动判定为「优秀」。
+  return <span>{`${value.toFixed(integer ? 0 : 2)}${suffix}`}</span>;
+}
+
+/** 期末未平仓数量：优先引擎声明值，否则使用最后一个交易日，不用历史峰值冒充。 */
+function openPositionCount(result: BacktestResult): number {
+  if (typeof result.open_positions === "number" && Number.isFinite(result.open_positions)) {
+    return Math.max(0, result.open_positions);
   }
-  if (metricKey === "payoff_ratio" && value > 1.5) {
-    return <span className="font-semibold text-rose-600 dark:text-rose-400">{text}</span>;
+  const last = result.equity_curve.at(-1)?.positions;
+  return typeof last === "number" && Number.isFinite(last) ? Math.max(0, last) : 0;
+}
+
+type SampleState = "never_traded" | "open_positions" | "closed_trades";
+
+/** 样本状态三分法：未交易 / 已买入未平仓 / 含平仓样本，供排名取池与表格标注共用。 */
+function sampleState(result: BacktestResult): SampleState {
+  if (result.trades.length > 0 || closedTradeSamples(result) > 0) return "closed_trades";
+  return openPositionCount(result) > 0 ? "open_positions" : "never_traded";
+}
+
+const SAMPLE_STATE_LABEL: Record<SampleState, string> = {
+  never_traded: "未交易",
+  open_positions: "已买入未平仓",
+  closed_trades: "含平仓样本",
+};
+
+/** 已平仓样本数：优先引擎口径，缺失时退回平仓交易明细条数。 */
+function closedTradeSamples(result: BacktestResult): number {
+  return finiteMetric(result, "closed_trades") ?? result.trades.length;
+}
+
+/** 在候选账户里取指标最大/最小的有效值；全部缺失或非有限时返回 null（无可比样本）。 */
+function bestByMetric(results: BacktestResult[], key: string, mode: "max" | "min"): Comparable | null {
+  let best: Comparable | null = null;
+  for (const result of results) {
+    const raw = finiteMetric(result, key);
+    if (raw === null) continue;
+    const value = key === "max_drawdown_pct" ? Math.abs(raw) : raw;
+    if (!best || (mode === "max" ? value > best.value : value < best.value)) best = { value, result };
   }
-  return <span>{text}</span>;
+  return best;
 }
 
 /** Cumulative return curves share one trading-day axis, so the crosshair always matches a date. */
@@ -311,7 +393,7 @@ function DailyReturnsTable({ results }: { results: BacktestResult[] }) {
                     <td
                       key={result.strategy_id}
                       className={`p-2 text-right font-mono tabular-nums ${
-                        value === undefined
+                        value === undefined || !Number.isFinite(value)
                           ? "text-muted-foreground"
                           : value > 0
                           ? "font-medium text-rose-600 dark:text-rose-400"
@@ -320,7 +402,9 @@ function DailyReturnsTable({ results }: { results: BacktestResult[] }) {
                           : "text-muted-foreground"
                       }`}
                     >
-                      {value === undefined ? "N/A" : `${value > 0 ? "+" : ""}${value.toFixed(2)}%`}
+                      {value === undefined || !Number.isFinite(value)
+                        ? "不可计算"
+                        : `${signedNumberText(value)}%`}
                     </td>
                   );
                 })}
@@ -506,28 +590,40 @@ export default function BacktestPage() {
 
   const selectedJob = jobs.find((job) => job.id === selected);
 
-  // 计算最佳指标高光
+  // 高光对比只在「真正持有过仓位」的账户之间排名：从未交易的纯现金账户
+  // 年化/回撤恒为 0，混进来会假装成「收益最高 / 回撤最低」。
   const highlights = useMemo(() => {
-    if (!report?.results?.length) return null;
-    let bestReturn = report.results[0];
-    let bestDrawdown = report.results[0];
-    let bestWinRate = report.results[0];
+    const results = report?.results ?? [];
+    if (!results.length) return null;
+    const traded = results.filter((result) => sampleState(result) !== "never_traded");
+    const neverTraded = results.filter((result) => sampleState(result) === "never_traded");
+    const closedSampleTotal = traded.reduce((sum, result) => sum + closedTradeSamples(result), 0);
 
-    for (const r of report.results) {
-      const ret = r.metrics.annualized_return_pct ?? -Infinity;
-      const bRet = bestReturn.metrics.annualized_return_pct ?? -Infinity;
-      if (ret > bRet) bestReturn = r;
+    // 只比较真实区间收益；缺失时不可拿年化折算值冒充。
+    const returnPool = traded.filter((result) => finiteMetric(result, "total_return_pct") !== null);
+    const returnRanking = bestByMetric(returnPool, "total_return_pct", "max");
+    const lossOnly = returnRanking !== null && returnRanking.value < 0;
+    const bestReturn = returnRanking?.result ?? null;
+    const bestDrawdown = bestByMetric(traded, "max_drawdown_pct", "min");
+    // 胜率只认「有已平仓样本且胜率有效」的账户：全缺失即无可比样本。
+    const winRatePool = traded.filter(
+      (result) => closedTradeSamples(result) > 0 && finiteMetric(result, "win_rate_pct") !== null
+    );
+    const bestWinRate = bestByMetric(winRatePool, "win_rate_pct", "max");
 
-      const dd = r.metrics.max_drawdown_pct ?? Infinity;
-      const bDd = bestDrawdown.metrics.max_drawdown_pct ?? Infinity;
-      if (dd < bDd) bestDrawdown = r;
-
-      const win = r.metrics.win_rate_pct ?? -Infinity;
-      const bWin = bestWinRate.metrics.win_rate_pct ?? -Infinity;
-      if (win > bWin) bestWinRate = r;
-    }
-
-    return { bestReturn, bestDrawdown, bestWinRate };
+    return {
+      traded,
+      neverTraded,
+      closedSampleTotal,
+      bestReturn,
+      bestReturnValue: returnRanking?.value ?? null,
+      returnPoolSize: returnPool.length,
+      bestDrawdown,
+      bestWinRate,
+      lossOnly,
+      drawdownPoolSize: traded.filter((result) => finiteMetric(result, "max_drawdown_pct") !== null).length,
+      winRatePoolSize: winRatePool.length,
+    };
   }, [report]);
 
   return (
@@ -774,65 +870,136 @@ export default function BacktestPage() {
             )}
           </div>
 
-          {/* 核心指标三高光卡片 */}
+          {/* 核心指标三对比卡片：只比「真正持有过仓位」的账户，并标注已平仓样本量 */}
           {highlights && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Card className="bg-gradient-to-br from-rose-500/5 to-transparent border-rose-500/20">
+              <Card className="bg-gradient-to-br from-muted/40 to-transparent">
                 <CardHeader className="p-4 pb-1">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                      🏆 最高年化收益
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-xs font-semibold">
+                      {highlights.bestReturn
+                        ? highlights.lossOnly
+                          ? "本样本亏损最少"
+                          : "本样本区间收益最高"
+                        : "区间收益对比"}
                     </CardTitle>
-                    <Trophy className="size-4 text-rose-500/70" />
+                    {highlights.bestReturn &&
+                      (highlights.lossOnly
+                        ? <TrendingDown className="size-4 shrink-0 text-muted-foreground" />
+                        : <TrendingUp className="size-4 shrink-0 text-rose-500/70" />)}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1">
-                  <div className="font-mono text-2xl font-bold tracking-tight text-rose-600 dark:text-rose-400">
-                    +{highlights.bestReturn.metrics.annualized_return_pct?.toFixed(2) ?? "0.00"}%
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground truncate">
-                    领跑策略：<span className="font-medium text-foreground">{highlights.bestReturn.name}</span>
-                  </p>
+                  {highlights.bestReturn ? (
+                    <>
+                      <div
+                        className={`font-mono text-2xl font-bold tracking-tight ${
+                          highlights.lossOnly
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-rose-600 dark:text-rose-400"
+                        }`}
+                      >
+                        {highlights.bestReturnValue === null
+                          ? "不可计算"
+                          : `${signedNumberText(highlights.bestReturnValue)}%`}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground truncate">
+                        <span className="font-medium text-foreground">{highlights.bestReturn.name}</span>
+                        {` · 已平仓 ${closedTradeSamples(highlights.bestReturn)} 笔 · `}
+                        {TOTAL_RETURN_LABEL}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        收益口径 · {highlights.returnPoolSize} 个账户有可比较区间收益
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-mono text-2xl font-bold tracking-tight text-muted-foreground">不可计算</div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        无人持有过仓位，或全部账户的收益指标缺失，无收益可比样本。
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
               <Card className="bg-gradient-to-br from-emerald-500/5 to-transparent border-emerald-500/20">
                 <CardHeader className="p-4 pb-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      🛡️ 最佳风控（最低回撤）
+                      本样本最低回撤
                     </CardTitle>
-                    <Shield className="size-4 text-emerald-500/70" />
+                    {highlights.bestDrawdown && <TrendingDown className="size-4 shrink-0 text-emerald-500/70" />}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1">
-                  <div className="font-mono text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-                    -{highlights.bestDrawdown.metrics.max_drawdown_pct?.toFixed(2) ?? "0.00"}%
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground truncate">
-                    低波策略：<span className="font-medium text-foreground">{highlights.bestDrawdown.name}</span>
-                  </p>
+                  {highlights.bestDrawdown ? (
+                    <>
+                      <div className="font-mono text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                        {Math.abs(highlights.bestDrawdown.value).toFixed(2)}%
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground truncate">
+                        <span className="font-medium text-foreground">{highlights.bestDrawdown.result.name}</span>
+                        {` · 已平仓 ${closedTradeSamples(highlights.bestDrawdown.result)} 笔 · `}
+                        {DRAWDOWN_LABEL}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        回撤越小越好，不等于风控更优或波动更低 · 参与对比 {highlights.drawdownPoolSize} 个账户 · 已平仓样本合计 {highlights.closedSampleTotal} 笔
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-mono text-2xl font-bold tracking-tight text-muted-foreground">不可计算</div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        无人持有过仓位，或全部账户的回撤指标缺失，无回撤可比样本。
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
               <Card className="bg-gradient-to-br from-blue-500/5 to-transparent border-blue-500/20">
                 <CardHeader className="p-4 pb-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                      🎯 最高胜率
+                      本样本胜率对比
                     </CardTitle>
-                    <CheckCircle2 className="size-4 text-blue-500/70" />
+                    {highlights.bestWinRate && <CheckCircle2 className="size-4 shrink-0 text-blue-500/70" />}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-1">
-                  <div className="font-mono text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
-                    {highlights.bestWinRate.metrics.win_rate_pct?.toFixed(2) ?? "0.00"}%
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground truncate">
-                    高胜率策略：<span className="font-medium text-foreground">{highlights.bestWinRate.name}</span>
-                  </p>
+                  {highlights.bestWinRate ? (
+                    <>
+                      <div className="font-mono text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+                        {`${highlights.bestWinRate.value.toFixed(2)}%`}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground truncate">
+                        <span className="font-medium text-foreground">{highlights.bestWinRate.result.name}</span>
+                        {` · 已平仓 ${closedTradeSamples(highlights.bestWinRate.result)} 笔 · 最高胜率（仅统计已平仓交易）`}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        参与对比 {highlights.winRatePoolSize} 个有平仓样本的账户 · 各自已平仓笔数见下表 · 胜率高不代表收益高
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-mono text-2xl font-bold tracking-tight text-muted-foreground">{highlights.closedSampleTotal > 0 ? "不可计算" : "无平仓样本"}</div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        没有账户产生可计算的已平仓交易胜率，无法比较。
+                      </p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
+
+              <p className="text-[11px] leading-relaxed text-muted-foreground sm:col-span-3">
+                排名口径：仅对实际交易且对应指标有效的账户比较；共 {highlights.traded.length} 个账户有交易记录，已平仓样本合计 {highlights.closedSampleTotal} 笔。
+                {highlights.neverTraded.length > 0 &&
+                  `未交易的纯现金账户 ${highlights.neverTraded.length} 个（${highlights.neverTraded
+                    .map((result) => result.name)
+                    .join("、")}）权益恒等于初始现金，不参与排名。`}
+                {highlights.lossOnly && "可计算区间收益的交易账户均为亏损，收益卡片只表示这些账户中亏损最少的一项。"}
+              </p>
             </div>
           )}
 
@@ -850,21 +1017,45 @@ export default function BacktestPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {report.results.map((result) => (
-                  <tr key={result.strategy_id} className="transition-colors hover:bg-muted/10">
-                    <th className="p-3 text-left font-medium">{result.name}</th>
-                    {METRIC_COLUMNS.map((column) => (
-                      <td key={column.key} className="p-3 text-right font-mono tabular-nums">
-                        <MetricValue
-                          metricKey={column.key}
-                          value={result.metrics[column.key]}
-                          percent={column.percent}
-                          integer={column.key === "closed_trades"}
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {report.results.map((result) => {
+                  const state = sampleState(result);
+                  return (
+                    <tr key={result.strategy_id} className="transition-colors hover:bg-muted/10">
+                      <th className="p-3 text-left font-medium">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {result.name}
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-normal ${
+                              state === "never_traded"
+                                ? "border-muted-foreground/30 text-muted-foreground"
+                                : "border-primary/20 text-primary"
+                            }`}
+                          >
+                            {SAMPLE_STATE_LABEL[state]}
+                          </Badge>
+                        </span>
+                        {state !== "closed_trades" && (
+                          <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                            {state === "never_traded"
+                              ? "未买入任何标的，权益为纯现金"
+                              : `已买入未平仓 ${openPositionCount(result)} 只，胜率/盈亏比缺少可统计样本`}
+                          </span>
+                        )}
+                      </th>
+                      {METRIC_COLUMNS.map((column) => (
+                        <td key={column.key} className="p-3 text-right font-mono tabular-nums">
+                          <MetricValue
+                            metricKey={column.key}
+                            value={result.metrics[column.key]}
+                            percent={column.percent}
+                            integer={column.key === "closed_trades"}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -873,7 +1064,10 @@ export default function BacktestPage() {
           <EquityChart results={report.results} />
 
           <p className="text-xs text-muted-foreground">
-            指标口径说明：N/A 表示无对应样本；未买入时年化与回撤记为 0，夏普/盈亏比/胜率为 N/A；已买入但未平仓时仅盈亏比/胜率为 N/A。盈亏比采用已平仓交易净金额，夏普无风险利率取 0，区间末未平仓持仓按收盘市值计入权益。
+            指标口径说明：「不可计算」表示当前样本下没有有效数值；未提供区间总收益时保持缺失，不用年化收益替代。
+            {TOTAL_RETURN_LABEL}为样本区间权益变化，{ANNUALIZED_LABEL}由同一区间折算全年，区间越短越不可信；{DRAWDOWN_LABEL}为区间内自峰值的最大跌幅，非负、越小越好。
+            盈亏比采用已平仓交易净金额，夏普无风险利率取 0，区间末未平仓持仓按收盘市值计入权益；胜率与盈亏比仅统计已平仓交易，样本量见「已平仓笔数」列。
+            「未交易」账户区间内未买入任何标的，权益恒为纯现金；「已买入未平仓」账户缺少已平仓样本，不应与其他账户比较胜率与盈亏比。
           </p>
 
           {/* 警告信息 */}
@@ -904,7 +1098,11 @@ export default function BacktestPage() {
                 <div key={result.strategy_id} className="space-y-2">
                   <h3 className="text-sm font-semibold">{result.name}</h3>
                   {!result.trades.length ? (
-                    <p className="text-xs text-muted-foreground">该策略在选定区间内未达成任何平仓交易。</p>
+                    <p className="text-xs text-muted-foreground">
+                      {sampleState(result) === "never_traded"
+                        ? "该策略在选定区间内未买入任何标的，因此没有平仓交易（纯现金账户）。"
+                        : `该策略在选定区间内没有平仓交易：已买入未平仓 ${openPositionCount(result)} 只，胜率与盈亏比缺少可统计样本。`}
+                    </p>
                   ) : (
                     <table className="w-full text-xs">
                       <thead>

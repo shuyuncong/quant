@@ -61,6 +61,8 @@ export function HoldingsPanel() {
   const [savedCapital, setSavedCapital] = useState(0);
   const [capitalInput, setCapitalInput] = useState("");
   const [savingCapital, setSavingCapital] = useState(false);
+  // 首屏加载完成前一律显示「—」，绝不把「还没读到」渲染成 0 元 / 未设置。
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +74,7 @@ export function HoldingsPanel() {
       };
       setHoldings(data.holdings.filter(row => row.shares > 0));
       setSavedCapital(Number(data.total_capital ?? 0));
+      setLoaded(true);
       // 轮询不覆盖正在编辑的输入，仅在尚未填写时同步已保存值
       setCapitalInput((prev) =>
         prev === "" && Number(data.total_capital ?? 0) > 0 ? String(data.total_capital) : prev
@@ -173,13 +176,18 @@ export function HoldingsPanel() {
 
   const totalAmount = holdings.reduce((sum, row) => sum + (row.total_amount || 0), 0);
   const capitalPct =
-    savedCapital > 0 && totalAmount > 0 ? ((totalAmount / savedCapital) * 100).toFixed(1) : "";
+    savedCapital > 0 ? ((totalAmount / savedCapital) * 100).toFixed(1) : "";
+  // 可用现金是「设定资金 − 账面占用」，与券商实际可用资金无关，这里只做预算口径估算。
+  const remainingAllocation = Math.max(0, savedCapital - totalAmount);
+  const capitalKnown = loaded && savedCapital > 0;
+  const unavailableMessage = loading ? "加载中…" : "未能读取，请刷新重试";
+  const money = (value: number) => `¥${fmtMoney(value)}`;
   const autoTotal = computedTotal();
 
   const saveCapital = async () => {
     const value = Number(capitalInput);
     if (capitalInput.trim() !== "" && (!Number.isFinite(value) || value < 0)) {
-      toast.error("请输入合法的账户总资金");
+      toast.error("请输入合法的设定总资金");
       return;
     }
     setSavingCapital(true);
@@ -197,7 +205,7 @@ export function HoldingsPanel() {
       const saved = Number(data.total_capital ?? 0);
       setSavedCapital(saved);
       setCapitalInput(saved > 0 ? String(saved) : "");
-      toast.success(saved > 0 ? "已保存账户总资金" : "已清除账户总资金");
+      toast.success(saved > 0 ? "已保存设定总资金（用于估算剩余配置额度）" : "已清除设定总资金");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
@@ -210,61 +218,71 @@ export function HoldingsPanel() {
       <div>
         <h2 className="text-lg font-semibold">我的持仓</h2>
         <p className="text-sm text-muted-foreground">
-          手动维护持仓信息与账户总资金；分析任务（个股/扫描/监控）与 AI 解读会带上相关持仓与仓位占比，供分析参考。
+          手动维护持仓信息与设定总资金（均为成本口径账面记录，本页不抓取行情）；分析任务（个股/扫描/监控）与 AI 解读会带上相关持仓与账面仓位占比，供分析参考。
         </p>
       </div>
 
-      {/* 顶部资产概览驾驶舱 */}
+      {/* 顶部资产概览驾驶舱（全部为成本口径的账面记录，不含实时行情） */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>账户总资金</span>
+            <span>设定总资金（手工基准）</span>
             <Wallet className="size-4 opacity-70" />
           </div>
           <div className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
-            ¥{savedCapital > 0 ? fmtMoney(savedCapital) : "未设置"}
+            {!loaded ? "—" : capitalKnown ? money(savedCapital) : "未设置"}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {savedCapital > 0 ? "已设基准资金" : "建议配置以计算仓位比例"}
+            {!loaded
+              ? unavailableMessage
+              : capitalKnown
+              ? "用于估算剩余配置额度，非券商绑定资金"
+              : "未设置：无法估算剩余配置额度与账面仓位占比"}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>持仓总市值</span>
+            <span>持仓账面金额（成本口径）</span>
             <Coins className="size-4 text-rose-500 opacity-80" />
           </div>
           <div className="mt-2 text-xl font-bold tracking-tight text-rose-600 dark:text-rose-400 sm:text-2xl">
-            ¥{fmtMoney(totalAmount)}
+            {!loaded ? "—" : money(totalAmount)}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            共 {holdings.length} 只在持标的
+            {!loaded ? unavailableMessage : `共 ${holdings.length} 只在持标的 · 按登记成本记账，非实时市值`}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>可用现金（预估）</span>
+            <span>预估剩余可用额度</span>
             <ShieldCheck className="size-4 opacity-70" />
           </div>
           <div className="mt-2 text-xl font-bold tracking-tight sm:text-2xl">
-            {savedCapital > 0 ? `¥${fmtMoney(Math.max(0, savedCapital - totalAmount))}` : "—"}
+            {capitalKnown ? money(remainingAllocation) : "—"}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {savedCapital > 0 && savedCapital < totalAmount ? "⚠️ 已超过设定总资金" : "可支配风险缓冲"}
+            {!loaded
+              ? unavailableMessage
+              : capitalKnown
+              ? savedCapital < totalAmount
+                ? "⚠️ 账面金额已超过设定总资金"
+                : "＝设定总资金 − 持仓账面金额，非券商可用资金"
+              : "需先设定总资金才能估算"}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>总仓位比例</span>
+            <span>账面仓位占比（成本口径）</span>
             <PieChart className="size-4 opacity-70" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-xl font-bold tracking-tight sm:text-2xl">
-              {capitalPct ? `${capitalPct}%` : "—"}
+              {capitalKnown && capitalPct ? `${capitalPct}%` : "—"}
             </span>
-            {capitalPct && (
+            {capitalKnown && capitalPct && (
               <Badge
                 variant="outline"
                 className={`text-[10px] ${
@@ -280,10 +298,15 @@ export function HoldingsPanel() {
             )}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            AI 解读将参考集中度建议
+            {!loaded ? "加载中…" : "AI 解读将参考集中度建议（按成本口径估算）"}
           </p>
         </div>
       </div>
+
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        口径说明：持仓是手工维护的账面记录，「持仓账面金额」按成本口径汇总（份额 × 持仓价，或手动填写的金额），不是实时市值，本页不抓取行情；
+        「预估剩余可用额度」＝设定总资金 − 持仓账面金额，只是配置预算的估算值，不代表券商可用资金或可买入金额。
+      </p>
 
       <Card>
         <CardHeader className="px-4 py-3">
@@ -292,7 +315,7 @@ export function HoldingsPanel() {
               <Wallet className="size-4" /> 资金配置与仓位基准
             </CardTitle>
             <span className="text-xs text-muted-foreground">
-              {savedCapital > 0 ? `当前配置: ¥${fmtMoney(savedCapital)}` : "未配置总资金"}
+              {!loaded ? "加载中…" : capitalKnown ? `当前配置: ${money(savedCapital)}` : "未配置总资金"}
             </span>
           </div>
         </CardHeader>
@@ -313,6 +336,9 @@ export function HoldingsPanel() {
               {savingCapital ? "保存中..." : "更新总资金"}
             </Button>
           </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            这里是手工基准资金，只用来估算剩余配置额度与账面占比；它不是券商账户余额，系统也不会同步真实资金。
+          </p>
         </CardContent>
       </Card>
 
@@ -323,7 +349,7 @@ export function HoldingsPanel() {
             {editing ? `编辑持仓：${editing}` : "添加持仓"}
           </CardTitle>
           <CardDescription>
-            总金额可手动填写，留空则自动按 持仓份额 × 持仓价 计算。
+            总金额按成本口径手动填写，留空则自动按 持仓份额 × 持仓价 计算；它不是实时市值，本页不抓取行情。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -366,7 +392,7 @@ export function HoldingsPanel() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="h-total">总金额（元）</Label>
+              <Label htmlFor="h-total">总金额（元，成本口径）</Label>
               <Input
                 id="h-total"
                 placeholder={autoTotal > 0 ? fmtMoney(autoTotal) : "留空自动算"}
@@ -400,9 +426,15 @@ export function HoldingsPanel() {
             <Wallet className="size-4" /> 持仓列表
           </CardTitle>
           <CardDescription>
-            共 {holdings.length} 只，总持仓 {fmtMoney(totalAmount)} 元
-            {capitalPct && savedCapital > 0 ? `，占账户总资金 ${capitalPct}%` : ""}
-            。
+            {!loaded ? (
+              unavailableMessage
+            ) : (
+              <>
+                共 {holdings.length} 只，持仓账面金额合计 {fmtMoney(totalAmount)} 元（成本口径）
+                {capitalPct && savedCapital > 0 ? `，占设定总资金 ${capitalPct}%` : ""}
+                。
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,7 +445,7 @@ export function HoldingsPanel() {
                 <TableHead>名称</TableHead>
                 <TableHead className="text-right">持仓份额</TableHead>
                 <TableHead className="text-right">持仓价（元）</TableHead>
-                <TableHead className="text-right">总金额（元）</TableHead>
+                <TableHead className="text-right">账面金额（元，成本口径）</TableHead>
                 <TableHead className="min-w-72">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -427,8 +459,8 @@ export function HoldingsPanel() {
                   <TableCell className="text-right font-mono text-xs">
                     {fmtMoney(row.total_amount)}
                     {row.total_amount <= 0 && (
-                      <Badge variant="outline" className="ml-1">
-                        未填
+                      <Badge variant="outline" className="ml-1" title="未登记账面金额，成本口径下按 0 计">
+                        未登记金额
                       </Badge>
                     )}
                   </TableCell>
@@ -457,7 +489,7 @@ export function HoldingsPanel() {
               {holdings.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    {loading ? "加载中..." : "暂无持仓，先在上方添加"}
+                    {!loaded ? unavailableMessage : "暂无持仓，先在上方添加"}
                   </TableCell>
                 </TableRow>
               )}
