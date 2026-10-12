@@ -63,7 +63,7 @@ const tables = [
   { name: "analysis_notes", key: ["id"], columns: ["id", "job_id", "symbol", "content", "model", "created_at", "result_path"] },
   { name: "schedule", key: ["id"], columns: ["id", "kind", "time", "interval_seconds", "trading_days_only", "enabled", "updated_at", "fixed_times"] },
   { name: "operation_logs", key: ["id"], columns: ["id", "job_id", "level", "module", "message", "detail", "created_at"] },
-  { name: "holdings", key: ["symbol"], columns: ["symbol", "name", "shares", "cost_price", "total_amount", "created_at", "updated_at"] },
+  { name: "holdings", key: ["symbol"], columns: ["symbol", "name", "shares", "cost_price", "total_amount", "strategy_id", "created_at", "updated_at"] },
 ];
 const serialTables = new Set(["model_profiles", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs"]);
 const boolColumns = new Set(["enabled", "vision_supported", "trading_days_only"]);

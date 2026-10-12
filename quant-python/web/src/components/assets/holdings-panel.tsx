@@ -22,6 +22,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Coins, Pencil, PieChart, Plus, RefreshCw, ShieldCheck, Trash2, Wallet, X } from "lucide-react";
+import { STRATEGIES, type HoldingStrategyId } from "@/lib/analysis-types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { HoldingTradeDialog, HoldingTradeHistory } from "@/components/holding-trade-dialog";
 
 interface HoldingRow {
@@ -30,6 +38,7 @@ interface HoldingRow {
   shares: number;
   cost_price: number;
   total_amount: number;
+  strategy_id: HoldingStrategyId;
   created_at: string;
   updated_at: string;
 }
@@ -40,7 +49,15 @@ const EMPTY_FORM = {
   shares: "",
   costPrice: "",
   totalAmount: "",
+  strategyId: "" as HoldingStrategyId,
 };
+
+/** 空串 = 未归属：止损与分批止盈按全局口径走，不猜归属。 */
+const UNOWNED_LABEL = "未归属（走全局止损/止盈）";
+
+function strategyLabel(id: HoldingStrategyId): string {
+  return STRATEGIES.find(strategy => strategy.id === id)?.name ?? UNOWNED_LABEL;
+}
 
 function fmtShares(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -112,6 +129,7 @@ export function HoldingsPanel() {
       shares: fmtShares(row.shares),
       costPrice: String(row.cost_price),
       totalAmount: row.total_amount > 0 ? String(row.total_amount) : "",
+      strategyId: row.strategy_id,
     });
   };
 
@@ -138,6 +156,9 @@ export function HoldingsPanel() {
         shares,
         cost_price: cost,
         total_amount: form.totalAmount.trim() ? Number(form.totalAmount) : 0,
+        // 归属策略只在编辑既有持仓时下发：新建时不给归属，避免一次点击就把
+        // 止损口径从全局换成策略级。
+        ...(editing ? { strategy_id: form.strategyId } : {}),
       };
       const url = editing
         ? `/api/holdings/${encodeURIComponent(editing)}`
@@ -353,7 +374,7 @@ export function HoldingsPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="h-symbol">股票代码</Label>
               <Input
@@ -400,7 +421,33 @@ export function HoldingsPanel() {
                 onChange={(event) => setField("totalAmount", event.target.value)}
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="h-strategy">归属策略</Label>
+              <Select
+                value={form.strategyId || "unowned"}
+                disabled={editing === null}
+                onValueChange={(value) =>
+                  setForm((prev) => ({ ...prev, strategyId: (value === "unowned" ? "" : value) as HoldingStrategyId }))
+                }
+              >
+                <SelectTrigger id="h-strategy">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unowned">{UNOWNED_LABEL}</SelectItem>
+                  {STRATEGIES.map((strategy) => (
+                    <SelectItem key={strategy.id} value={strategy.id}>
+                      {strategy.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            归属策略决定该持仓按哪一套止损与分批止盈计划执行（对应引擎的 risk.strategy_stop_loss_pct /
+            risk.strategy_exit_plan）。「未归属」一律走全局口径，系统不会根据当天命中的信号替你猜归属；先添加持仓，再编辑它来指定。
+          </p>
           <div className="mt-4 flex items-center gap-2">
             <Button onClick={() => void save()} disabled={saving}>
               <Plus className="size-4" />
@@ -446,6 +493,7 @@ export function HoldingsPanel() {
                 <TableHead className="text-right">持仓份额</TableHead>
                 <TableHead className="text-right">持仓价（元）</TableHead>
                 <TableHead className="text-right">账面金额（元，成本口径）</TableHead>
+                <TableHead>归属策略</TableHead>
                 <TableHead className="min-w-72">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -461,6 +509,21 @@ export function HoldingsPanel() {
                     {row.total_amount <= 0 && (
                       <Badge variant="outline" className="ml-1" title="未登记账面金额，成本口径下按 0 计">
                         未登记金额
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {row.strategy_id ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        {strategyLabel(row.strategy_id)}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-muted-foreground"
+                        title="未归属：止损与分批止盈按全局 risk.stop_loss_pct / risk.exit_plan 执行"
+                      >
+                        未归属
                       </Badge>
                     )}
                   </TableCell>
@@ -488,7 +551,7 @@ export function HoldingsPanel() {
               ))}
               {holdings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     {!loaded ? unavailableMessage : "暂无持仓，先在上方添加"}
                   </TableCell>
                 </TableRow>

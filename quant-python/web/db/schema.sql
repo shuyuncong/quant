@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS quant.holdings (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+-- v5: 持仓归属策略（等价于幂等 ALTER，保证新库与既有库列一致）。
+-- 空串 = 未归属：止损与分批止盈一律走全局 risk.stop_loss_pct / risk.exit_plan，
+-- 不会借用被评估策略的口径（见 signal_system/strategy/registry.py 的 stop_owner）。
+ALTER TABLE quant.holdings ADD COLUMN IF NOT EXISTS strategy_id TEXT NOT NULL DEFAULT '';
 
 INSERT INTO quant.schema_meta (version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
@@ -224,3 +228,8 @@ BEGIN
 END
 $schedule_v4$;
 INSERT INTO quant.schema_meta (version) VALUES (4) ON CONFLICT (version) DO NOTHING;
+
+-- v5: quant.holdings.strategy_id（归属策略，空串=未归属走全局口径）。
+-- 列本身在上方的幂等 ALTER 补齐；此处只登记版本号。
+-- 存量持仓一律回填为空串，即维持"按全局止损/止盈"的既有行为，需要人工逐个指定归属。
+INSERT INTO quant.schema_meta (version) VALUES (5) ON CONFLICT (version) DO NOTHING;

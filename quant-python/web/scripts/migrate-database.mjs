@@ -32,7 +32,7 @@ const tables = [
   { name: "analysis_notes", key: ["id"], columns: ["id", "job_id", "symbol", "content", "model", "created_at", "result_path"] },
   { name: "schedule", key: ["id"], columns: ["id", "kind", "time", "interval_seconds", "trading_days_only", "enabled", "updated_at", "fixed_times"] },
   { name: "operation_logs", key: ["id"], columns: ["id", "job_id", "level", "module", "message", "detail", "created_at"] },
-  { name: "holdings", key: ["symbol"], columns: ["symbol", "name", "shares", "cost_price", "total_amount", "created_at", "updated_at"] },
+  { name: "holdings", key: ["symbol"], columns: ["symbol", "name", "shares", "cost_price", "total_amount", "strategy_id", "created_at", "updated_at"] },
 ];
 const serialTables = new Set(["model_profiles", "pending_imports", "jobs", "analysis_notes", "schedule", "operation_logs"]);
 const boolColumns = new Set(["enabled", "vision_supported", "trading_days_only"]);
@@ -223,7 +223,7 @@ async function exportPostgresToSqlite() {
       CREATE TABLE schedule (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL UNIQUE, time TEXT NOT NULL DEFAULT '15:20', interval_seconds INTEGER NOT NULL DEFAULT 60, trading_days_only INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, fixed_times TEXT NOT NULL DEFAULT '[]');
       CREATE TABLE operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, job_id INTEGER, level TEXT NOT NULL DEFAULT 'info', module TEXT NOT NULL DEFAULT '', message TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL);
       CREATE INDEX idx_operation_logs_created ON operation_logs(created_at);
-      CREATE TABLE holdings (symbol TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', shares REAL NOT NULL DEFAULT 0, cost_price REAL NOT NULL DEFAULT 0, total_amount REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE holdings (symbol TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', shares REAL NOT NULL DEFAULT 0, cost_price REAL NOT NULL DEFAULT 0, total_amount REAL NOT NULL DEFAULT 0, strategy_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     `);
     const snapshots = [];
     for (const table of tables) {

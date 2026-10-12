@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getTotalCapital, listHoldings, removeHolding, setTotalCapital, upsertHolding } from "../db";
+import { normalizeHoldingStrategyId } from "../analysis-types";
+import { correctHolding } from "../portfolio";
 import {
   buildHoldingsContext,
   historyCompleteFromJobPayload,
@@ -54,6 +56,32 @@ describe.skipIf(!process.env.SUPABASE_TEST_DATABASE_URL)("holdings", () => {
     expect(holding.total_amount).toBe(1234.5);
   });
 
+  it("默认未归属，指定归属后能读回", async () => {
+    const created = await upsertHolding({ symbol: "600519.SH", shares: 100, cost_price: 10 });
+    expect(created.strategy_id).toBe("");
+
+    const owned = await correctHolding({
+      symbol: "600519.SH", name: "贵州茅台", shares: 100, cost_price: 10, strategy_id: "macd_zero_axis",
+    });
+    expect(owned.strategy_id).toBe("macd_zero_axis");
+    expect((await listHoldings())[0].strategy_id).toBe("macd_zero_axis");
+  });
+
+  it("不传归属策略时保持原值：清仓/删除不能顺手把归属抹掉", async () => {
+    await correctHolding({ symbol: "600519.SH", shares: 100, cost_price: 10, strategy_id: "macd_divergence" });
+    // 校正为 0 股（等同删除）走的也是这条路，归属必须留着，重新建仓才不用再选一次。
+    const closed = await correctHolding({ symbol: "600519.SH", shares: 0 });
+    expect(closed.strategy_id).toBe("macd_divergence");
+    expect((await correctHolding({ symbol: "600519.SH", shares: 0, strategy_id: "" })).strategy_id).toBe("");
+  });
+
+  it("拒绝未知归属策略，且不落库", async () => {
+    await expect(correctHolding({
+      symbol: "600519.SH", shares: 100, cost_price: 10, strategy_id: "buy_1_pullback",
+    })).rejects.toThrow("未知的归属策略");
+    expect(await listHoldings()).toHaveLength(0);
+  });
+
   it("reads and writes total capital setting", async () => {
     expect(await getTotalCapital()).toBe(0);
     await setTotalCapital(100000);
@@ -93,6 +121,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -127,6 +156,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -136,6 +166,7 @@ describe("holdings context", () => {
         shares: 100,
         cost_price: 10,
         total_amount: 1000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -158,6 +189,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -177,6 +209,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -197,6 +230,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -217,6 +251,7 @@ describe("holdings context", () => {
         shares: 1000,
         cost_price: 30,
         total_amount: 30000,
+        strategy_id: "" as const,
         created_at: "",
         updated_at: "",
       },
@@ -234,6 +269,7 @@ const HOLDING = {
   shares: 1000,
   cost_price: 30,
   total_amount: 30000,
+  strategy_id: "" as const,
   created_at: "",
   updated_at: "",
 };
@@ -344,5 +380,24 @@ describe("job payload 解析：两种键都要认", () => {
     });
     expect(holdingsFromJobPayload(payload)).toHaveLength(1);
     expect(tradesFromJobPayload(payload)).toEqual([]);
+  });
+});
+
+describe("holding strategy ownership", () => {
+  it("把空值读作未归属，而不是错误地借一个策略", () => {
+    expect(normalizeHoldingStrategyId("")).toBe("");
+    expect(normalizeHoldingStrategyId("   ")).toBe("");
+    expect(normalizeHoldingStrategyId(null)).toBe("");
+    expect(normalizeHoldingStrategyId(undefined)).toBe("");
+  });
+
+  it("保留合法的归属策略 id", () => {
+    expect(normalizeHoldingStrategyId("macd_zero_axis")).toBe("macd_zero_axis");
+    expect(normalizeHoldingStrategyId(" macd_divergence ")).toBe("macd_divergence");
+  });
+
+  it("未知归属策略直接报错：静默退回全局会让用户以为按策略计划已生效", () => {
+    expect(() => normalizeHoldingStrategyId("buy_1_pullback")).toThrow("未知的归属策略");
+    expect(() => normalizeHoldingStrategyId("MACD_ZERO_AXIS")).toThrow("未知的归属策略");
   });
 });

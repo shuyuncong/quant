@@ -5,6 +5,7 @@ import {
   type QueryResultRow,
 } from "pg";
 import { nowIso } from "./time";
+import { normalizeHoldingStrategyId } from "./analysis-types";
 import { isModelProtocol, isReasoningEffort, type ModelProtocol, type ReasoningEffort } from "./model-protocol";
 import type {
   AnalysisNote,
@@ -19,7 +20,7 @@ import type {
 
 export type { ScheduleRow };
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const SCHEDULER_LOCK_KEY = 1_907_082_026;
 const WATCHLIST_LOCK_KEY = 1_907_082_027;
 
@@ -866,6 +867,7 @@ function rowToHolding(row: Record<string, unknown>): HoldingRow {
     shares: Number(row.shares ?? 0),
     cost_price: Number(row.cost_price ?? 0),
     total_amount: Number(row.total_amount ?? 0),
+    strategy_id: normalizeHoldingStrategyId(row.strategy_id),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
@@ -878,7 +880,7 @@ export async function listHoldings(db?: DbClient): Promise<HoldingRow[]> {
 }
 
 export async function upsertHolding(
-  input: { symbol: string; name?: string; shares?: number; cost_price?: number; total_amount?: number },
+  input: { symbol: string; name?: string; shares?: number; cost_price?: number; total_amount?: number; strategy_id?: unknown },
   db?: DbClient,
 ): Promise<HoldingRow> {
   const symbol = input.symbol.trim().toUpperCase();
@@ -888,20 +890,22 @@ export async function upsertHolding(
   if (totalAmount <= 0 && shares > 0 && costPrice > 0) {
     totalAmount = Math.round(shares * costPrice * 100) / 100;
   }
+  const strategyId = normalizeHoldingStrategyId(input.strategy_id);
   const now = nowIso();
   const client = await resolveDb(db);
   const result = await client.query(
     `INSERT INTO quant.holdings
-       (symbol, name, shares, cost_price, total_amount, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $6)
+       (symbol, name, shares, cost_price, total_amount, strategy_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
      ON CONFLICT (symbol) DO UPDATE SET
        name = EXCLUDED.name,
        shares = EXCLUDED.shares,
        cost_price = EXCLUDED.cost_price,
        total_amount = EXCLUDED.total_amount,
+       strategy_id = EXCLUDED.strategy_id,
        updated_at = EXCLUDED.updated_at
      RETURNING *`,
-    [symbol, input.name ?? "", shares, costPrice, totalAmount, now],
+    [symbol, input.name ?? "", shares, costPrice, totalAmount, strategyId, now],
   );
   return rowToHolding(result.rows[0]);
 }

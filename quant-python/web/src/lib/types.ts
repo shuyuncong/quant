@@ -1,3 +1,5 @@
+import type { HoldingStrategyId } from "./analysis-types";
+
 export interface JobRow {
   id: number;
   kind: string;
@@ -82,6 +84,8 @@ export interface HoldingRow {
   shares: number;
   cost_price: number;
   total_amount: number;
+  /** 归属策略；"" = 未归属，止损与分批止盈走全局口径。 */
+  strategy_id: HoldingStrategyId;
   created_at: string;
   updated_at: string;
 }

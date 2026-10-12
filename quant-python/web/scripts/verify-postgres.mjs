@@ -25,7 +25,7 @@ try {
   await client.connect();
   const version = await client.query("SHOW server_version");
   const schemaVersion = await client.query("SELECT MAX(version) AS version FROM quant.schema_meta");
-  if (Number(schemaVersion.rows[0]?.version) !== 4) throw new Error("Schema version must be 4");
+  if (Number(schemaVersion.rows[0]?.version) !== 5) throw new Error("Schema version must be 5");
   const counts = {};
   for (const table of tables) {
     const result = await client.query(`SELECT count(*)::integer AS count FROM quant.${table}`);

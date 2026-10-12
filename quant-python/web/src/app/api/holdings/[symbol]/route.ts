@@ -14,6 +14,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
     shares?: unknown;
     cost_price?: unknown;
     total_amount?: unknown;
+    strategy_id?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -28,6 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
     shares: toNumber(body.shares),
     cost_price: toNumber(body.cost_price),
     total_amount: toNumber(body.total_amount),
+    strategy_id: body.strategy_id,
   });
   return NextResponse.json({ ok: true, holding });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "持仓保存失败" }, { status: 422 }); }

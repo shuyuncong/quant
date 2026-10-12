@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { getDb } from "./db";
 import { nowIso } from "./time";
 import { normalizeSymbol } from "./symbols";
+import { normalizeHoldingStrategyId } from "./analysis-types";
 import { calculateTrade, decimal, decimalString, validateTradeLot, type TradeInput } from "./trade-math";
 
 async function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -72,20 +73,25 @@ export async function recordHoldingTrade(raw: TradeInput) {
   });
 }
 
-export async function correctHolding(input: { symbol: string; name?: string; shares?: number; cost_price?: number; total_amount?: number }) {
+export async function correctHolding(input: {
+  symbol: string; name?: string; shares?: number; cost_price?: number; total_amount?: number; strategy_id?: unknown;
+}) {
   const symbol = validateSymbol(input.symbol);
   const shares = Number(input.shares ?? 0);
   if (!Number.isSafeInteger(shares) || shares < 0) throw new Error("持仓数量必须是非负整数");
   const cost = decimal(input.cost_price ?? 0);
   if (shares > 0 && cost <= 0n) throw new Error("有持仓时成本价必须大于 0");
   const amount = input.total_amount && input.total_amount > 0 ? decimal(input.total_amount) : cost * BigInt(shares);
+  // 归属策略未传时保持原值：清仓/删除走的是同一条校正路径，不能顺手把归属抹掉。
+  const requested = input.strategy_id === undefined ? undefined : normalizeHoldingStrategyId(input.strategy_id);
   return transaction(async (client) => {
     const previous = await lockHolding(client, symbol);
+    const strategyId = requested ?? String(previous?.strategy_id ?? "");
     const now = nowIso();
     const holding = (await client.query(
-      `INSERT INTO quant.holdings(symbol,name,shares,cost_price,total_amount,version,created_at,updated_at) VALUES($1,$2,$3,$4,$5,1,$6,$6)
-       ON CONFLICT(symbol) DO UPDATE SET name=EXCLUDED.name,shares=EXCLUDED.shares,cost_price=EXCLUDED.cost_price,total_amount=EXCLUDED.total_amount,version=quant.holdings.version+1,updated_at=EXCLUDED.updated_at RETURNING *`,
-      [symbol, input.name ?? previous?.name ?? "", shares, decimalString(cost), decimalString(shares ? amount : 0n), now],
+      `INSERT INTO quant.holdings(symbol,name,shares,cost_price,total_amount,strategy_id,version,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,1,$7,$7)
+       ON CONFLICT(symbol) DO UPDATE SET name=EXCLUDED.name,shares=EXCLUDED.shares,cost_price=EXCLUDED.cost_price,total_amount=EXCLUDED.total_amount,strategy_id=EXCLUDED.strategy_id,version=quant.holdings.version+1,updated_at=EXCLUDED.updated_at RETURNING *`,
+      [symbol, input.name ?? previous?.name ?? "", shares, decimalString(cost), decimalString(shares ? amount : 0n), strategyId, now],
     )).rows[0];
     await client.query("INSERT INTO quant.holding_events(symbol,kind,before_state,after_state,created_at) VALUES($1,$2,$3,$4,$5)",
       [symbol, previous ? "correction" : "opening_snapshot", JSON.stringify(previous ?? {}), JSON.stringify(holding), now]);
