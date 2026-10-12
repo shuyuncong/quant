@@ -149,7 +149,7 @@ export async function getSettingValue(key: string): Promise<unknown> {
   return getSetting(key);
 }
 
-type FieldType = "number" | "string" | "boolean" | "stringArray" | "enum";
+type FieldType = "number" | "string" | "boolean" | "stringArray" | "enum" | "object";
 
 interface FieldDef {
   type: FieldType;
@@ -172,6 +172,10 @@ const STRATEGIES_SCHEMA: Record<string, FieldDef> = {
   "risk.strategy_stop_loss_pct.macd_zero_axis": { type: "number", min: 0.001, max: 0.99, nullable: true },
   "risk.strategy_stop_loss_pct.yearline_pullback": { type: "number", min: 0.001, max: 0.99, nullable: true },
   "risk.strategy_stop_loss_pct.macd_divergence": { type: "number", min: 0.001, max: 0.99, nullable: true },
+  "risk.exit_plan": { type: "object", nullable: true },
+  "risk.strategy_exit_plan.macd_zero_axis": { type: "object", nullable: true },
+  "risk.strategy_exit_plan.yearline_pullback": { type: "object", nullable: true },
+  "risk.strategy_exit_plan.macd_divergence": { type: "object", nullable: true },
   "risk.stop_profit_pct": { type: "number", min: 0.001, max: 10 },
   "backtest.chan_zero_axis.max_holding_bars": { type: "number", min: 1, max: 2000, integer: true },
   "signal_strategy.chan.min_bi_bars": { type: "number", min: 2 },
@@ -246,6 +250,19 @@ export function validateSection(
     const def = schema[key];
     if (!def) {
       errors.push(`未知配置项: ${key}`);
+      continue;
+    }
+    if (def.type === "object") {
+      // 结构化配置 (如 risk.exit_plan)：null 表示清除 (回退到固定止盈全清)，
+      // 对象原样透传给 Python 端做深层校验；标量/数组一律拒绝，
+      // 避免用字符串覆盖整段计划定义。
+      if (raw === undefined) continue;
+      if (raw === null) { normalized[key] = null; continue; }
+      if (typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(`${key} 必须是对象或 null`);
+        continue;
+      }
+      normalized[key] = raw;
       continue;
     }
     if (def.nullable) {

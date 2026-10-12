@@ -189,3 +189,37 @@ describe("validateSection per-strategy stop loss overrides", () => {
     expect(errors.some((item) => item.includes("未知配置项: monitor.daily_scan_time"))).toBe(true);
   });
 });
+
+describe("validateSection scale-out exit plan", () => {
+  it("passes a structured plan through unchanged for the Python resolver to validate", () => {
+    const plan = { initial_fraction: 0.5, first_gain: 0.15, tiers: [{ gain: 0.3, fraction: 0.5 }], protect_tail: "breakeven" };
+    const { ok, errors, normalized } = validateSection("strategies", {
+      "risk.exit_plan": plan,
+      "risk.strategy_exit_plan.macd_zero_axis": null,
+      "risk.strategy_exit_plan.yearline_pullback": { trailing_activation_gain: 0.15, trailing_pct: 0.08 },
+    });
+    expect(errors).toEqual([]);
+    expect(ok).toBe(true);
+    expect(normalized["risk.exit_plan"]).toEqual(plan);
+    expect(normalized["risk.strategy_exit_plan.macd_zero_axis"]).toBeNull();
+    expect(normalized["risk.strategy_exit_plan.yearline_pullback"]).toEqual({ trailing_activation_gain: 0.15, trailing_pct: 0.08 });
+  });
+
+  it("rejects scalars and arrays so a plan cannot be replaced by a string", () => {
+    const { ok, errors } = validateSection("strategies", {
+      "risk.exit_plan": "ladder",
+      "risk.strategy_exit_plan.macd_divergence": [0.15],
+    });
+    expect(ok).toBe(false);
+    expect(errors.some((item) => item.includes("risk.exit_plan"))).toBe(true);
+    expect(errors.some((item) => item.includes("macd_divergence"))).toBe(true);
+  });
+
+  it("treats a missing plan key as untouched and never writes a value", () => {
+    const { ok, normalized } = validateSection("strategies", {
+      "risk.exit_plan": undefined,
+    });
+    expect(ok).toBe(true);
+    expect("risk.exit_plan" in normalized).toBe(false);
+  });
+});

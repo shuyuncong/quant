@@ -245,6 +245,29 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
 - 策略独立值优先于全局值，缺失/空覆盖继承全局，未配置全局时以 8% 兜底。实际持仓未明确归属策略时仍用全局；当前持仓页面没有归属编辑项，不自动改动已有持仓。详见 [三策略独立止损说明](../quant-python/signal_system/README.md#三策略独立止损2026-10-07)。
 - 新任务冻结提交时的规则；已有任务不读取后来修改的值，已完成报告保持不变。策略版本 `2026-10-07.1` 会使旧信号检查点失效；恢复中的任务可能重算信号，但复用原冻结行情和参数，不需要重新抓取已有输入。
 
+### 分批止盈（分批减仓）
+
+- 在 `/settings/strategies` 的“分批止盈（分批减仓）”面板启用：填写首档涨幅、首档减仓比例、可选后续档位，以及“首档后尾仓止损上移到成本价”。默认关闭（`risk.exit_plan = null`），关闭时行为与旧的固定止盈一次性全清完全一致。
+- 覆盖键为 `risk.exit_plan`（全局）与 `risk.strategy_exit_plan.<strategy>`（策略级，`null` 继承全局、`{}` 表示该策略单独关闭分批）。合法结构由 Python 端 `strategy/registry.resolve_exit_plan` 校验：档位涨幅严格递增、各档比例之和不超过 1、`protect_tail` 仅为 `none`/`breakeven`、移动止盈的两个参数必须成对提供。UI 只能编辑阶梯 + 保本止损；带 `trailing_*` 的计划需经 API/`config.yaml` 修改，表单会按只读处理避免误删字段。
+- 计划生效后**接管止盈侧**：`risk.stop_profit_pct` 对该策略不再产生离场条件；止损、持仓超时、顶背离/跌破年线照旧，尾仓继续由这些规则管理。
+- 回测执行口径：档位在日线最高价触及当日成交（成交价取档位价与开盘价较优者），同一交易日最多减一档，比例按整手截断、最后一档吸收零头；保本止损在首档成交后把剩余仓位的止损上移到成本价；移动止盈按收盘价激活、激活当根不清仓。同日优先级为 **止损 → 尾仓保护 → 下一档止盈**。详见 [分批止盈说明](../quant-python/signal_system/README.md#分批止盈2026-10-10) 与 [2024H1 归档](2026-10-10-三策略止盈分批减仓回测归档.md)。
+- 2024H1 与 2024H2 两个半年样本的一致结论：日线零轴金叉与零轴＋底背离分批更优（"先卖一半 + 尾仓保本止损"最稳），年线趋势两个区间都不如一次性全清，"移动止盈单独使用"方向反复。**默认仍为关闭**，启用属于人工决策。
+- 若要按研究结论分开配置（「策略配置 → 按策略覆盖分批计划」，三选一）：
+  - 日线零轴金叉 → 自定义：首档 +15% 卖 50%，勾选"首档后尾仓止损上移到成本价"；
+  - 零轴＋底背离 → 自定义：+15% / +30% / +45% 各卖 1/3；
+  - 年线趋势 → 关闭分批（写入空计划 `{}`），保持一次性全清。
+  对应的覆盖键：`risk.strategy_exit_plan.macd_zero_axis` / `.macd_divergence` / `.yearline_pullback`；`null` 表示继承全局计划。
+- **每日提醒与 AI 解读已带上分批口径**（2026-10-11）：`evaluate_strategies` 在实盘层按当日**日线最高价**判定下一档，触发时该条件 `met = true`、`trigger_basis = 日线最高价`，结果对象带 `exit_plan_advice`（下一档触发价、建议股数、原始仓位比例、已执行/剩余档位、保本止损位、移动止盈激活价与回撤位）。推送 evidence 字段为 `exit_plan_advice`，`/workflow` 报告表在"实际数值"列直接显示引擎算好的执行摘要。回测回放层（`evaluate_exits`）仍保持信息行（`met = null`），两者不可混用。
+- **AI 解读只能照抄引擎数字**：`INTERPRET_SYSTEM_PROMPT` 与两阶段提示词的 `synthesis` 阶段都写明——建议减仓时必须引用 `exit_plan_advice.next` 的触发价与建议股数、说明占原始仓位比例、`breakeven_active` 时说明尾仓止损已上移到成本价；不得自行估算比例或股数，也不得建议卖得比该档更多；没有 advice 时不得编造档位。解读输入（`buildInterpretationContext`）已保留 `strategies` 字段，否则模型看不到这些数字。
+- **保本止损与档位进度来自成交记录**：持仓台账目前没有 `exit_levels_taken` 字段，实盘进度由 `quant.holding_trades` 反推——累计卖出 ÷ 累计买入 = 已执行比例，对照计划档位比例得出已执行到第几档，原始股数取累计买入（`resolve_plan_progress`）。建议与止损共用这一口径，不会出现"建议说保本已生效、止损行还印 8%"的分叉；首档执行后止损来源变为 `plan_breakeven`。
+- **进度是估算时必须说明**：成交记录每股只保留最近 50 笔（快照 `history_complete` 恒为假），所以文案统一写"按已知成交估算"；卖出多于已知买入（期初持仓没有买入记录）时判定为未知，退回"按当前仓位视为原始仓位"并按 0 档处理，不猜。
+- **回测口径不受影响**：replay 传入合成持仓（无成交记录），档位进度由引擎内部维护，`--parity-grid` 30 组仍为零差异。
+- **持仓归属策略（2026-10-12 已落地）**：`quant.holdings.strategy_id`（schema v5，`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`）在 `/assets?tab=holdings` 的编辑表单里可选「归属策略」，选项为三个策略 id 或「未归属」。升级需跑 `npm run db:setup`（把 `db/schema.sql` 整段幂等重放并把 `schema_meta` 升到 5；`src/lib/db.ts` 的 `SCHEMA_VERSION` 必须同步为 5，否则 `validateSchema` 会拒绝启动）。存量持仓列默认空串 = 未归属，**行为与升级前完全一致**，需要人工逐个指定归属。
+  - 归属是**这一笔持仓**的属性：`strategy.registry.stop_owner` 只看 `holding.strategy_id`；指定后该持仓的止损走 `risk.strategy_stop_loss_pct.<id>`、止盈走 `risk.strategy_exit_plan.<id>`（含分批计划），且**所有**被评估策略看同一笔持仓时都用归属策略的口径，不会各自换回自己的。空串/缺失/未知归属一律回到全局。
+  - 「未归属」是显式选择，不会根据当天命中的信号猜归属；未知 id 由 `PUT /api/holdings/<symbol>` 直接返回 422，不静默降级。
+  - 归属只在**编辑既有持仓**时下发：新增持仓时表单不给该字段，避免一次点击就把止损口径从全局换成策略级。
+  - 端到端回归：`tests/test_exit_notification.py::HoldingAttributionTests`（归属生效 / 未归属不借口径两条）。
+
 ### 界面指标与操作约定
 
 - `/assets?tab=holdings` 的持仓账面金额为登记成本金额合计，不是实时市值；剩余额度按设定总资金减账面占用估算，不代表券商可用现金。首次加载前显示 `—`，不把未读取的数据当成零。

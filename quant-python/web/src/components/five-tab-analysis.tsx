@@ -94,13 +94,15 @@ function Conditions({
               <tr key={index} className="transition-colors hover:bg-muted/20">
                 <td className="p-2.5 font-medium">{row.name}</td>
                 <td className="p-2.5 font-mono text-muted-foreground">
-                  {row.actual == null
-                    ? "未知"
-                    : typeof row.actual === "boolean"
-                    ? row.actual
-                      ? "是"
-                      : "否"
-                    : String(row.actual)}
+                  {(() => {
+                    // 分批/移动止盈的条件项没有单一数值，直接展示引擎算好的执行摘要
+                    // （下一档触发价 + 建议股数 + 保本止损位），比一个"未知"有用得多。
+                    const details = row.details;
+                    if (details && typeof details === "object" && "summary" in details && typeof details.summary === "string") return details.summary;
+                    if (row.actual == null) return "未知";
+                    if (typeof row.actual === "boolean") return row.actual ? "是" : "否";
+                    return String(row.actual);
+                  })()}
                 </td>
                 <td className="p-2.5 text-muted-foreground">{row.expected}</td>
                 <td className="p-2.5 text-right">

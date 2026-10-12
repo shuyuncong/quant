@@ -66,6 +66,66 @@ const STEPS = [
   },
 ];
 
+/** 三个买入策略的入场与退出口径；退出数值来自 2024H1 + 2024H2 双样本对照。 */
+const ENTRY_STRATEGIES = [
+  {
+    id: "macd_zero_axis",
+    name: "日线零轴金叉",
+    recommended: true,
+    summary: "先卖一半，剩下的一半保住本",
+    entry: "DIF 上穿 DEA 的金叉，按 0轴上方 > 0轴附近 > 0轴下方排序，并要求温和放量、突破 MA5/MA10、红柱放大等确认条件。",
+    stop: "默认继承全局止损（8%）。半年对照里把止损放到 10% 更优，但那属于回测口径，不是已生效的建议值。",
+    take: "推荐「先卖一半 @+15%，剩余仓位把止损上移到成本价」。同类对照中两段区间分别 +13.12% / +13.10%（一次性全清为 +2.57% / −8.78%），最大回撤也从 16.3% / 21.4% 降到 11.6% / 12.5%。",
+    otherExits: "持仓超时 40 根日线；剩余仓位继续按止损与超时离场。",
+    steps: [
+      { when: "股价涨到成本价 +15%", action: "卖出最初股数的 50%", rest: "剩下 50%" },
+      { when: "首档成交之后", action: "剩余仓位的止损上移到成本价（跌破买入价就走）", rest: "剩下 50% 继续持有到止损 / 超时" },
+    ],
+    example: "10 元买入 1000 股（成本 10000 元）：涨到 11.5 元（+15%）卖出 500 股，落袋约 5750 元；剩下 500 股的止损从 9.2 元上移到 10 元。之后继续涨就拿着，一旦跌破 10 元就卖掉这 500 股、只赚点手续费的差价，不会倒亏。",
+    why: "先锁定一半利润，再用「保本止损」挡住「涨过又跌回去」——这是它比 30% 一次全清多赚、回撤还更浅的原因。",
+  },
+  {
+    id: "macd_divergence",
+    name: "零轴＋底背离",
+    recommended: true,
+    summary: "涨一档卖一档，分三次卖完",
+    entry: "零轴附近金叉叠加日线 MACD 底背离确认（正柱周期完成、价格创新高但动能收缩）。",
+    stop: "默认继承全局止损（8%）；该策略另外启用 v1b 退出规则集（顶背离 / 跌破年线 / 超时）。",
+    take: "推荐「阶梯减仓 1/3 @+15%、1/3 @+30%、1/3 @+45%」。两段区间分别 +0.18% / +16.54%（一次性全清为 −4.20% / +3.66%），回撤也从 12.3% / 12.7% 降到 9.7% / 8.1%。",
+    otherExits: "已确认的日线顶背离、跌破年线 MA250、持仓超时 40 根日线。",
+    steps: [
+      { when: "股价涨到成本价 +15%", action: "卖出最初股数的 1/3", rest: "剩下 2/3" },
+      { when: "股价涨到成本价 +30%", action: "再卖出 1/3", rest: "剩下 1/3" },
+      { when: "股价涨到成本价 +45%", action: "卖出最后 1/3，清仓", rest: "0" },
+    ],
+    example: "10 元买入 900 股：涨到 11.5 元卖 300 股 → 涨到 13 元再卖 300 股 → 涨到 14.5 元卖完最后 300 股。如果只涨到 12 元就掉头，只有第一档成交（卖掉 1/3），剩下 600 股继续按止损、顶背离、跌破年线、超时离场。",
+    why: "底背离是抄底信号，后面能涨多少不确定性大，所以分三档「见好就收」，涨得越多卖得越多。",
+  },
+  {
+    id: "yearline_pullback",
+    name: "年线趋势",
+    recommended: false,
+    summary: "不分批，涨 30% 一次全清",
+    entry: "MA250 向上 + 均线多头排列 + 回踩年线区间守稳 + 当日收阳（六条件固定，见「结果」页说明）。",
+    stop: "默认继承全局止损（8%）。该策略持仓期长、单笔盈亏比高（5.12），止损偏紧会频繁被震出。",
+    take: "保持一次性全清（30%）：8 种分批方案在两段区间全部跑输一次性全清（两段最好分别是 −2.25% 与 +7.24%，同期全清为 +2.37% 与 +14.79%）。它的利润本来就来自 30% 止盈那几笔，提前减半会削掉这部分。",
+    otherExits: "持仓超时 40 根日线。",
+    steps: [
+      { when: "股价涨到成本价 +30%", action: "一次性全部卖出", rest: "0" },
+    ],
+    example: "10 元买入 1000 股：涨到 13 元（+30%）→ 1000 股一次全卖，这笔结束。中途不设分批卖出。",
+    why: "它赚的是大趋势的钱——胜率只有 16%，全靠少数几笔涨到 30% 以上的行情拉动。如果涨 15% 就卖掉一半，等于把大行情的肉提前割掉，所以它保持原样。",
+  },
+] as const;
+
+/** 读懂上面三张表需要先统一的四个说法。 */
+const REDUCTION_GLOSSARY = [
+  { term: "档位涨幅", meaning: "相对「买入成本价」。+15% 就是成本价 × 1.15（10 元买的股票涨到 11.5 元）。" },
+  { term: "每档卖出比例", meaning: "相对「最初买入股数」，不是相对剩余仓位。三档各 1/3 就是把最初那笔分三次卖完。" },
+  { term: "尾仓 / 保本止损", meaning: "首档卖出后，把剩余仓位的止损从「成本价 −8%」上移到「成本价」：之后跌破买入价就保本走人。" },
+  { term: "默认状态", meaning: "三个策略默认都是「固定止盈 30% 一次性全清」；分批减仓需要手动开启，可全局设、也可按策略覆盖。" },
+];
+
 const CONFIG_PAGES = [
   { page: "策略配置", path: "/settings/strategies", purpose: "缠论参数、MACD 与底背离参数、止损止盈、扫描范围（自选/全市场）、监控周期" },
   { page: "推送配置", path: "/settings/notifications", purpose: "Bark、企业微信、邮件、Webhook 开关与密钥" },
@@ -219,6 +279,115 @@ export default function WorkflowPage() {
           );
         })}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="size-4" /> 三个买入策略与各自的止盈止损
+          </CardTitle>
+          <CardDescription>
+            在「设置 → 策略配置」里修改。三个策略共用「买入信号 → 次日开盘买入」的框架，但 <strong>退出规则各自独立</strong>：回测结论是「没有全局最优减仓方式，必须按策略分开」。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="text-xs font-medium">先统一四个说法</div>
+            <div className="mt-2 flex flex-col gap-1">
+              {REDUCTION_GLOSSARY.map((item) => (
+                <div key={item.term} className="text-xs leading-5 text-muted-foreground">
+                  <span className="font-medium text-foreground">{item.term}：</span>{item.meaning}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {ENTRY_STRATEGIES.map((strategy) => (
+            <div key={strategy.id} className="rounded-lg border p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{strategy.name}</span>
+                <Badge variant="outline" className="font-mono text-[10px]">{strategy.id}</Badge>
+                {strategy.recommended && <Badge variant="secondary">回测更优</Badge>}
+              </div>
+              <div className="mt-1.5 text-sm text-foreground">{strategy.summary}</div>
+              <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">买入条件：</span>{strategy.entry}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">止损：</span>{strategy.stop}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">止盈 / 减仓：</span>{strategy.take}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">其它离场：</span>{strategy.otherExits}
+              </div>
+
+              <div className="mt-3 overflow-hidden rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-medium">触发条件</th>
+                      <th className="px-2 py-1.5 text-left font-medium">卖出动作</th>
+                      <th className="px-2 py-1.5 text-left font-medium">卖出后剩余</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategy.steps.map((step) => (
+                      <tr key={step.when} className="border-t">
+                        <td className="px-2 py-1.5">{step.when}</td>
+                        <td className="px-2 py-1.5">{step.action}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground">{step.rest}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">举例：</span>{strategy.example}
+              </div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">为什么这样：</span>{strategy.why}
+              </div>
+            </div>
+          ))}
+
+          <div className="overflow-hidden rounded-lg border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-medium">策略</th>
+                  <th className="px-2 py-1.5 text-left font-medium">减仓方式（一句话）</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ENTRY_STRATEGIES.map((strategy) => (
+                  <tr key={strategy.id} className="border-t">
+                    <td className="px-2 py-1.5 font-medium">{strategy.name}</td>
+                    <td className="px-2 py-1.5">{strategy.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-lg border p-3 text-xs leading-5 text-muted-foreground">
+            <span className="font-medium text-foreground">三种减仓方式：</span>
+            <span className="ml-1">① 一次性全清（配置项 <code className="font-mono">risk.stop_profit_pct</code>，默认 30%，现状）</span>
+            <span className="mx-1">·</span>
+            <span>② 阶梯减仓（配置项 <code className="font-mono">risk.exit_plan</code>，按涨幅分档卖出原始仓位的固定比例）</span>
+            <span className="mx-1">·</span>
+            <span>③ 尾仓保护（首档成交后把剩余仓位止损上移到成本价，或按回撤比例移动止盈）。</span>
+            <span className="ml-1">三者在「策略配置」的「分批止盈」区域设置；默认关闭，即全部按 ① 执行。</span>
+          </div>
+          <div className="flex items-start gap-2 border-t pt-4 text-xs leading-5 text-muted-foreground">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              下表「回测更优」来自 2024 上半年（选参数）+ 2024 下半年（样本外复核）两段各半年的对照，止损档位沿用上一轮回测结果，<strong>未覆盖 2018/2022 类持续熊市</strong>，也没有做多区间滚动。它是研究结论，不是自动生效的推荐；启用与否属于人工决策。
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

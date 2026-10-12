@@ -325,13 +325,27 @@ ROE、统一负债率和 log 市值在没有新数据范围或新方法前不重
 
 ### 30. 第四优先级：退出与仓位模型
 
-- [ ] MFE 后利润保护或跟踪止盈
+- [x] MFE 后利润保护或跟踪止盈（2026-10-10：`risk.exit_plan` 支持保本止损/移动止盈；回测见归档）
 - [ ] ATR 跟踪止损/止盈
 - [ ] timeout 固定退出 vs MA-break 条件退出
 - [ ] 零轴死叉 1 日确认 vs 2 日确认
-- [ ] 分段止盈和回撤保护
+- [x] **持仓归属策略字段（2026-10-12 已完成）**：`quant.holdings` 新增 `strategy_id`（schema v5，
+  幂等 `ADD COLUMN IF NOT EXISTS`，存量行默认空串 = 未归属，行为不变）；`/assets?tab=holdings`
+  编辑表单新增「归属策略」选择，`PUT /api/holdings/<symbol>` 接受并校验该字段（未知 id → 422），
+  归属只在编辑既有持仓时下发。`portfolioSnapshot` 已 `SELECT *`，字段随 `portfolio_context`
+  进到 `stop_owner`，`risk.strategy_exit_plan.<id>` 与 `risk.strategy_stop_loss_pct.<id>`
+  在线上按归属生效。回归：`HoldingAttributionTests`（Python，归属生效 / 未归属不借口径）
+  + `holding strategy ownership` / `默认未归属，指定归属后能读回`（web，TS）。
+  升级需 `npm run db:setup` 且 `SCHEMA_VERSION` 已同步为 5。
+- [x] 分段止盈和回撤保护（2026-10-10：分批减仓 + 尾仓保护引擎与配置已落地，24 组 2024H1 对照 + 2024H2 样本外复核方向一致；**未更改默认参数**）
+- [x] 每日卖出信号与 AI 解读带上分批口径（2026-10-11：`strategy/registry.exit_plan_advice` 给出下一档触发价/建议股数/保本止损位，
+  `evaluate_strategies` 在实盘层按当日日线最高价补 `met`，推送 evidence 带 `exit_plan_advice`，`/results` 条件表直接显示执行摘要，
+  AI 提示词要求照抄引擎数字；回测回放层保持 `met = null` 不受影响。档位进度改由成交记录反推
+  （台账无 `exit_levels_taken`），样本不全时文案标明"按已知成交估算"；30 组 parity 仍零差异）
 
 不得重新开展“直接取消 SL8”或无证据放宽止损实验；所有退出实验必须保持单变量和尾部风险闸门。
+分批止盈属同一单变量闸门：档位/比例的任何默认变更都必须先在非重叠区间复核，
+且不得只凭单一半年样本的收益最高档直接投产。已知差异：年线趋势在两个区间都不适合分批减仓。
 
 ### 31. 统一因子验收闸门
 

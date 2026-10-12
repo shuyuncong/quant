@@ -108,6 +108,29 @@ describe("buildInterpretationContext", () => {
       expect(result.timeframes["1m"].recent_bars.length).toBeLessThan(100);
     }
   });
+
+  it("keeps strategy results so the model can quote reduction levels instead of guessing", () => {
+    // 档位触发价/建议股数/保本止损位只存在于 strategies 里：压缩时丢掉它，
+    // AI 解读就只能自己估仓位，与引擎分批发出的指令对不上。
+    const report = {
+      mode: "analyze",
+      results: [{
+        symbol: "600036.SH",
+        name: "招商银行",
+        strategies: [{
+          strategy_id: "macd_zero_axis",
+          name: "日线零轴金叉",
+          sell: true,
+          exit_plan_advice: { taken: 0, pending: 1, next: { trigger_price: 11.5, quantity: 500 }, summary: "下一档 +15% 触发价 11.500，卖出 500 股" },
+        }],
+        timeframes: { "1d": { status: "ok", indicators: { dif: 2 }, chan: {}, recent_bars: bars("600036.SH", 100) } },
+      }],
+    };
+    const parsed = JSON.parse(buildInterpretationContext(JSON.stringify(report), 20_000)) as typeof report;
+    const advice = parsed.results[0].strategies[0].exit_plan_advice;
+    expect(advice.next.trigger_price).toBe(11.5);
+    expect(advice.next.quantity).toBe(500);
+  });
 });
 
 describe("INTERPRET_SYSTEM_PROMPT", () => {
