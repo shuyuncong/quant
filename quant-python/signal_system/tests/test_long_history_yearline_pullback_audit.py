@@ -43,6 +43,46 @@ def test_distribution_reports_order_quantiles():
     assert result["non_negative_pct"] == 75.0
 
 
+def test_allowlist_matches_the_real_primary_to_current_config_diff():
+    """The allowlist must equal the actual diff, so a config edit cannot slip through.
+
+    The frozen primary lives in a git blob; when it is unavailable (shallow clone,
+    exported tree) the comparison is skipped rather than failed.
+    """
+    import subprocess
+
+    import yaml
+
+    from long_history_yearline_pullback_audit import (
+        ALLOWED_NON_EXECUTION_CONFIG_DIFFS,
+        CONFIG_REPOSITORY_PATH,
+        PRIMARY_CONFIG_GIT_REVISION,
+        _mapping_differences,
+    )
+
+    blob = subprocess.run(["git", "show", f"{PRIMARY_CONFIG_GIT_REVISION}:{CONFIG_REPOSITORY_PATH}"],
+                          cwd=ROOT.parents[1], capture_output=True)
+    if blob.returncode != 0:
+        pytest.skip("frozen primary config blob is unavailable in this checkout")
+    primary = yaml.safe_load(blob.stdout.decode("utf-8"))
+    current = yaml.safe_load((ROOT / "config" / Path(CONFIG_REPOSITORY_PATH).name).read_text(encoding="utf-8"))
+    differences = _mapping_differences(primary, current)
+    # 允许表用 "<PRESENT>" 简写"新增了一个非空配置段"，其余条目必须逐值相等；
+    # 两种写法都在这里被机器核对，避免手写条目长期与真实差异漂移。
+    assert set(differences) == set(ALLOWED_NON_EXECUTION_CONFIG_DIFFS), (
+        "config.yaml 与 allowlist 的差异集合不一致: "
+        f"新增未登记={sorted(set(differences) - set(ALLOWED_NON_EXECUTION_CONFIG_DIFFS))} "
+        f"已失效={sorted(set(ALLOWED_NON_EXECUTION_CONFIG_DIFFS) - set(differences))}"
+    )
+    for path, (left, right) in differences.items():
+        allowed_left, allowed_right = ALLOWED_NON_EXECUTION_CONFIG_DIFFS[path]
+        assert left == allowed_left, f"{path} 左侧不一致: {left!r} != {allowed_left!r}"
+        if allowed_right == "<PRESENT>":
+            assert right not in ("<MISSING>", None), f"{path} 声明为新增非空段，但实际不是: {right!r}"
+        else:
+            assert right == allowed_right, f"{path} 右侧不一致: {right!r} != {allowed_right!r}"
+
+
 def test_effect_compares_dynamic_to_fixed_eight():
     result = _effect(
         {

@@ -51,12 +51,16 @@ from utils.time_utils import now_shanghai
 logger = logging.getLogger(__name__)
 
 # 退出条件优先级: 数字越小越先作为提醒的主因 (止损最紧急, 止盈最不急)。
+# 分批止盈/移动止盈排在整仓离场规则之后：同日既触发整仓离场又触发减仓档时，
+# 主因必须仍然是"这只票要走了"，不能因为减仓档顺带触发就弱化成只卖一部分。
 EXIT_RULE_PRIORITY = {
     "持仓成本止损": 0,
     "已确认日线顶背离": 1,
     "跌破年线": 2,
     "持仓超时": 3,
-    "固定止盈": 4,
+    "分批止盈": 4,
+    "移动止盈": 5,
+    "固定止盈": 6,
 }
 
 
@@ -348,6 +352,35 @@ class SignalMonitor:
                 filtered_events.append(event)
         return filtered_events
 
+    def _holding_with_trade_history(self, holding: dict) -> dict:
+        """把该股的成交记录挂到持仓上，供分批减仓进度反推使用。
+
+        回测/回放的持仓由引擎自己维护档位状态，不经过这里，所以口径不会被污染。
+        `history_complete` 随快照传递：为假时规则层会把反推结果标成"估算"。
+        持仓表没有建仓日字段，这里用最早一笔买入补上，否则"持有满 N 根日线"只能报未知。
+        """
+        context = getattr(self, "portfolio_context", None) or {}
+        symbol = str(holding.get("symbol") or "")
+        trades = [
+            row for row in (context.get("trades") or [])
+            if isinstance(row, dict) and str(row.get("symbol") or "") == symbol
+        ]
+        if not trades:
+            return holding
+        enriched = dict(holding)
+        enriched["trades"] = trades
+        if "history_complete" in context:
+            enriched["history_complete"] = bool(context.get("history_complete"))
+        if not enriched.get("opened_on"):
+            opened = sorted(
+                str(row.get("traded_at") or "")[:10]
+                for row in trades
+                if str(row.get("side") or "").strip().lower() == "buy" and str(row.get("traded_at") or "")[:10]
+            )
+            if opened:
+                enriched["opened_on"] = opened[0]
+        return enriched
+
     def _exit_notification_events(
         self,
         analysis: dict[str, Any],
@@ -390,6 +423,11 @@ class SignalMonitor:
             str(strategy.get("strategy_id")): str(strategy.get("exit_rule") or "")
             for strategy in (analysis.get("strategies") or [])
         }
+        plan_advice = {
+            str(strategy.get("strategy_id")): strategy.get("exit_plan_advice")
+            for strategy in (analysis.get("strategies") or [])
+            if strategy.get("exit_plan_advice")
+        }
         event = SignalEvent(
             symbol=symbol,
             name=str(holding.get("name") or name or primary.get("name") or ""),
@@ -417,6 +455,9 @@ class SignalMonitor:
                 # 同一条规则被多个策略同时标出时, 不挑一个"背锅": 全部列出来。
                 "strategy_names": sorted({alert["strategy_name"] for alert in alerts}),
                 "exit_mode": exit_modes.get(primary["strategy_id"], ""),
+                # 分批减仓建议：档位、触发价、建议股数、保本止损位。提醒里带上它，
+                # 收到推送就能直接照着下单，不用回页面重新算。
+                "exit_plan_advice": plan_advice.get(primary["strategy_id"]),
                 "cost_price": cost or None,
                 "pnl_pct": round((price / cost - 1) * 100, 2) if cost > 0 and price > 0 else None,
                 "opened_on": holding.get("opened_on"),
@@ -563,6 +604,10 @@ class SignalMonitor:
                 if getattr(self, "analysis_version", 1) == 2:
                     from strategy.registry import evaluate_strategies
                     holding = next((row for row in getattr(self, "portfolio_context", {}).get("holdings", []) if row.get("symbol") == symbol), None)
+                    # 持仓表没有档位字段，把成交记录一起交给规则层，
+                    # 才能算出"已经减过几档、尾仓止损该不该上移"，而不是按 0 猜。
+                    if holding is not None:
+                        holding = self._holding_with_trade_history(holding)
                     analysis["strategies"] = evaluate_strategies(
                         bars.get("1d", pd.DataFrame()), self.config, holding,
                         as_of=getattr(self, "analysis_cutoff", None),

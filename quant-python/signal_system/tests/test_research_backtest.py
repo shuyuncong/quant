@@ -9,7 +9,7 @@ import pandas as pd
 
 import research_backtest as rb
 from research_backtest import entry_indices, metrics, prepare_backtest_inputs, replay
-from strategy.registry import STRATEGIES, evaluate_strategies
+from strategy.registry import STRATEGIES, evaluate_strategies, resolve_exit_plan
 
 CALENDAR_DAYS = [str(day.date()) for day in pd.bdate_range("2022-01-03", "2024-03-29")]
 
@@ -245,6 +245,97 @@ class ResearchBacktestReplayTests(unittest.TestCase):
         self.assertEqual(inherited["trades"], [])
         config["risk"]["strategy_stop_loss_pct"]["macd_zero_axis"] = .05
         self.assertEqual(json.dumps(config, sort_keys=True), frozen)
+
+    def exit_frame(self, dates, price=10.0):
+        # Entry bar (index 271) opens at 10, so the first fill is 2400 shares: budget
+        # 25000, commission 5, slippage 0.05% leaves room for 24 lots.
+        frame = bars(dates, price=price)
+        frame.loc[271, "open"] = price
+        return frame
+
+    def run_plan(self, frame, dates, plan, stop_loss_pct=.20, strategy="macd_zero_axis"):
+        signals = {"600000.SH": {key: set() for key in STRATEGIES}}
+        signals["600000.SH"][strategy] = {270}
+        config = {"backtest": {"price_limit_model": "none"},
+                  "risk": {"stop_loss_pct": stop_loss_pct, "stop_profit_pct": .30, "exit_plan": plan}}
+        return replay({"600000.SH": frame}, signals, dates[269:278], config, self.options(dates[269]), strategy)
+
+    def test_scale_out_sells_each_level_as_a_separate_trade(self):
+        dates = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = self.exit_frame(dates)
+        frame.loc[272:, ["open", "high", "low", "close"]] = [10.9, 11.2, 10.7, 11.1]
+        frame.loc[273:, ["open", "high", "low", "close"]] = [11.1, 12.3, 11.0, 12.2]
+        plan = {"initial_fraction": .5, "first_gain": .10, "tiers": [{"gain": .20, "fraction": .5}]}
+        result = self.run_plan(frame, dates, plan)
+        self.assertEqual([(trade["exit_day"], trade["quantity"], trade["exit_reason"]) for trade in result["trades"]],
+                         [(dates[272], 1200, "take_profit"), (dates[273], 1200, "take_profit")])
+        # A favourable gap fills at the open, otherwise the level itself.
+        self.assertEqual([trade["exit_price"] for trade in result["trades"]], [11.0, 12.0])
+        self.assertEqual(result["open_positions"], 0)
+
+    def test_plan_keeps_single_take_profit_level_when_not_configured(self):
+        dates = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = self.exit_frame(dates)
+        frame.loc[272:, ["open", "high", "low", "close"]] = [11.1, 11.3, 10.9, 11.2]
+        signals = {"600000.SH": {key: set() for key in STRATEGIES}}
+        signals["600000.SH"]["macd_zero_axis"] = {270}
+        config = {"backtest": {"price_limit_model": "none"}, "risk": {"stop_loss_pct": .20, "stop_profit_pct": .10}}
+        result = replay({"600000.SH": frame}, signals, dates[269:274], config, self.options(dates[269]), "macd_zero_axis")
+        # No plan = the historical one-level all-out exit, unchanged.
+        self.assertEqual([(trade["quantity"], trade["exit_reason"]) for trade in result["trades"]], [(2400, "take_profit")])
+
+    def test_breakeven_tail_stops_at_entry_after_the_first_level(self):
+        dates = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = self.exit_frame(dates)
+        frame.loc[272:, ["open", "high", "low", "close"]] = [11.0, 11.2, 10.8, 11.1]
+        frame.loc[273:, ["open", "high", "low", "close"]] = [11.0, 11.05, 9.9, 10.0]
+        plan = {"initial_fraction": .5, "first_gain": .10, "protect_tail": "breakeven"}
+        result = self.run_plan(frame, dates, plan)
+        self.assertEqual([(trade["exit_day"], trade["exit_price"], trade["exit_reason"]) for trade in result["trades"]],
+                         [(dates[272], 11.0, "take_profit"), (dates[273], 10.0, "stop_loss")])
+        # Without the raised stop the same bar would still be held at the 20% stop (8.0).
+        loose = self.run_plan(frame, dates, {"initial_fraction": .5, "first_gain": .10})
+        self.assertEqual([trade["exit_reason"] for trade in loose["trades"]], ["take_profit"])
+
+    def test_trailing_tail_arms_on_a_close_and_never_exits_its_activation_bar(self):
+        dates = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = self.exit_frame(dates)
+        # +15% activation needs a close at or above 11.5; a 12.0 high that closes 11.4
+        # is not enough, so the tail cannot arm and exit on the same bar.
+        frame.loc[272:, ["open", "high", "low", "close"]] = [11.4, 12.0, 10.2, 11.4]
+        frame.loc[273:, ["open", "high", "low", "close"]] = [11.4, 11.6, 11.2, 11.5]
+        frame.loc[274:, ["open", "high", "low", "close"]] = [11.4, 11.45, 10.5, 10.6]
+        plan = {"trailing_activation_gain": .15, "trailing_pct": .08}
+        result = self.run_plan(frame, dates, plan)
+        # Armed on the close of day 273; the floor is 11.5 * 0.92 = 10.58 on day 274.
+        self.assertEqual([(trade["exit_day"], trade["exit_price"], trade["exit_reason"]) for trade in result["trades"]],
+                         [(dates[274], 10.58, "profit_lock")])
+
+    def test_malformed_plan_raises_instead_of_changing_the_exit(self):
+        dates = [str(day.date()) for day in pd.bdate_range("2024-01-01", periods=280)]
+        frame = self.exit_frame(dates)
+        with self.assertRaises(ValueError):
+            self.run_plan(frame, dates, {"initial_fraction": .5, "first_gain": .10, "tiers": [{"gain": .05, "fraction": .5}]})
+        with self.assertRaises(ValueError):
+            self.run_plan(frame, dates, {"initial_fraction": .6, "first_gain": .10, "tiers": [{"gain": .30, "fraction": .5}]})
+        with self.assertRaises(ValueError):
+            self.run_plan(frame, dates, {"trailing_activation_gain": .15})
+
+    def test_strategy_scoped_plan_overrides_and_inherits_global(self):
+        override = {"initial_fraction": .5, "first_gain": .10}
+        global_plan = {"trailing_activation_gain": .15, "trailing_pct": .08}
+        config = {"risk": {"exit_plan": global_plan, "strategy_exit_plan": {"macd_zero_axis": override}}}
+        self.assertEqual(resolve_exit_plan(config, "macd_zero_axis")["levels"],
+                         [{"gain": .10, "fraction": .5}])
+        self.assertEqual(resolve_exit_plan(config, "yearline_pullback"),
+                         {"levels": [], "breakeven": False, "trailing": {"activation_gain": .15, "pct": .08}})
+        self.assertEqual(resolve_exit_plan({"risk": {}}, "macd_zero_axis"), {})
+        # An explicit empty plan opts a single strategy out while the global plan stands.
+        opted_out = {"risk": {"exit_plan": {"initial_fraction": .5, "first_gain": .15},
+                              "strategy_exit_plan": {"macd_zero_axis": {}}}}
+        self.assertEqual(resolve_exit_plan(opted_out, "macd_zero_axis"), {})
+        self.assertEqual(resolve_exit_plan(opted_out, "macd_divergence")["levels"],
+                         [{"gain": .15, "fraction": .5}])
 
 
 class PrepareBacktestInputsTests(unittest.TestCase):

@@ -95,6 +95,17 @@ class SignalNotifier:
             # 成本未知时不要印 0.000/+0.00%: 那是"算不出来", 不是"不亏不赚"。
             cost_text = f"{float(cost):.3f}" if cost else "未知"
             pnl_text = f"{float(pnl):+.2f}%" if pnl is not None else "未知"
+            # 分批减仓：只喊"该减仓了"没用，必须给出档位触发价、卖多少股和尾仓止损位。
+            # 分批止盈本身就是头条规则时，触发条件那行已经含了同一段摘要，别重复印一遍。
+            plan = evidence.get("exit_plan_advice") or {}
+            summary = str(plan.get("summary") or "")
+            plan_lines = ""
+            if summary and not any(summary in str(reason) for reason in reasons):
+                plan_lines = f"- 分批减仓：{summary}\n"
+            if plan.get("breakeven_active"):
+                stop = plan.get("breakeven_stop_price")
+                stop_text = f"{float(stop):.3f}" if stop is not None else "成本价"
+                plan_lines += f"- 尾仓止损：已上移到成本价 {stop_text}\n"
             return (
                 f"# 🔴 策略退出提醒\n\n"
                 f"> **{payload.get('name', '')} ({payload['symbol']})**\n\n"
@@ -103,6 +114,7 @@ class SignalNotifier:
                 f"- 成本价：{cost_text}\n"
                 f"- 浮动盈亏：{pnl_text}\n"
                 f"- 触发条件：{'；'.join(reasons) if reasons else '见结构化 evidence'}\n"
+                f"{plan_lines}"
                 f"- 建仓日：{evidence.get('opened_on') or '未知'}\n"
                 f"- 确认时间：{payload['confirmed_at']}\n\n"
                 f"> {payload['risk_notice']}\n"

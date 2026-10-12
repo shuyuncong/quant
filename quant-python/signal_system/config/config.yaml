@@ -204,6 +204,16 @@ position:
 risk:
   stop_loss_pct: 0.08
   stop_profit_pct: 0.30
+  # 分批止盈计划: 不配置时保持"固定止盈一次性全清"。结构见 research_backtest.resolve_exit_plan:
+  #   levels[].gain 为相对成本价的绝对涨幅, levels[].fraction 为该档卖出的原始仓位比例;
+  #   protect_tail=breakeven 表示首档成交后尾仓止损上移到成本价;
+  #   trailing_activation_gain/trailing_pct 为尾仓移动止盈 (按收盘价激活, 回撤比例清仓)。
+  # 也可用 strategy_exit_plan.<strategy_id> 做策略级覆盖, 值为 null 时继承此全局计划。
+  exit_plan: null
+  strategy_exit_plan:
+    macd_zero_axis: null
+    yearline_pullback: null
+    macd_divergence: null
   long_holding_days_threshold: 40
   long_holding_stop_loss_multiplier: 1.25
   long_holding_stop_profit_multiplier: 1.10

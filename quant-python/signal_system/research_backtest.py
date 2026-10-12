@@ -430,6 +430,9 @@ def replay(histories: dict[str, pd.DataFrame], signals: dict[str, dict[str, set[
     allocation = float(options.get("position_size_pct", .25))
     execution = _execution_values(_resolve_execution_config(config))
     rules = exit_parameters(config, strategy)
+    # The plan travels with the exit rules so a strategy override or owner-based
+    # resolution can never disagree with the take-profit percentage in the same dict.
+    plan = rules["exit_plan"]
     locations = {symbol: {str(pd.Timestamp(value).date()): index for index, value in enumerate(frame.datetime)} for symbol, frame in histories.items()}
     candidates: dict[str, list[tuple[str, int]]] = {}
     for symbol, frame in histories.items():
@@ -443,19 +446,48 @@ def replay(histories: dict[str, pd.DataFrame], signals: dict[str, dict[str, set[
     positions: dict[str, dict] = {}
     trades, curve, rejected = [], [], []
 
-    def sell(symbol, index, price, reason, day, session):
+    def sell(symbol, index, price, reason, day, session, quantity=None):
+        """Sell all or part of a position. A missing quantity keeps the legacy all-in/out path."""
         nonlocal cash
         position = positions[symbol]
+        remaining = position["quantity"]
+        quantity = remaining if quantity is None else min(int(quantity), remaining)
+        if quantity <= 0:
+            return None
         resolved = _resolve_sell_fill(symbol, histories[symbol], index, price, session, execution)
         if resolved is None:
+            # A locked limit-down defers the exit to the next opening. Only a full exit
+            # can arrive here: a scale-out needs the bar high, which a locked bar lacks.
             position["pending_exit"] = reason
-            return False
+            return None
         costs = {**execution, "stamp_tax_pct": .0005 if day >= "2023-08-28" else .001}
-        received = _sell_cash(resolved[0], position["quantity"], costs)["total"]
+        received = _sell_cash(resolved[0], quantity, costs)["total"]
+        unit_cost = position["entry_cash"] / position["orig_quantity"]
         cash += received
-        trades.append({"symbol": symbol, "entry_day": position["entry_day"], "exit_day": day, "entry_price": position["entry_price"], "exit_price": resolved[0], "quantity": position["quantity"], "pnl_cash": received - position["entry_cash"], "exit_reason": reason})
-        del positions[symbol]
-        return True
+        trades.append({"symbol": symbol, "entry_day": position["entry_day"], "exit_day": day, "entry_price": position["entry_price"], "exit_price": resolved[0], "quantity": quantity, "pnl_cash": received - unit_cost * quantity, "exit_reason": reason})
+        position["quantity"] -= quantity
+        position["pending_exit"] = None
+        if position["quantity"] <= 0:
+            del positions[symbol]
+        return received
+
+    def scale_out(symbol, position, index, price, fraction, day):
+        """Sell ``fraction`` of the original position, absorbing a sub-lot remainder.
+
+        Retail lots truncate to whole lots, so the final partial level would otherwise
+        leave a sub-lot dust position that never exits; absorb the remainder instead.
+        Returns the realised cash on a fill and ``None`` when the book is locked.
+        """
+        lot = execution["lot_size"]
+        quantity = position["quantity"] if fraction >= 1.0 else int(position["orig_quantity"] * fraction / lot) * lot
+        quantity = min(quantity, position["quantity"])
+        if fraction < 1.0 and position["quantity"] - quantity < lot:
+            quantity = position["quantity"]
+        if quantity <= 0:
+            return None
+        # The fill is the worse of the bar open and the level price.
+        fill = max(float(price), float(histories[symbol].iloc[index].open))
+        return sell(symbol, index, fill, "take_profit", day, "intraday", quantity)
 
     for day in calendar:
         # Only opening exits release cash for orders executed at this opening.
@@ -486,23 +518,68 @@ def replay(histories: dict[str, pd.DataFrame], signals: dict[str, dict[str, set[
                 continue
             spent = _buy_cash(price, quantity, execution)["total"]
             cash -= spent
-            positions[symbol] = {"quantity": quantity, "entry_price": price, "entry_cash": spent, "entry_day": day, "entry_index": index, "mark": price, "pending_exit": None}
+            positions[symbol] = {"quantity": quantity, "orig_quantity": quantity, "entry_price": price, "entry_cash": spent, "entry_day": day, "entry_index": index, "mark": price, "pending_exit": None, "levels_taken": 0, "breakeven_active": False, "trailing_active": False, "peak_high": -1.0}
         for symbol, position in list(positions.items()):
             index = locations[symbol].get(day)
             if index is None:
                 continue
             frame = histories[symbol]
             row = frame.iloc[index]
-            position["mark"] = float(row.close)
+            close = float(row.close)
+            position["mark"] = close
             if day > position["entry_day"] and float(row.volume) > 0:
-                stop = position["entry_price"] * (1 - rules["stop_loss_pct"])
-                take = position["entry_price"] * (1 + rules["take_profit_pct"]) if rules["take_profit_pct"] is not None else None
-                if float(row.low) <= stop:
-                    if sell(symbol, index, min(float(row.open), stop), "stop_loss", day, "intraday"):
-                        continue
-                elif take is not None and float(row.high) >= take:
-                    if sell(symbol, index, max(float(row.open), take), "take_profit", day, "intraday"):
-                        continue
+                if plan:
+                    # A plan owns the take-profit side; the levels below the entry are
+                    # only the initial stop and, once armed, the protected tail stop.
+                    stop = position["entry_price"]
+                    if not position["breakeven_active"]:
+                        stop *= 1 - rules["stop_loss_pct"]
+                    if float(row.low) <= stop:
+                        if sell(symbol, index, min(float(row.open), stop), "stop_loss", day, "intraday") is not None:
+                            continue
+                    # Intraday precedence: stop → tail protection → next ladder level.
+                    # A daily bar cannot order its own path, so the engine takes the
+                    # adverse outcome first (same rule as stop-before-take below).
+                    elif position["trailing_active"]:
+                        floor = position["peak_high"] * (1 - plan["trailing"]["pct"])
+                        if float(row.low) <= floor:
+                            if sell(symbol, index, min(float(row.open), floor), "profit_lock", day, "intraday") is not None:
+                                continue
+                    elif position["levels_taken"] < len(plan["levels"]):
+                        # Fill the next level once the bar trades through it. The bar path
+                        # is unknowable, so at most one scale-out per day keeps the study
+                        # from claiming an intraday round trip it cannot prove happened.
+                        level = position["entry_price"] * (1 + plan["levels"][position["levels_taken"]]["gain"])
+                        # a favourable gap fills at the open; otherwise the level itself.
+                        trigger = float(row.open) if float(row.open) >= level else level
+                        if float(row.high) >= level and float(row.low) <= trigger:
+                            fraction = plan["levels"][position["levels_taken"]]["fraction"]
+                            # A level needs the bar high, so a locked limit-down bar can
+                            # never hold one up; the fill only differs by the rounded lots.
+                            if scale_out(symbol, position, index, level, fraction, day) is not None:
+                                position["levels_taken"] += 1
+                                if plan["breakeven"]:
+                                    position["breakeven_active"] = True
+                else:
+                    stop = position["entry_price"] * (1 - rules["stop_loss_pct"])
+                    take = position["entry_price"] * (1 + rules["take_profit_pct"]) if rules["take_profit_pct"] is not None else None
+                    # Stop always resolves first: a daily bar cannot order its own highs
+                    # and lows, and taking the stop first is the conservative reading.
+                    if float(row.low) <= stop:
+                        if sell(symbol, index, min(float(row.open), stop), "stop_loss", day, "intraday") is not None:
+                            continue
+                    elif take is not None and float(row.high) >= take:
+                        if sell(symbol, index, max(float(row.open), take), "take_profit", day, "intraday") is not None:
+                            continue
+            if symbol not in positions:
+                continue
+            # The trailing tail tracks the highest close actually reached; activation
+            # starts at the close above the activation gain so the floor can never sit
+            # below the entry and turn a winner into a loss.
+            if plan and plan["trailing"] is not None:
+                position["peak_high"] = max(position["peak_high"], close)
+                if not position["trailing_active"] and close >= position["entry_price"] * (1 + plan["trailing"]["activation_gain"]):
+                    position["trailing_active"] = True
             # Attribute the synthetic holding to the replay strategy so a real holding's
             # strategy override applies here; without the tag the stop would fall back to
             # the global one and silently neutralize the backtest.

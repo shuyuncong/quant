@@ -67,7 +67,9 @@ CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
 # 成交量/因子/回测口径未变，旧值 9aec5db0…
 # 2026-09-17 重新登记：config.yaml 仅调度(04:00→17:00)漂移；成交量/因子口径未变，旧值 4e0084eb…
 PREREGISTERED_CONFIG_SHA256 = (
-    "39771129042fb826389b49c111ed81340867a1e9aced522ac7e5cf516d7e400f"
+# 2026-10-10 重新登记：config.yaml 新增 risk.exit_plan / risk.strategy_exit_plan
+# (分批止盈计划, 默认 null)；不动成交、因子、回测与既有策略口径，旧值 39771129…
+    "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 )
 PREREGISTERED_CANONICAL_SHA256 = {
     "train": "28a2defd6f7f09904295cb270cc311bf989add84b4cd0c8dc947d4e59a4fb40f",

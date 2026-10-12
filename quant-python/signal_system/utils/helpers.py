@@ -194,6 +194,14 @@ DEFAULT_CONFIG = {
             "yearline_pullback": None,
             "macd_divergence": None,
         },
+        # 分批止盈计划: 不配置 (null) 时保持单次固定止盈全清的历史口径。
+        # 结构见 research_backtest.resolve_exit_plan; 策略级覆盖同理可为 null 继承全局。
+        "exit_plan": None,
+        "strategy_exit_plan": {
+            "macd_zero_axis": None,
+            "yearline_pullback": None,
+            "macd_divergence": None,
+        },
         "stop_profit_pct": 0.30,
         "long_holding_days_threshold": 40,
         "long_holding_stop_loss_multiplier": 1.25,

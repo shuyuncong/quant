@@ -33,7 +33,9 @@ INPUT_VERSION = "long_history_yearline_trend_experiment.v1"
 PRIMARY_CONFIG_GIT_REVISION = "e2787288051ab1ec6bcdfba40c04fa7e59295863"
 CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
 PRIMARY_CONFIG_SHA256 = "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
-VERIFY_CONFIG_SHA256 = "39771129042fb826389b49c111ed81340867a1e9aced522ac7e5cf516d7e400f"
+# 2026-10-10 重新登记：config.yaml 新增 risk.exit_plan / risk.strategy_exit_plan
+# (分批止盈计划, 默认 null)；不动成交、因子、回测与既有策略口径，旧值 39771129…
+VERIFY_CONFIG_SHA256 = "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 FROZEN_EXPERIMENT_SHA256 = "033818294f9504fba61c6223a671fa99224fa89827990b74d43c26d3f4375b67"
 FROZEN_BACKTEST_ENGINE_SHA256 = "562278a0a551e7ed3ef77cb21e49a6e85369cc9dd8df8843d83872d5c3969e2b"
 ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
@@ -50,7 +52,11 @@ ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
     # 2026-10-04: 新增 trading_limits (持仓台账/交易闸门)。只在信号侧校验与记账,
     # 不参与 yearline_pullback 的回测执行口径。
     "trading_limits": ("<MISSING>", "<PRESENT>"),
-    "trading_limits.account_equity": ("<MISSING>", "<PRESENT>"),
+    # 2026-10-10: 新增 risk.exit_plan / risk.strategy_exit_plan (分批止盈计划)。
+    # risk.exit_plan 默认 null；strategy_exit_plan 为三个 null 的策略级覆盖，
+    # yearline_pullback 仍走 fixed 止盈 + 持仓超时，口径未变。
+    "risk.exit_plan": ("<MISSING>", None),
+    "risk.strategy_exit_plan": ("<MISSING>", {"macd_zero_axis": None, "yearline_pullback": None, "macd_divergence": None}),
 }
 ROUTE = "yearline_pullback"
 PROFILES = ("fixed_sl8", "dynamic_sl5_sl8")
