@@ -1,0 +1,218 @@
+{
+ "strategies": [
+  "macd_zero_axis",
+  "yearline_pullback",
+  "macd_divergence"
+ ],
+ "best_plan": {
+  "macd_zero_axis": "ladder_b",
+  "yearline_pullback": "none",
+  "macd_divergence": "ladder_b"
+ },
+ "windows": {
+  "2024H1": {
+   "macd_zero_axis|nogate": {
+    "plan": "ladder_b",
+    "return_pct": 1.9736102044000114,
+    "annualized_pct": 4.299302645660519,
+    "max_dd_pct": 11.038051564643093,
+    "sharpe": 0.299679536698987,
+    "payoff": 0.9754825524084392,
+    "win_rate_pct": 56.00000000000001,
+    "trades": 25,
+    "open_positions": 4
+   },
+   "macd_zero_axis|gate": {
+    "plan": "ladder_b",
+    "return_pct": 0.0,
+    "annualized_pct": 0.0,
+    "max_dd_pct": 0.0,
+    "sharpe": null,
+    "payoff": null,
+    "win_rate_pct": null,
+    "trades": 0,
+    "open_positions": 0
+   },
+   "yearline_pullback|nogate": {
+    "plan": "none",
+    "return_pct": 2.3711000604,
+    "annualized_pct": 5.1769298767677,
+    "max_dd_pct": 17.220753578399993,
+    "sharpe": 0.31767847130549587,
+    "payoff": 5.124201588462028,
+    "win_rate_pct": 16.27906976744186,
+    "trades": 43,
+    "open_positions": 4
+   },
+   "yearline_pullback|gate": {
+    "plan": "none",
+    "return_pct": 0.0,
+    "annualized_pct": 0.0,
+    "max_dd_pct": 0.0,
+    "sharpe": null,
+    "payoff": null,
+    "win_rate_pct": null,
+    "trades": 0,
+    "open_positions": 0
+   },
+   "macd_divergence|nogate": {
+    "plan": "ladder_b",
+    "return_pct": 1.022276644799991,
+    "annualized_pct": 2.214819235315746,
+    "max_dd_pct": 9.640160771200003,
+    "sharpe": 0.2120411796198289,
+    "payoff": 1.5064590895869896,
+    "win_rate_pct": 38.46153846153847,
+    "trades": 26,
+    "open_positions": 3
+   },
+   "macd_divergence|gate": {
+    "plan": "ladder_b",
+    "return_pct": 0.0,
+    "annualized_pct": 0.0,
+    "max_dd_pct": 0.0,
+    "sharpe": null,
+    "payoff": null,
+    "win_rate_pct": null,
+    "trades": 0,
+    "open_positions": 0
+   }
+  },
+  "2024H2": {
+   "macd_zero_axis|nogate": {
+    "plan": "ladder_b",
+    "return_pct": 1.002094940000009,
+    "annualized_pct": 2.0305081820129134,
+    "max_dd_pct": 17.929745125384475,
+    "sharpe": 0.20855988238325918,
+    "payoff": 0.8863692197791836,
+    "win_rate_pct": 54.54545454545454,
+    "trades": 33,
+    "open_positions": 4
+   },
+   "macd_zero_axis|gate": {
+    "plan": "ladder_b",
+    "return_pct": -17.202481577999997,
+    "annualized_pct": -31.652455245391874,
+    "max_dd_pct": 21.40568968691442,
+    "sharpe": -1.8562607824796162,
+    "payoff": 0.6247947902194453,
+    "win_rate_pct": 20.0,
+    "trades": 10,
+    "open_positions": 4
+   },
+   "yearline_pullback|nogate": {
+    "plan": "none",
+    "return_pct": 14.791233336000008,
+    "annualized_pct": 32.06142635231477,
+    "max_dd_pct": 10.426156786399998,
+    "sharpe": 1.225509329037287,
+    "payoff": 6.967125057228952,
+    "win_rate_pct": 15.909090909090908,
+    "trades": 44,
+    "open_positions": 4
+   },
+   "yearline_pullback|gate": {
+    "plan": "none",
+    "return_pct": 3.2115457316000073,
+    "annualized_pct": 6.580122974176428,
+    "max_dd_pct": 6.3022165839228315,
+    "sharpe": 0.5561907542930665,
+    "payoff": 8.225333036159778,
+    "win_rate_pct": 12.5,
+    "trades": 16,
+    "open_positions": 3
+   },
+   "macd_divergence|nogate": {
+    "plan": "ladder_b",
+    "return_pct": 11.153472125999997,
+    "annualized_pct": 23.760152356960695,
+    "max_dd_pct": 8.670998338181764,
+    "sharpe": 1.2274592639261175,
+    "payoff": 1.268525848426288,
+    "win_rate_pct": 53.84615384615385,
+    "trades": 26,
+    "open_positions": 4
+   },
+   "macd_divergence|gate": {
+    "plan": "ladder_b",
+    "return_pct": -0.8267715091999972,
+    "annualized_pct": -1.6597712333572545,
+    "max_dd_pct": 8.068292255710062,
+    "sharpe": -0.07125745645432635,
+    "payoff": 0.9866519212361556,
+    "win_rate_pct": 44.44444444444444,
+    "trades": 9,
+    "open_positions": 4
+   }
+  },
+  "2024Q4": {
+   "macd_zero_axis|nogate": {
+    "plan": "ladder_b",
+    "return_pct": -18.944206765999994,
+    "annualized_pct": -58.00732943790191,
+    "max_dd_pct": 19.213825774399997,
+    "sharpe": -2.815601525655634,
+    "payoff": 0.6091747545687732,
+    "win_rate_pct": 23.076923076923077,
+    "trades": 13,
+    "open_positions": 4
+   },
+   "macd_zero_axis|gate": {
+    "plan": "ladder_b",
+    "return_pct": -17.202481577999997,
+    "annualized_pct": -54.15231041789297,
+    "max_dd_pct": 21.40568968691442,
+    "sharpe": -2.66530657992597,
+    "payoff": 0.6247947902194453,
+    "win_rate_pct": 20.0,
+    "trades": 10,
+    "open_positions": 4
+   },
+   "yearline_pullback|nogate": {
+    "plan": "none",
+    "return_pct": 2.3655343679999996,
+    "annualized_pct": 10.140405705181,
+    "max_dd_pct": 7.340965830207969,
+    "sharpe": 0.7051426662821899,
+    "payoff": 7.982866163802861,
+    "win_rate_pct": 9.090909090909092,
+    "trades": 11,
+    "open_positions": 4
+   },
+   "yearline_pullback|gate": {
+    "plan": "none",
+    "return_pct": 3.2115457316000073,
+    "annualized_pct": 13.94979794555795,
+    "max_dd_pct": 6.3022165839228315,
+    "sharpe": 0.7933244476033758,
+    "payoff": 8.225333036159778,
+    "win_rate_pct": 12.5,
+    "trades": 16,
+    "open_positions": 3
+   },
+   "macd_divergence|nogate": {
+    "plan": "ladder_b",
+    "return_pct": 0.44551750000001444,
+    "annualized_pct": 1.8533765068724506,
+    "max_dd_pct": 8.593953743599995,
+    "sharpe": 0.1900790184652905,
+    "payoff": 1.2365289679743419,
+    "win_rate_pct": 42.857142857142854,
+    "trades": 14,
+    "open_positions": 4
+   },
+   "macd_divergence|gate": {
+    "plan": "ladder_b",
+    "return_pct": -0.8267715091999972,
+    "annualized_pct": -3.3715646693136425,
+    "max_dd_pct": 8.068292255710062,
+    "sharpe": -0.10157337996395169,
+    "payoff": 0.9866519212361556,
+    "win_rate_pct": 44.44444444444444,
+    "trades": 9,
+    "open_positions": 4
+   }
+  }
+ }
+}
