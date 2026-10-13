@@ -1,0 +1,74 @@
+{
+ "window": "2024H2(校准)",
+ "sample": "output/backtests/scale-out-take-profit-250k-2024h2-oos/sample-2024-07-01-2024-12-31",
+ "gate_open_days": 39,
+ "gate_total_days": 125,
+ "cases": {
+  "macd_zero_axis|nogate": {
+   "plan": "ladder_b",
+   "return_pct": 1.002094940000009,
+   "annualized_pct": 2.0305081820129134,
+   "max_dd_pct": 17.929745125384475,
+   "sharpe": 0.20855988238325918,
+   "payoff": 0.8863692197791836,
+   "win_rate_pct": 54.54545454545454,
+   "trades": 33,
+   "open_positions": 4
+  },
+  "macd_zero_axis|gate": {
+   "plan": "ladder_b",
+   "return_pct": -17.202481577999997,
+   "annualized_pct": -31.652455245391874,
+   "max_dd_pct": 21.40568968691442,
+   "sharpe": -1.8562607824796162,
+   "payoff": 0.6247947902194453,
+   "win_rate_pct": 20.0,
+   "trades": 10,
+   "open_positions": 4
+  },
+  "yearline_pullback|nogate": {
+   "plan": "none",
+   "return_pct": 14.791233336000008,
+   "annualized_pct": 32.06142635231477,
+   "max_dd_pct": 10.426156786399998,
+   "sharpe": 1.225509329037287,
+   "payoff": 6.967125057228952,
+   "win_rate_pct": 15.909090909090908,
+   "trades": 44,
+   "open_positions": 4
+  },
+  "yearline_pullback|gate": {
+   "plan": "none",
+   "return_pct": 3.2115457316000073,
+   "annualized_pct": 6.580122974176428,
+   "max_dd_pct": 6.3022165839228315,
+   "sharpe": 0.5561907542930665,
+   "payoff": 8.225333036159778,
+   "win_rate_pct": 12.5,
+   "trades": 16,
+   "open_positions": 3
+  },
+  "macd_divergence|nogate": {
+   "plan": "ladder_b",
+   "return_pct": 11.153472125999997,
+   "annualized_pct": 23.760152356960695,
+   "max_dd_pct": 8.670998338181764,
+   "sharpe": 1.2274592639261175,
+   "payoff": 1.268525848426288,
+   "win_rate_pct": 53.84615384615385,
+   "trades": 26,
+   "open_positions": 4
+  },
+  "macd_divergence|gate": {
+   "plan": "ladder_b",
+   "return_pct": -0.8267715091999972,
+   "annualized_pct": -1.6597712333572545,
+   "max_dd_pct": 8.068292255710062,
+   "sharpe": -0.07125745645432635,
+   "payoff": 0.9866519212361556,
+   "win_rate_pct": 44.44444444444444,
+   "trades": 9,
+   "open_positions": 4
+  }
+ }
+}
