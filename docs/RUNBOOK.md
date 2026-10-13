@@ -291,6 +291,11 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
 - **市场闸门核验（2026-10-13）**：闸门确实生效（`entry_filters.market_gate_enabled: true`、
   `market_gate_fail_open: false`，实盘消费点 `monitor/service.py:286`；关闭时候选降级为
   `observe_only` 并保留 `blocked_by` 原因，不静默丢弃）。但核验显示：
+  - **⚠️ 作用范围只限日线零轴金叉**：三个扫描入口里，只有 `scan_zero_axis`（`service.py:838`）
+    引用 `allows_entries`；`scan_yearline`（`:1315`）与 `scan_macd_divergence`（`:1541`）
+    **0 处引用闸门**，且各自 docstring 明确写着是**独立研究展示池**——
+    "不进监控/不下单/不推送通知"，后者更直接写明"不读 `entry_filters`…也不受执行策略与市场闸门影响"。
+    **即：闸门不管年线趋势，也不管零轴＋底背离。**
   - **严格度远超"熊市"**：1200 个交易日只开放 210 天（17.5%）；2021、2022 全年 0 天；
     2024H1 整半年 0/117 天（根因 `ma_long_up` 即 MA250 斜率在 117/117 天全为 False，
     同期 `strict_regime` 有 41 天是 bull）。
@@ -305,6 +310,10 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
   - **`position.mobile_cash_ratio`（"预留 25% 机动现金"）是死配置**：全仓库只有写入无读取
     （`utils/helpers.py:354` 抄进 `risk_control.position.reserve_cash_ratio` 后无人使用）。
     实测平均部署率 94.1%、2024Q4 的 61 天里 55 天满 4 仓。**不要按"已预留 25% 现金"做仓位预期。**
+  - **两套回测对闸门处理不一致**：`backtest_winrate.py`（旧）在 `simulate_signal_mode` 里对
+    **每个买点**都查闸门、**不分策略**；`research_backtest.py`（新，三策略对照用）**完全不读闸门**
+    （0 处引用，仅把 `entry_filters` 列入 `CONFIG_KEYS` 做快照）。因此三策略分批止盈的所有结论
+    都是**无闸门口径**（每个信号都买），与实盘（有闸门、1200 天只开 210 天）不可直接比较。
 
 ### 界面指标与操作约定
 
