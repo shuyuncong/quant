@@ -1,0 +1,74 @@
+{
+ "window": "2022",
+ "sample": "output/backtests/_gate_samples/sample-2022-01-01-2022-12-31",
+ "gate_open_days": 1,
+ "gate_total_days": 242,
+ "cases": {
+  "macd_zero_axis|nogate": {
+   "plan": "ladder_b",
+   "return_pct": -36.446379208,
+   "annualized_pct": -37.62571218650906,
+   "max_dd_pct": 39.38461094850095,
+   "sharpe": -1.6834681927421709,
+   "payoff": 0.8969661696471861,
+   "win_rate_pct": 39.39393939393939,
+   "trades": 66,
+   "open_positions": 4
+  },
+  "macd_zero_axis|gate": {
+   "plan": "ladder_b",
+   "return_pct": -8.034266103999999,
+   "annualized_pct": -8.35200152047475,
+   "max_dd_pct": 9.468475384000003,
+   "sharpe": -1.387481551189368,
+   "payoff": null,
+   "win_rate_pct": 0.0,
+   "trades": 4,
+   "open_positions": 0
+  },
+  "yearline_pullback|nogate": {
+   "plan": "none",
+   "return_pct": -8.386944168800003,
+   "annualized_pct": -8.717955196122173,
+   "max_dd_pct": 24.49741578370948,
+   "sharpe": -0.1455202849465716,
+   "payoff": 5.059197052607494,
+   "win_rate_pct": 15.0,
+   "trades": 100,
+   "open_positions": 4
+  },
+  "yearline_pullback|gate": {
+   "plan": "none",
+   "return_pct": -0.809640332799999,
+   "annualized_pct": -0.842955144466706,
+   "max_dd_pct": 1.8516796367606985,
+   "sharpe": -0.7205644590800246,
+   "payoff": null,
+   "win_rate_pct": 0.0,
+   "trades": 1,
+   "open_positions": 0
+  },
+  "macd_divergence|nogate": {
+   "plan": "ladder_b",
+   "return_pct": 10.691451067199997,
+   "annualized_pct": 11.157040809476237,
+   "max_dd_pct": 12.730018546886201,
+   "sharpe": 0.6310703355813189,
+   "payoff": 1.6741820018125888,
+   "win_rate_pct": 42.3728813559322,
+   "trades": 59,
+   "open_positions": 1
+  },
+  "macd_divergence|gate": {
+   "plan": "ladder_b",
+   "return_pct": 0.0,
+   "annualized_pct": 0.0,
+   "max_dd_pct": 0.0,
+   "sharpe": null,
+   "payoff": null,
+   "win_rate_pct": null,
+   "trades": 0,
+   "open_positions": 0
+  }
+ }
+}
