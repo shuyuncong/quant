@@ -288,6 +288,23 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
   - 「未归属」是显式选择，不会根据当天命中的信号猜归属；未知 id 由 `PUT /api/holdings/<symbol>` 直接返回 422，不静默降级。
   - 归属只在**编辑既有持仓**时下发：新增持仓时表单不给该字段，避免一次点击就把止损口径从全局换成策略级。
   - 端到端回归：`tests/test_exit_notification.py::HoldingAttributionTests`（归属生效 / 未归属不借口径两条）。
+- **市场闸门核验（2026-10-13）**：闸门确实生效（`entry_filters.market_gate_enabled: true`、
+  `market_gate_fail_open: false`，实盘消费点 `monitor/service.py:286`；关闭时候选降级为
+  `observe_only` 并保留 `blocked_by` 原因，不静默丢弃）。但核验显示：
+  - **严格度远超"熊市"**：1200 个交易日只开放 210 天（17.5%）；2021、2022 全年 0 天；
+    2024H1 整半年 0/117 天（根因 `ma_long_up` 即 MA250 斜率在 117/117 天全为 False，
+    同期 `strict_regime` 有 41 天是 bull）。
+  - **无可证明的入场择时优势**：日级 63 个（季度×策略×horizon）配对中，
+    开放日更优 28 / 关闭日更优 35，中位 Δ −0.29pp、均值 −2.00pp。
+  - **在暴跌起点是开着的**：2026-06 闸门于 6/15–6/23 开放，6/17 的 78 只信号在 20 日后
+    中位 **−27.7%**（同期指数从 5/13 高点回撤 11.3%）；2025Q1 Δ −12.09pp。
+    机制是 MA250 斜率属慢变量，**开得晚、关得也晚**。
+  - **方法警示**：把同一时间窗内的信号池化当独立样本会得出相反结论（两组落在不同日历时段，
+    且未剔除样本末端的前向窗口污染）。正确做法是**按日聚合**并做季度内配对。
+    详见 [2026-10-13 市场闸门核验](../docs/2026-10-13-市场闸门核验.md)。
+  - **`position.mobile_cash_ratio`（"预留 25% 机动现金"）是死配置**：全仓库只有写入无读取
+    （`utils/helpers.py:354` 抄进 `risk_control.position.reserve_cash_ratio` 后无人使用）。
+    实测平均部署率 94.1%、2024Q4 的 61 天里 55 天满 4 仓。**不要按"已预留 25% 现金"做仓位预期。**
 
 ### 界面指标与操作约定
 
