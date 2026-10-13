@@ -292,10 +292,15 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
   `market_gate_fail_open: false`，实盘消费点 `monitor/service.py:286`；关闭时候选降级为
   `observe_only` 并保留 `blocked_by` 原因，不静默丢弃）。但核验显示：
   - **⚠️ 作用范围只限日线零轴金叉**：三个扫描入口里，只有 `scan_zero_axis`（`service.py:838`）
-    引用 `allows_entries`；`scan_yearline`（`:1315`）与 `scan_macd_divergence`（`:1541`）
-    **0 处引用闸门**，且各自 docstring 明确写着是**独立研究展示池**——
-    "不进监控/不下单/不推送通知"，后者更直接写明"不读 `entry_filters`…也不受执行策略与市场闸门影响"。
-    **即：闸门不管年线趋势，也不管零轴＋底背离。**
+    引用 `allows_entries`（2 处）；`scan_yearline`（`:1315`）与 `scan_macd_divergence`（`:1541`）
+    **0 处引用闸门** → 年线趋势与零轴＋底背离**生产上没有闸门**。
+    **三个策略都在生产运行**（`web/src/lib/scan-service.ts:16` 默认
+    `STRATEGIES.map(row => row.id)`；`web_bridge.py:273,275` 有各自入口；
+    `api/candidates` 与 `api/run` 都接受三个 `pool_type`；`analysis-service.ts:33-38`
+    会把各池候选并入分析标的）。
+    ⚠️ **勿信 `scan_yearline` / `scan_macd_divergence` 的 docstring** ——
+    它写"研究展示池，不进监控/不下单/不推送"，但那是过时描述（2026-10-13 核实），
+    与调用图不符。判断某策略是否在生产，**只看调用图，不看 docstring**。
   - **严格度远超"熊市"**：1200 个交易日只开放 210 天（17.5%）；2021、2022 全年 0 天；
     2024H1 整半年 0/117 天（根因 `ma_long_up` 即 MA250 斜率在 117/117 天全为 False，
     同期 `strict_regime` 有 41 天是 bull）。
