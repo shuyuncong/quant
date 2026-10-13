@@ -1,0 +1,74 @@
+{
+ "window": "2021H1",
+ "sample": "output/backtests/_gate_samples/sample-2021-01-01-2021-06-30",
+ "gate_open_days": 41,
+ "gate_total_days": 118,
+ "cases": {
+  "macd_zero_axis|nogate": {
+   "plan": "ladder_b",
+   "return_pct": -2.7164971600000087,
+   "annualized_pct": -5.71196263748811,
+   "max_dd_pct": 13.347779191874446,
+   "sharpe": -0.15261577288272743,
+   "payoff": 0.8340966212000911,
+   "win_rate_pct": 51.85185185185185,
+   "trades": 27,
+   "open_positions": 4
+  },
+  "macd_zero_axis|gate": {
+   "plan": "ladder_b",
+   "return_pct": 1.765559591999999,
+   "annualized_pct": 3.808345776185118,
+   "max_dd_pct": 7.328207647854714,
+   "sharpe": 0.29495078235212546,
+   "payoff": 0.8933188222728649,
+   "win_rate_pct": 52.38095238095239,
+   "trades": 21,
+   "open_positions": 4
+  },
+  "yearline_pullback|nogate": {
+   "plan": "none",
+   "return_pct": 18.961416363999994,
+   "annualized_pct": 44.88946609035664,
+   "max_dd_pct": 9.714515296036568,
+   "sharpe": 1.8211473334689374,
+   "payoff": 6.90104519393185,
+   "win_rate_pct": 19.444444444444446,
+   "trades": 36,
+   "open_positions": 4
+  },
+  "yearline_pullback|gate": {
+   "plan": "none",
+   "return_pct": 15.070504629600002,
+   "annualized_pct": 34.956666613787625,
+   "max_dd_pct": 6.342084478236896,
+   "sharpe": 1.4672133929144242,
+   "payoff": 5.601707081149662,
+   "win_rate_pct": 25.0,
+   "trades": 20,
+   "open_positions": 4
+  },
+  "macd_divergence|nogate": {
+   "plan": "ladder_b",
+   "return_pct": -2.1009347472000006,
+   "annualized_pct": -4.433270550594292,
+   "max_dd_pct": 9.983299851398009,
+   "sharpe": -0.17533786801399034,
+   "payoff": 1.4223701840306802,
+   "win_rate_pct": 34.78260869565217,
+   "trades": 23,
+   "open_positions": 3
+  },
+  "macd_divergence|gate": {
+   "plan": "ladder_b",
+   "return_pct": -7.122771531200001,
+   "annualized_pct": -14.598164288786242,
+   "max_dd_pct": 9.814422009701202,
+   "sharpe": -2.114398102193883,
+   "payoff": null,
+   "win_rate_pct": 0.0,
+   "trades": 5,
+   "open_positions": 0
+  }
+ }
+}
