@@ -1,0 +1,38 @@
+{
+ "macd_zero_axis|nogate": {
+  "with_cost": -2.7164971600000087,
+  "no_cost": -1.847106799999998,
+  "drag_pp": 0.8693903600000108,
+  "trades": 27
+ },
+ "macd_zero_axis|gate": {
+  "with_cost": 1.765559591999999,
+  "no_cost": 2.410090339999993,
+  "drag_pp": 0.644530747999994,
+  "trades": 21
+ },
+ "yearline_pullback|nogate": {
+  "with_cost": 18.961416363999994,
+  "no_cost": 21.01282364399999,
+  "drag_pp": 2.051407279999996,
+  "trades": 36
+ },
+ "yearline_pullback|gate": {
+  "with_cost": 15.070504629600002,
+  "no_cost": 16.023820952000012,
+  "drag_pp": 0.9533163224000099,
+  "trades": 20
+ },
+ "macd_divergence|nogate": {
+  "with_cost": -2.1009347472000006,
+  "no_cost": -1.4602668159999999,
+  "drag_pp": 0.6406679312000008,
+  "trades": 23
+ },
+ "macd_divergence|gate": {
+  "with_cost": -7.122771531200001,
+  "no_cost": -6.934484984,
+  "drag_pp": 0.1882865472000006,
+  "trades": 5
+ }
+}
