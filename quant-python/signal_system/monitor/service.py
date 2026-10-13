@@ -270,21 +270,25 @@ class SignalMonitor:
                 )
             else:
                 strict_regime = "unknown"
-            if (
+            # 闸门与 regime 是**两层**，不可混用（对齐 backtest_winrate.build_market_gate）：
+            #   - allows_entries 只看五个 blocker；
+            #   - regime 只用于 signal_policy.by_regime 收紧执行模式与展示。
+            # 曾经把 blocker 折叠成 regime="bear" 再由 regime 反推 allows_entries，
+            # 使 strict_regime 被重复计入闸门：在 blocker 全清但 MA10<MA20 且 MA20 下行
+            # 的日子（长期趋势完好、仅短期回调）多拦了一批开仓，与回测口径分歧 28/2103 天。
+            blocked = bool(
                 death_cross
                 or indicators.get("ma_long_down")
                 or not indicators.get("above_ma_long")
                 or not trend_up
                 or fast_bear
-            ):
-                regime = "bear"
-            else:
-                regime = strict_regime
+            )
             return {
                 "enabled": True,
                 "index_code": index_code,
-                "allows_entries": regime != "bear",
-                "regime": regime,
+                "allows_entries": not blocked,
+                "regime": strict_regime,
+                "blocked": blocked,
                 "death_cross": death_cross,
                 "bearish_structure": bearish_structure,
                 "above_ma_long": bool(indicators.get("above_ma_long")),

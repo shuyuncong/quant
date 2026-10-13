@@ -98,6 +98,15 @@ def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path) -> str
 
     combined = pd.concat([existing, new_rows], ignore_index=True) if not existing.empty else new_rows
     combined = combined.drop_duplicates("datetime", keep="last").sort_values("datetime").reset_index(drop=True)
+    # pd.concat / reset_index 会丢掉 DataFrame.attrs，而下游审计（atr_volatility_audit、
+    # canonical_replay_semantics_audit 等）用 frame.attrs["adjust"] == "qfq" 判定口径。
+    # 必须显式还原，否则整批缓存会被判为"非 qfq"而拒绝。
+    combined.attrs = dict(existing.attrs) if existing.attrs else {}
+    combined.attrs.setdefault("source", "tencent")
+    combined.attrs["timeframe"] = "1d"
+    combined.attrs["adjust"] = "qfq"
+    combined.attrs.setdefault("timezone", "Asia/Shanghai")
+    combined.attrs.setdefault("timestamp_semantics", "end")
     combined.to_pickle(path)
     return f"added:{len(new_rows)}"
 

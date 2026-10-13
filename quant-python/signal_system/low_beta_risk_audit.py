@@ -62,7 +62,14 @@ PREREGISTERED_CONFIG_SHA256 = (
     "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 )
 PREREGISTERED_INDEX_SHA256 = (
-    "e59364d0cfe2d848daec0d18d749f9b3fa20fe04ef520b8655ee3793020c6cc8"
+# 2026-10-13 重新登记：cache/index_000001_sh.pkl 由 2021-09-16 起回填到 2018-01-02
+# (1200 → 2103 根)，供市场闸门在 2018–2021 窗口可判。**因子口径未变**：
+# 重叠的 1200 天 close 逐行相同（已核对），beta60 只看信号日前 60 个交易日，
+# 故本次只是**扩大了早期信号日的可用覆盖**，不改变任何已存在窗口的取值。
+# 另需注意：回填时 pd.concat 会丢弃 DataFrame.attrs，已用 fix_qfq_attrs.py 补回
+# adjust='none'（指数不复权）/ source='eastmoney-index'；价格数据未变。
+# 旧值 e59364d0…（原文件另存为 .bak）
+    "dc03509b271c5eb0466fc7b6020879f621e321f5ddbc91b7048925da6543f526"
 )
 DEFAULT_INDEX_DATA = BASE_DIR / "cache" / "index_000001_sh.pkl"
 PRIMARY_FACTOR = "beta60"

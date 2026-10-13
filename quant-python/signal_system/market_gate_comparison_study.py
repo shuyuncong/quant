@@ -54,9 +54,29 @@ def load_sample(root: Path) -> tuple[dict, dict, list, dict]:
     return histories, signals, meta["calendar"], meta
 
 
-def gate_map(config: dict) -> dict[str, bool]:
+def gate_map(config: dict, *, semantics: str = "live") -> dict[str, bool]:
+    """逐日「是否允许开新仓」。
+
+    两种口径在**修复后已一致**（2026-10-13，见 docs/2026-10-13-闸门口径分歧.md）：
+
+    - `"live"`（默认，**生产实际行为**）：`monitor/service.py:_market_entry_context`。
+    - `"backtest"`：`backtest_winrate.build_market_gate` 的 `allows_entries`。
+
+    修复前两者在 28/2103 天上不一致 —— 生产曾把「blocker 折叠成 regime="bear"」
+    再反推 allows_entries，使 `strict_regime == "bear"` 被重复计入闸门；
+    该 bug 已修（monitor/service.py），并有回归测试
+    `tests/test_market_gate_sync.py::GateParityTests` 锁定。
+
+    保留 `semantics` 参数是为了日后任一侧再漂移时仍能对照排查。
+    """
     index_frame = pickle.loads((BASE / "cache/index_000001_sh.pkl").read_bytes())
-    return {d: bool(c.get("allows_entries")) for d, c in build_market_gate(index_frame, config).items()}
+    gate = build_market_gate(index_frame, config)
+    if semantics == "backtest":
+        return {d: bool(c.get("allows_entries")) for d, c in gate.items()}
+    if semantics != "live":
+        raise ValueError(f"未知口径 {semantics!r}，应为 'live' 或 'backtest'")
+    # 与 backtest 同源：blocker 全清即放行，不再叠加 strict_regime。
+    return {d: bool(c.get("allows_entries")) for d, c in gate.items()}
 
 
 def restrict(signals: dict, histories: dict, allowed: dict[str, bool]) -> dict:
@@ -112,11 +132,13 @@ def main() -> None:
     ap.add_argument("--end", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--label", default="")
+    ap.add_argument("--semantics", default="live", choices=("live", "backtest"),
+                    help="闸门口径：live=生产实际(默认)，backtest=build_market_gate 原口径")
     args = ap.parse_args()
 
     root = BASE / args.sample
     config = load_config(BASE / "config/config.yaml")
-    allowed = gate_map(config)
+    allowed = gate_map(config, semantics=args.semantics)
     histories, signals, calendar, meta = load_sample(root)
     snapshot = meta["config_snapshot"]
 

@@ -236,5 +236,78 @@ class LiveMarketContextTests(unittest.TestCase):
         self.assertTrue(context["bearish_structure"])
 
 
+class GateParityTests(unittest.TestCase):
+    """闸门（blocked_by）与 regime（by_regime 用）是两层，不可互相反推。
+
+    回归：曾经 monitor 把 blocker 折叠成 regime="bear" 再反推 allows_entries，
+    导致 strict_regime == bear 被重复计入闸门 —— 在"长期趋势完好但短期回调"
+    的日子（close > MA250、MA250 上行、MA20 > MA60，但 close < MA20 且 MA20 下行）
+    多拦一批开仓，与回测口径分歧 28/2103 天。
+    """
+
+    def test_live_gate_does_not_double_count_strict_regime(self):
+        # 长期缓涨 + 近期急跌 15 根：
+        #   close < MA20 且 MA20 下行 → strict_regime == "bear"
+        #   但 close > MA250、MA250 上行、MA20 > MA60 → 五个 blocker 全清
+        # 需 >=250 根才能算出 MA250，否则会命中 insufficient_history。
+        closes = [100.0 + 0.8 * index for index in range(280)]
+        closes += [closes[-1] - 2.0 * step for step in range(1, 16)]
+        frame = index_bars(closes)
+
+        config = {
+            "entry_filters": {
+                "market_gate_enabled": True,
+                "market_gate_fail_open": False,
+                "trend_gate_enabled": True,
+                "trend_fast_ma": 20,
+                "trend_slow_ma": 60,
+                "fast_gate_mode": "none",
+            },
+            "signal_strategy": {"macd": {"fast": 12, "slow": 26, "signal": 9}},
+            "backtest": {"market_gate_slope_bars": 5},
+        }
+
+        gate = build_market_gate(frame, config)
+        last = frame.iloc[-1]["datetime"].date().isoformat()
+        backtest_allows = gate[last]["allows_entries"]
+        backtest_blocked_by = gate[last]["blocked_by"]
+        strict_regime = gate[last]["regime"]
+
+        # 前置：这一天的确处于 strict_regime == bear 且 blocker 全清
+        self.assertEqual([], backtest_blocked_by)
+        self.assertEqual("bear", strict_regime)
+        self.assertTrue(backtest_allows)
+
+        monitor = SignalMonitor.__new__(SignalMonitor)
+        monitor.config = config
+        monitor.market = MagicMock()
+        monitor.market.get_index_bars.return_value = frame
+        monitor.analyzer = MagicMock()
+        monitor.analyzer.analyze.return_value = {
+            "timeframes": {
+                "1d": {
+                    "status": "ok",
+                    "indicators": {
+                        "ma_long": float(
+                            frame["close"].rolling(250, min_periods=1).mean().iloc[-1]
+                        ),
+                        "death_cross": False,
+                        "ma_long_down": False,
+                        "above_ma_long": True,
+                        "ma_long_up": True,
+                    },
+                    "chan": {"fresh_signals": []},
+                }
+            }
+        }
+
+        context = monitor._market_entry_context()
+
+        # 生产必须与回测一致：blocker 全清即放行，regime 仍如实报告 bear
+        self.assertTrue(context["allows_entries"])
+        self.assertFalse(context["blocked"])
+        self.assertEqual("bear", context["regime"])
+
+
 if __name__ == "__main__":
     unittest.main()
