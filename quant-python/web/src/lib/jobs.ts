@@ -7,10 +7,10 @@ import {
   addOperationLog,
   createJob,
   findNoteByJobAndResult,
+  getDb,
   getJob,
   listRecoverableJobs,
   updateJob,
-  updateJobPayload,
 } from "./db";
 import { nowIso } from "./time";
 import { interpretReportWithFallback, pickChatModel, extractStandpoints } from "./llm";
@@ -258,15 +258,36 @@ function mergeOverrides(
   return result;
 }
 
-/** 后台解析手动输入代码的名称并回写 payload；失败只影响列表展示，不影响任务执行。 */
-async function persistSymbolNames(jobId: number, payload: Record<string, unknown>): Promise<void> {
+/**
+ * 后台解析标的名称并回写任务 payload，供「个股分析记录」列表回填显示名。
+ *
+ * 两个关键细节：
+ *   1. **必须用 SQL 端合并**（`payload::jsonb || $2::jsonb`）而不是把整个 payload 覆盖回去。
+ *      分析/扫描批次会并发地往同一个 payload 里写 `progress`（见 analysis-service /
+ *      scan-service），整体覆盖会把并发的进度写丢掉。
+ *   2. 不传 `payload.symbols` 时改为读取任务当前的标的目标，避免调用方还要自己取一遍。
+ *
+ * 名称解析失败只影响列表展示，绝不影响任务执行 —— 列表会回退到代码本身。
+ */
+export async function persistSymbolNames(jobId: number, symbols?: string[]): Promise<void> {
   try {
-    const outcome = await runBridge("resolve-names", { symbols: payload.symbols }, { timeoutMs: 20_000 });
+    let targets = symbols;
+    if (!targets || targets.length === 0) {
+      const job = await getJob(jobId);
+      if (!job) return;
+      const parsed = JSON.parse(job.payload) as Record<string, unknown>;
+      targets = Array.isArray(parsed.symbols) ? parsed.symbols.map(String) : [];
+    }
+    if (targets.length === 0) return;
+    const outcome = await runBridge("resolve-names", { symbols: targets }, { timeoutMs: 20_000 });
     const data = outcome.data;
     if (!outcome.ok || !data || typeof data !== "object" || !("names" in data)) return;
     const names = data.names;
-    if (!names || typeof names !== "object") return;
-    await updateJobPayload(jobId, { ...payload, symbol_names: names });
+    if (!names || typeof names !== "object" || Array.isArray(names)) return;
+    await (await getDb()).query(
+      "UPDATE quant.jobs SET payload=(payload::jsonb || $2::jsonb)::text WHERE id=$1",
+      [jobId, JSON.stringify({ symbol_names: names })],
+    );
   } catch {
     /* 名称解析失败时保留原始 payload，列表展示回退到代码本身 */
   }
@@ -284,11 +305,6 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
   }
   const jobId = await createJob(kind, payload);
   await updateJob(jobId, { status: "running", started_at: nowIso() });
-  if (kind === "analyze" && Array.isArray(payload.symbols) && payload.symbols.length > 0) {
-    // 手动输入的代码往往不在股票池/持仓，最近任务列表会缺失名称；解析放在后台并回写 payload，
-    // 否则每次点击都要等一个 Python 子进程（约 2s 起）才拿到 202，用户会以为没反应而连点。
-    void persistSymbolNames(jobId, payload);
-  }
   await addOperationLog({
     job_id: jobId,
     level: "info",

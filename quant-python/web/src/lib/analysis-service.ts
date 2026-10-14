@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { getDb, createJob, updateJob, getJob, listPool, addNote, addOperationLog } from "./db";
+import { persistSymbolNames } from "./jobs";
 import type { PoolClient } from "pg";
 import { runBridge } from "./bridge";
 import { buildOverrides, freezeEngineConfig } from "./config";
@@ -125,6 +126,11 @@ export async function startAnalysisBatch(kind: string, input: Record<string, unk
     analysis_cutoff: nowIso(), frozen_overrides: frozenOverrides };
   const id = typeof input.existing_job_id === "number" ? input.existing_job_id : await createJob(kind, payload);
   if (input.existing_job_id) await (await getDb()).query("UPDATE quant.jobs SET payload=$2 WHERE id=$1", [id, JSON.stringify(payload)]);
+  // 解析名称写进 payload，供「个股分析记录」列表回填显示名。
+  // 记录自带的名字来自 Python 报告的 stock.name，取不到时会为空；而这些标的又常常
+  // 不在股票池/持仓里，于是列表只剩代码可显示。名称在任务建立时就解析，避免每次
+  // 打开列表都要回表猜。放后台执行（一次 bridge 调用约 1s），不拖慢返回 job id。
+  void persistSymbolNames(id, symbols);
   void executeAnalysisBatch(id).catch(async error => {
     await updateJob(id, { status: "failed", error: String(error), finished_at: nowIso() });
   });

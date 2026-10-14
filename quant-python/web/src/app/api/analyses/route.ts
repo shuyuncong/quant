@@ -59,8 +59,8 @@ function bareCode(value: unknown): string {
  * 名称回退的优先级（只填空，不覆盖）：
  *   1. 记录自带 `stock_analyses.name`
  *   2. **该记录所属任务的 `payload.symbol_names`** —— 同一批记录自己携带的名称。
- *      批任务在 `startJob` 时调 bridge 的 `resolve-names` 写入，覆盖该批全部标的，
- *      所以它比池/持仓更贴近这条记录的来源。
+ *      分析批次在 `startAnalysisBatch` 建任务后就解析并写入（`persistSymbolNames`），
+ *      覆盖该批全部标的，所以它比池/持仓更贴近这条记录的来源。
  *   3. `quant.stock_pool` / `quant.holdings`
  *   4. 都没有就留空（列表退回显示代码）
  *
