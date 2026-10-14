@@ -4,11 +4,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FiveTabAnalysis } from "./five-tab-analysis";
-import type { AnalysisRecord } from "@/lib/analysis-types";
-function getConsensusBadge(record: AnalysisRecord) {
+import type { AnalysisRecordSummary } from "@/lib/analysis-types";
+
+function getConsensusBadge(record: AnalysisRecordSummary) {
   const strategies = record.document?.strategies;
   if (!Array.isArray(strategies) || strategies.length === 0) return null;
 
@@ -44,7 +45,7 @@ function getConsensusBadge(record: AnalysisRecord) {
 }
 
 export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?: React.ReactNode }) {
-  const [records, setRecords] = useState<AnalysisRecord[]>([]);
+  const [records, setRecords] = useState<AnalysisRecordSummary[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [symbol, setSymbol] = useState("");
@@ -52,12 +53,24 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
   const [open, setOpen] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const requestVersion = useRef(0);
+  /**
+   * 同步的"请求进行中"标记。
+   *
+   * `fetching` 是 state：同一 tick 内连点两次时，DOM 上的 disabled 还没更新，
+   * 两次点击都会进入处理器，函数式更新各推进一页 → 用户点一下却跳到第 3 页。
+   * 这个 ref 在点击瞬间上锁，把同一 tick 的第二次点击挡掉。
+   */
+  const requestInFlight = useRef(false);
+  const listTop = useRef<HTMLElement | null>(null);
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
     const search = new URLSearchParams({ page: String(page), symbol: query });
     if (jobId) search.set("job_id", String(jobId));
+    requestInFlight.current = true;
+    setFetching(true);
     try {
       const response = await fetch(`/api/analyses?${search}`);
       const result = await response.json();
@@ -66,7 +79,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
       setRecords((prev) => {
         if (
           prev.length === result.records.length &&
-          prev.every((p: AnalysisRecord, i: number) => {
+          prev.every((p: AnalysisRecordSummary, i: number) => {
             const n = result.records[i];
             return n && p.id === n.id && p.updated_at === n.updated_at;
           })
@@ -81,19 +94,38 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
       // 在弹窗中（有 jobId）默认打开首个记录；在首页大列表（!jobId）保持折叠防止撑爆页面
       setOpen((current) => {
         if (jobId) {
-          if (current !== null && result.records.some((record: AnalysisRecord) => record.id === current)) {
+          if (current !== null && result.records.some((record: AnalysisRecordSummary) => record.id === current)) {
             return current;
           }
           return result.records[0]?.id ?? null;
         }
-        return current !== null && result.records.some((record: AnalysisRecord) => record.id === current)
+        return current !== null && result.records.some((record: AnalysisRecordSummary) => record.id === current)
           ? current
           : null;
       });
     } catch (err) {
       if (version === requestVersion.current) setError(err instanceof Error ? err.message : "读取失败");
+    } finally {
+      // 无条件释放：若按 version 判定，被取代的请求会留下永久锁定，翻页就再也点不动。
+      requestInFlight.current = false;
+      if (version === requestVersion.current) setFetching(false);
     }
   }, [page, jobId, query]);
+
+  /**
+   * 翻页：收起展开项、滚回列表顶部，并推进一页。
+   *
+   * 进入前先查同步锁——同一 tick 内连点两次时 DOM 的 disabled 尚未更新，
+   * 两次点击都会到达这里，各推进一页，用户点一下会跳到第 3 页。
+   */
+  const goToPage = useCallback((delta: 1 | -1) => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setOpen(null);
+    setPage((current) => Math.max(1, current + delta));
+    // jsdom 等无布局环境没有 scrollIntoView；浏览器里始终存在。
+    listTop.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
+  }, []);
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -197,7 +229,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
   }
 
   return (
-    <section className="space-y-3" aria-label="个股分析记录">
+    <section ref={listTop} className="space-y-3" aria-label="个股分析记录">
       {!jobId && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -340,16 +372,21 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
 
       {(!jobId || total > 5) && (
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-          <span>共 {total} 条 · 每页 5 条</span>
+          <span className="flex items-center gap-1.5">
+            共 {total} 条 · 每页 5 条
+            {fetching && (
+              <span role="status" className="inline-flex items-center gap-1 text-primary">
+                <Loader2 className="size-3 animate-spin" />
+                读取中
+              </span>
+            )}
+          </span>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              disabled={page === 1}
-              onClick={() => {
-                setPage(page - 1);
-                setOpen(null);
-              }}
+              disabled={page === 1 || fetching}
+              onClick={() => goToPage(-1)}
               className="h-8 text-xs"
             >
               上一页
@@ -360,11 +397,8 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
             <Button
               size="sm"
               variant="outline"
-              disabled={page * 5 >= total}
-              onClick={() => {
-                setPage(page + 1);
-                setOpen(null);
-              }}
+              disabled={page * 5 >= total || fetching}
+              onClick={() => goToPage(1)}
               className="h-8 text-xs"
             >
               下一页

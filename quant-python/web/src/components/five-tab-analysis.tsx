@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
   STRATEGIES,
-  type AnalysisDocument,
+  type AnalysisDocumentView,
   type AnalysisStage,
   type StrategyCondition,
 } from "@/lib/analysis-types";
@@ -139,7 +139,7 @@ export function FiveTabAnalysis({
   document,
   onRetry,
 }: {
-  document: AnalysisDocument;
+  document: AnalysisDocumentView;
   onRetry?: () => void;
 }) {
   const failed =

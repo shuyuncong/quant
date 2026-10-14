@@ -75,8 +75,11 @@ async function settle() {
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 }
 
-async function renderRecords(fetchMock: ReturnType<typeof vi.fn>) {
-  vi.stubGlobal("fetch", fetchMock);
+/** 组件只会以 URL 调 fetch；测试用这个签名替身，避免笼统的 `vi.fn()` 掩盖参数形状。 */
+type FetchStub = (url: string) => Promise<Response>;
+
+async function renderRecords(fetchMock: FetchStub) {
+  vi.stubGlobal("fetch", vi.fn(fetchMock));
   await act(async () => root.render(createElement(AnalysisRecords)));
   await settle();
 }
@@ -172,5 +175,115 @@ describe("analysis records expansion", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(expandedSymbols(host)).toEqual([]);
     expect(host.textContent).not.toContain("招商银行");
+  });
+});
+
+describe("analysis records pagination", () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    ...records[0],
+    id: 200 - i,
+    symbol: `6000${String(i).padStart(2, "0")}.SH`,
+    name: `股票${i}`,
+    document: { ...records[0].document, symbol: `6000${String(i).padStart(2, "0")}.SH` },
+  }));
+
+  /** 模拟真实 API：total 是全集数量，records 只含当前页。 */
+  function pagedFetch() {
+    return vi.fn((url: string) => {
+      const page = Number(new URL(String(url), "http://localhost").searchParams.get("page") ?? "1");
+      const pageRecords = many.slice((page - 1) * 5, page * 5);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ records: pageRecords, total: many.length, page, page_size: 5 }),
+      } as Response);
+    });
+  }
+
+  it("shows the next page records and hides the previous page", async () => {
+    await renderRecords(pagedFetch());
+    expect(host.textContent).toContain("股票0");
+    expect(host.textContent).not.toContain("股票6");
+
+    await act(async () => buttonIn(host, "下一页").click());
+    await settle();
+
+    expect(host.textContent).toContain("股票5");
+    expect(host.textContent).not.toContain("股票0");
+  });
+
+  it("counts pages from total and disables 下一页 on the last page", async () => {
+    await renderRecords(pagedFetch());
+    expect(host.textContent).toContain("/ 3");
+
+    await act(async () => buttonIn(host, "下一页").click());
+    await settle();
+    await act(async () => buttonIn(host, "下一页").click());
+    await settle();
+
+    expect(host.textContent).toContain("股票10");
+    expect(buttonIn(host, "下一页").disabled).toBe(true);
+  });
+
+  it("returns to the previous page", async () => {
+    await renderRecords(pagedFetch());
+    await act(async () => buttonIn(host, "下一页").click());
+    await settle();
+    await act(async () => buttonIn(host, "上一页").click());
+    await settle();
+
+    expect(host.textContent).toContain("股票0");
+    expect(host.textContent).not.toContain("股票5");
+  });
+
+  it("ignores a second 下一页 click while the page request is still in flight", async () => {
+    const gate = deferred<void>();
+    const paged = pagedFetch();
+    const slowFetch = vi.fn(async (url: string) => {
+      // 只挡住第 2 页，首屏必须正常返回，否则按钮会因首屏未完成而本来就是灰的。
+      if (String(url).includes("page=2")) await gate.promise;
+      return paged(url);
+    });
+    await renderRecords(slowFetch);
+    expect(host.textContent).toContain("1 / 3");
+
+    const next = buttonIn(host, "下一页");
+    await act(async () => {
+      next.click();
+      next.click();
+    });
+    // 让请求真正起飞（它是 setTimeout(0) 调度的），此时 gate 未放行 → 按钮应置灰。
+    await settle();
+    expect(buttonIn(host, "下一页").disabled).toBe(true);
+
+    await act(async () => { gate.resolve(); });
+    await settle();
+
+    // 关键：只前进一页（不是两页），且只发一次 page=2。
+    expect(host.textContent).toContain("2 / 3");
+    expect(host.textContent).toContain("股票5");
+    const pageTwoRequests = slowFetch.mock.calls.filter(([url]) => String(url).includes("page=2"));
+    expect(pageTwoRequests).toHaveLength(1);
+  });
+
+  it("collapses the open report and returns to the top when paging", async () => {
+    // jsdom 没有布局，scrollIntoView 未实现；补一个探针再断言它被调用。
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      await renderRecords(pagedFetch());
+
+      await act(async () => articleFor("股票1", host).click());
+      expect(expandedSymbols(host)).toEqual(["600001.SH"]);
+      scrollIntoView.mockClear();
+
+      await act(async () => buttonIn(host, "下一页").click());
+      await settle();
+
+      expect(expandedSymbols(host)).toEqual([]);
+      expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      delete (Element.prototype as unknown as Record<string, unknown>).scrollIntoView;
+    }
   });
 });

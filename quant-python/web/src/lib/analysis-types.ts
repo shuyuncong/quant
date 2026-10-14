@@ -120,6 +120,23 @@ export interface AnalysisRecord {
   updated_at: string;
   document: AnalysisDocument;
 }
+
+/**
+ * 列表摘要：报告正文（五页签）之外的一切都返回，唯独不带 `report` / `portfolio`。
+ *
+ * 这两个字段是载荷的主体：单条实测 ~129KB，其中 `timeframes`（1m/5m/15m/30m/60m/120m）
+ * 占 118KB，而列表只用到 `strategies`（一致度徽标）与各阶段状态。
+ * 列表按 5 条翻页时若带上它们，每页要传 ~0.6–1.2MB，且每 10 分钟静默轮询都会重传一遍——
+ * 这是"翻页点了像没反应"的主要来源（服务器带宽被占满时首字节要等整包传完）。
+ *
+ * 五页签正文只读 `strategies` / `technical` / `synthesis` 与标头字段，
+ * 因此本类型即可满足渲染，无需再取回 `report` / `portfolio`。
+ */
+export type AnalysisDocumentView = Omit<AnalysisDocument, "report" | "portfolio">;
+
+export type AnalysisRecordSummary = Omit<AnalysisRecord, "document"> & {
+  document: AnalysisDocumentView;
+};
 export interface AnalysisScope {
   holdings: boolean;
   watchlist: boolean;
