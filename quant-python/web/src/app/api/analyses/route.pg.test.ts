@@ -55,8 +55,12 @@ beforeAll(async () => {
   db = new PGlite();
   // 直接吃生产 schema，避免测试用的建表语句与线上漂移
   await db.exec(fs.readFileSync("db/schema.sql", "utf8"));
+  // 任务 payload 里带 symbol_names —— 批任务记录自己携带的名称，键故意用"纯代码"格式
   await db.exec(`INSERT INTO quant.jobs (id,kind,status,payload,created_at) OVERRIDING SYSTEM VALUE
-    VALUES (733,'scan','success','{}','2026-10-13T14:00:00'),(732,'scan','success','{}','2026-10-13T14:00:00')`);
+    VALUES (733,'scan','success',
+      '{"symbol_names":{"600050":"任务名甲","600052":"任务名乙","600054":"任务名丙"}}',
+      '2026-10-13T14:00:00'),
+      (732,'scan','success','{}','2026-10-13T14:00:00')`);
 
   // 7 条记录：偶数序号 name 为空（走回退），奇数序号自带 name
   for (let i = 0; i < 7; i++) {
@@ -99,7 +103,7 @@ describe("GET /api/analyses against real Postgres", () => {
     expect(byJob.body.total).toBe(3);
     const bySymbol = await call("page=1&symbol=600052");
     expect(bySymbol.body.total).toBe(1);
-    expect((bySymbol.body.records as Row[])[0].name).toBe("池内名称乙");
+    expect((bySymbol.body.records as Row[])[0].name).toBe("任务名乙");
   });
 
   it("clamps an out-of-range page and rejects a negative job id", async () => {
@@ -117,9 +121,10 @@ describe("GET /api/analyses against real Postgres", () => {
     // 记录自带 name 优先
     expect(names["600055.SH"]).toBe("自带名5");
     expect(names["600053.SH"]).toBe("自带名3");
-    // 池存纯代码 / 持仓存大小写前缀，都要能回退命中
-    expect(names["600052.SH"]).toBe("池内名称乙");
-    expect(names["600054.SH"]).toBe("持仓名称丙");
+    // 任务 payload 里有的，用 payload 名（覆盖池/持仓）
+    expect(names["600052.SH"]).toBe("任务名乙");
+    expect(names["600054.SH"]).toBe("任务名丙");
+    // payload 里没有的，落到持仓（持仓存的是大小写前缀格式，仍需归一化命中）
     expect(names["600056.SH"]).toBe("持仓名称丁");
   });
 
@@ -172,5 +177,32 @@ describe("GET /api/analyses 在数据库故障时仍返回 JSON", () => {
     } finally {
       await db.exec("ALTER TABLE quant.stock_pool_hidden RENAME TO stock_pool");
     }
+  });
+});
+
+describe("名称回退优先级", () => {
+  it("优先用记录自带名称，其次任务 payload，再其次池/持仓", async () => {
+    // 600055 在 stock_pool 里也有，但它自带名称 —— 自带名称必须赢
+    await db.exec(`INSERT INTO quant.stock_pool(symbol,name,source,created_at)
+      VALUES ('600055','池内不该赢','manual','2026-10-13') ON CONFLICT (symbol) DO NOTHING`);
+    // 600057 加入池，且任务 732 无 symbol_names -> 应落到池名
+    await db.exec(`INSERT INTO quant.stock_pool(symbol,name,source,created_at)
+      VALUES ('600057','池内名称己','manual','2026-10-13') ON CONFLICT (symbol) DO NOTHING`);
+
+    const { body } = await call("page=1&symbol=");
+    const names = Object.fromEntries((body.records as Row[]).map((r) => [r.symbol, r.name]));
+
+    // 自带名称（600055 是奇数序号，自带 "自带名5"）
+    expect(names["600055.SH"]).toBe("自带名5");
+    // 任务 733 的 payload.symbol_names（键是纯代码 600052/600054，记录是 600052.SH/600054.SH）
+    expect(names["600052.SH"]).toBe("任务名乙");
+    expect(names["600054.SH"]).toBe("任务名丙");
+  });
+
+  it("任务 payload 里的名称优先于池/持仓", async () => {
+    // 600050 同时在 payload（任务名甲）与池（池内名称甲）里
+    const { body } = await call("page=2&symbol=");
+    const row = (body.records as Row[]).find((r) => r.symbol === "600050.SH");
+    expect(row?.name).toBe("任务名甲");
   });
 });

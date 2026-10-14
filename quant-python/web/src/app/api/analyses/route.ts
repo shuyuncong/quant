@@ -56,10 +56,15 @@ function bareCode(value: unknown): string {
 }
 
 /**
- * 为空名称的记录补上池/持仓名称（best-effort）。
+ * 名称回退的优先级（只填空，不覆盖）：
+ *   1. 记录自带 `stock_analyses.name`
+ *   2. **该记录所属任务的 `payload.symbol_names`** —— 同一批记录自己携带的名称。
+ *      批任务在 `startJob` 时调 bridge 的 `resolve-names` 写入，覆盖该批全部标的，
+ *      所以它比池/持仓更贴近这条记录的来源。
+ *   3. `quant.stock_pool` / `quant.holdings`
+ *   4. 都没有就留空（列表退回显示代码）
  *
- * 刻意不做成列表主查询里的子查询：一旦名称表缺失或结构不同，整个列表就会 500。
- * 名称只是补充信息，查不到就留空，绝不能让列表跟着挂掉。
+ * 全部 best-effort：名称只是补充信息，任何一步失败都不影响列表本身。
  */
 async function fillMissingNames(
   db: { query: (text: string, values?: readonly unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
@@ -67,26 +72,27 @@ async function fillMissingNames(
 ): Promise<void> {
   const missing = rows.filter((row) => !String(row.name ?? "").trim());
   if (missing.length === 0) return;
-  const codes = [...new Set(missing.map((row) => bareCode(row.symbol)).filter(Boolean))];
-  if (codes.length === 0) return;
+  const codes = new Set(missing.map((row) => bareCode(row.symbol)).filter(Boolean));
+  if (codes.size === 0) return;
 
   const found = new Map<string, string>();
+  const collect = (candidates: Map<string, string>) => {
+    for (const [code, name] of candidates) {
+      if (codes.has(code) && !found.has(code)) found.set(code, name);
+    }
+  };
+
+  const jobIds = [...new Set(missing.map((row) => Number(row.job_id)).filter(Number.isSafeInteger))];
+  try {
+    collect(await lookupJobNames(db, jobIds));
+  } catch {
+    // 任务表/字段不可用时跳过，继续尝试池与持仓。
+  }
+
+  const wanted = [...codes];
   for (const table of NAME_TABLES) {
     try {
-      const result = await db.query(
-        `SELECT regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') AS code,
-                MAX(BTRIM(name)) AS name
-           FROM ${table}
-          WHERE regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') = ANY($1::text[])
-            AND BTRIM(name) <> ''
-          GROUP BY 1`,
-        [codes],
-      );
-      for (const row of result.rows) {
-        const code = String(row.code ?? "");
-        const name = String(row.name ?? "").trim();
-        if (code && name && !found.has(code)) found.set(code, name);
-      }
+      collect(await lookupTableNames(db, table, wanted));
     } catch {
       // 名称是补充信息：该表缺失/结构不同时静默跳过，不影响列表本身。
     }
@@ -97,6 +103,59 @@ async function fillMissingNames(
     const name = found.get(bareCode(row.symbol));
     if (name) row.name = name;
   }
+}
+
+/** 从任务 payload 的 `symbol_names` 取名称；键在库里可能是纯代码或带交易所后缀，统一归一。 */
+async function lookupJobNames(
+  db: { query: (text: string, values?: readonly unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+  jobIds: number[],
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (jobIds.length === 0) return found;
+  // `quant.jobs.payload` 是 TEXT（不是 jsonb），所以取原文后在 JS 里解析 ——
+  // 与 /api/jobs 的既有做法一致；在 SQL 里对它用 `->` 会报 "operator does not exist: text -> unknown"。
+  const result = await db.query("SELECT payload FROM quant.jobs WHERE id = ANY($1::bigint[])", [jobIds]);
+  for (const row of result.rows) {
+    let names: unknown;
+    try {
+      const parsed = JSON.parse(String(row.payload ?? ""));
+      names = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>).symbol_names : undefined;
+    } catch {
+      continue; // payload 不是合法 JSON 就跳过这条任务
+    }
+    if (!names || typeof names !== "object" || Array.isArray(names)) continue;
+    for (const [key, value] of Object.entries(names as Record<string, unknown>)) {
+      const code = bareCode(key);
+      const name = String(value ?? "").trim();
+      if (code && name && !found.has(code)) found.set(code, name);
+    }
+  }
+  return found;
+}
+
+/** 从池/持仓按归一化代码取名；表名是字面量，不来自请求。 */
+async function lookupTableNames(
+  db: { query: (text: string, values?: readonly unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+  table: (typeof NAME_TABLES)[number],
+  codes: string[],
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (codes.length === 0) return found;
+  const result = await db.query(
+    `SELECT regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') AS code,
+            MAX(BTRIM(name)) AS name
+       FROM ${table}
+      WHERE regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') = ANY($1::text[])
+        AND BTRIM(name) <> ''
+      GROUP BY 1`,
+    [codes],
+  );
+  for (const row of result.rows) {
+    const code = String(row.code ?? "");
+    const name = String(row.name ?? "").trim();
+    if (code && name && !found.has(code)) found.set(code, name);
+  }
+  return found;
 }
 
 export async function GET(request: Request) {
