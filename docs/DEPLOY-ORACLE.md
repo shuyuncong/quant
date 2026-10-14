@@ -128,6 +128,27 @@ docker compose -f docker-compose.oracle.yml logs -f quant-web
 docker compose -f docker-compose.oracle.yml exec quant-web npm run db:verify
 ```
 
+> ⚠️ **若 `.env` 里 `DB_MODE=selfhost`（当前生产就是），上面的 `up -d --build` 必须再加上
+> `-f docker-compose.oracle.db.yml`。** 少了这个 overlay，新容器会丢掉 `internal` 网络与
+> `DATABASE_URL` 覆盖 → 解析不到 `quant-db` → 所有查询失败 → instrumentation 阶段抛错 →
+> 整站 500（2026-10-14 第二次事故即此）。
+>
+> 推荐直接用封装脚本，它强制正确文件、**先迁移后重建**、并在重建后自动巡检：
+>
+> ```bash
+> /home/ubuntu/ops/recreate-quant.sh            # 重建全部
+> /home/ubuntu/ops/recreate-quant.sh quant-web  # 只重建 quant-web
+> /home/ubuntu/ops/recreate-quant.sh --check    # 只巡检，不动容器
+> ```
+>
+> 对应的正确命令（供脚本不可用时手工执行）：
+>
+> ```bash
+> cd /opt/docker/quant/quant-python/quant-python
+> docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d --build
+> ```
+
+
 本服务为本地构建镜像，无需 `docker compose pull`。验证应用是否起来：
 
 ```bash
@@ -473,6 +494,27 @@ docker compose -f docker-compose.oracle.yml ps
 curl -fsS http://127.0.0.1:3111/api/config >/dev/null && echo OK
 ```
 
+> ⚠️ **若 `.env` 里 `DB_MODE=selfhost`（当前生产就是），上面的 `up -d --build` 必须再加上
+> `-f docker-compose.oracle.db.yml`。** 少了这个 overlay，新容器会丢掉 `internal` 网络与
+> `DATABASE_URL` 覆盖 → 解析不到 `quant-db` → 所有查询失败 → instrumentation 阶段抛错 →
+> 整站 500（2026-10-14 第二次事故即此）。
+>
+> 推荐直接用封装脚本，它强制正确文件、**先迁移后重建**、并在重建后自动巡检：
+>
+> ```bash
+> /home/ubuntu/ops/recreate-quant.sh            # 重建全部
+> /home/ubuntu/ops/recreate-quant.sh quant-web  # 只重建 quant-web
+> /home/ubuntu/ops/recreate-quant.sh --check    # 只巡检，不动容器
+> ```
+>
+> 对应的正确命令（供脚本不可用时手工执行）：
+>
+> ```bash
+> cd /opt/docker/quant/quant-python/quant-python
+> docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d --build
+> ```
+
+
 `db:verify` 应显示 PostgreSQL `17.6`、`transaction_round_trip: true` 和 `public_schema_usage: false`。自动部署脚本后续会继续读取服务器上的这个 `.env`，不需要把数据库密码加入 GitHub Actions Secrets。
 
 Oracle 上旧的 `web/data/app.db` 不再是 Web 运行时数据库，不要把它复制进新容器覆盖 Supabase。如果 Oracle 的旧 `app.db` 含有比 Supabase 更新的数据，应先停止升级并单独核对增量数据；不要直接执行迁移覆盖已有 Supabase 数据。
@@ -495,6 +537,27 @@ scp -r quant-python/signal_system/output/* ubuntu@服务器IP:/opt/docker/quant/
 > git pull
 > docker compose -f docker-compose.oracle.yml up -d --build
 > ```
+
+> ⚠️ **若 `.env` 里 `DB_MODE=selfhost`（当前生产就是），上面的 `up -d --build` 必须再加上
+> `-f docker-compose.oracle.db.yml`。** 少了这个 overlay，新容器会丢掉 `internal` 网络与
+> `DATABASE_URL` 覆盖 → 解析不到 `quant-db` → 所有查询失败 → instrumentation 阶段抛错 →
+> 整站 500（2026-10-14 第二次事故即此）。
+>
+> 推荐直接用封装脚本，它强制正确文件、**先迁移后重建**、并在重建后自动巡检：
+>
+> ```bash
+> /home/ubuntu/ops/recreate-quant.sh            # 重建全部
+> /home/ubuntu/ops/recreate-quant.sh quant-web  # 只重建 quant-web
+> /home/ubuntu/ops/recreate-quant.sh --check    # 只巡检，不动容器
+> ```
+>
+> 对应的正确命令（供脚本不可用时手工执行）：
+>
+> ```bash
+> cd /opt/docker/quant/quant-python/quant-python
+> docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d --build
+> ```
+
 
 ## 自动部署（推送即更新，可选）
 
