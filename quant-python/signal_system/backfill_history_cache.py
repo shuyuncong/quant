@@ -40,7 +40,17 @@ BACKFILL_START = "2018-01-01"
 # 而预热（270 根）与信号计算会跨过这个断裂 → 结果不可信。故统一回填到 2023-05-19。
 BACKFILL_END = "2023-05-19"
 CACHE_DIR = BASE / "cache" / "daily_history"
-PROGRESS = CACHE_DIR / "_backfill_2018_2022_progress.json"
+# 进度文件**按回填区间命名**：换区间（例如从 2018 再前推到 2016）时必须另起一个，
+# 否则上一轮记下的 done 会把标的全部跳过，表现为"跑了但什么都没做"。
+_PROGRESS_TEMPLATE = "_backfill_{start}_{end}_progress.json"
+
+
+def progress_path(start: str, end: str) -> Path:
+    return CACHE_DIR / _PROGRESS_TEMPLATE.format(start=start.replace("-", ""), end=end.replace("-", ""))
+
+
+# 默认区间（与既有调用/文档一致）；实际运行时以命令行覆盖后的区间为准。
+PROGRESS = progress_path(BACKFILL_START, BACKFILL_END)
 
 
 def to_standard(frame: pd.DataFrame) -> pd.DataFrame:
@@ -61,18 +71,18 @@ def to_standard(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_progress() -> set[str]:
-    if PROGRESS.exists():
-        return set(json.loads(PROGRESS.read_text(encoding="utf-8")).get("done", []))
+def load_progress(path: Path) -> set[str]:
+    if path.exists():
+        return set(json.loads(path.read_text(encoding="utf-8")).get("done", []))
     return set()
 
 
-def save_progress(done: set[str]) -> None:
-    PROGRESS.write_text(json.dumps({"done": sorted(done)}, ensure_ascii=False), encoding="utf-8")
+def save_progress(path: Path, done: set[str]) -> None:
+    path.write_text(json.dumps({"done": sorted(done)}, ensure_ascii=False), encoding="utf-8")
 
 
-def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path) -> str:
-    """返回结果码：added / no_data / already / error。"""
+def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path, start: str, end: str) -> str:
+    """返回结果码：added / no_data / already / error。区间由调用方给出。"""
     existing = pd.DataFrame()
     if path.exists():
         try:
@@ -85,13 +95,13 @@ def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path) -> str
     if not dates.empty:
         # "已完成"的判据是**起点足够早且中段无空洞**，不是"存在旧数据"：
         # 只回填到 2022 就跳过的写法会漏掉 2023-01 ~ 2023-05 的断裂。
-        early = int((dates < BACKFILL_START).sum())
+        early = int((dates < start).sum())
         has_gap = ((dates.sort_values().diff().dt.days > 30).sum() > 0)
         if early > 200 and not has_gap:
             return "already"
 
     ts_code = symbol + (".SH" if symbol.startswith("6") else ".SZ" if symbol.startswith(("0", "3")) else ".BJ")
-    fetched = provider.get_daily_data(ts_code, start_date=BACKFILL_START.replace("-", ""), end_date=BACKFILL_END.replace("-", ""))
+    fetched = provider.get_daily_data(ts_code, start_date=start.replace("-", ""), end_date=end.replace("-", ""))
     new_rows = to_standard(fetched)
     if new_rows.empty:
         return "no_data"
@@ -117,7 +127,13 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0, help="只处理前 N 只（0=全部），用于冒烟")
     parser.add_argument("--symbols", nargs="*", default=None, help="指定标的（不带后缀）")
     parser.add_argument("--interval", type=float, default=None, help="请求间隔秒，默认取 config")
+    parser.add_argument("--start", default=BACKFILL_START, help=f"回填起点（默认 {BACKFILL_START}）")
+    parser.add_argument("--end", default=BACKFILL_END, help=f"回填终点（默认 {BACKFILL_END}）")
+    parser.add_argument("--max-cache-start-year", type=int, default=None,
+                        help="只处理缓存起点年份 <= 该值的标的。前推历史时用它把范围限定在"
+                             "本来就有早期数据的标的，避免对 5000 只全量重抓（全量约 6 小时）")
     args = parser.parse_args()
+    start, end = args.start, args.end
 
     config = load_config(BASE / "config/config.yaml")
     interval = args.interval if args.interval is not None else float(
@@ -130,19 +146,36 @@ def main() -> None:
         symbols = list(args.symbols)
     else:
         symbols = sorted(p.name[: -len("_qfq.pkl")] for p in CACHE_DIR.glob("*_qfq.pkl"))
+    if args.max_cache_start_year is not None:
+        kept: list[str] = []
+        for symbol in symbols:
+            path = CACHE_DIR / f"{symbol}_qfq.pkl"
+            try:
+                frame = pd.read_pickle(path)
+                dates = pd.to_datetime(frame["datetime"], errors="coerce").dropna()
+            except Exception:  # noqa: BLE001 - 读不了就跳过
+                continue
+            if len(dates) and dates.min().year <= args.max_cache_start_year:
+                kept.append(symbol)
+        print(f"按缓存起点年份 <= {args.max_cache_start_year} 过滤：{len(kept)} / {len(symbols)}", flush=True)
+        symbols = kept
+
     if args.limit:
         symbols = symbols[: args.limit]
 
-    done = load_progress()
+    progress = progress_path(start, end)
+    done = load_progress(progress)
     todo = [s for s in symbols if s not in done]
-    print(f"待处理 {len(todo)} / {len(symbols)}（已完成 {len(symbols) - len(todo)}），间隔 {interval}s", flush=True)
+    print(f"区间 {start} ~ {end}")
+    print(f"进度文件 {progress.name}（已完成 {len(done)}）")
+    print(f"待处理 {len(todo)} / {len(symbols)}，间隔 {interval}s", flush=True)
 
     counts: dict[str, int] = {}
     started = time.time()
     for index, symbol in enumerate(todo, start=1):
         path = CACHE_DIR / f"{symbol}_qfq.pkl"
         try:
-            result = backfill_one(provider, symbol, path)
+            result = backfill_one(provider, symbol, path, start, end)
         except Exception as error:  # noqa: BLE001 - 单只失败继续
             result = f"error: {type(error).__name__}: {error}"
         key = result.split(":")[0]
@@ -155,10 +188,10 @@ def main() -> None:
             remaining = rate * (len(todo) - index)
             print(f"  {index}/{len(todo)}  {counts}  用时 {elapsed/60:.1f}m  预计剩余 {remaining/60:.1f}m",
                   flush=True)
-            save_progress(done)
+            save_progress(progress, done)
         time.sleep(interval)
 
-    save_progress(done)
+    save_progress(progress, done)
     print(f"\n完成：{counts}")
     print(f"总用时 {(time.time() - started)/60:.1f} 分钟")
 

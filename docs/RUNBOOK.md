@@ -312,9 +312,14 @@ python quant-python/signal_system/acceptance/run_daily_scan_acceptance.py --grou
   - **方法警示**：把同一时间窗内的信号池化当独立样本会得出相反结论（两组落在不同日历时段，
     且未剔除样本末端的前向窗口污染）。正确做法是**按日聚合**并做季度内配对。
     详见 [2026-10-13 市场闸门核验](../docs/2026-10-13-市场闸门核验.md)。
-  - **`position.mobile_cash_ratio`（"预留 25% 机动现金"）是死配置**：全仓库只有写入无读取
-    （`utils/helpers.py:354` 抄进 `risk_control.position.reserve_cash_ratio` 后无人使用）。
+  - **`position.mobile_cash_ratio`（"预留 25% 机动现金"）不参与任何资金计算**：它有读取点
+    （`core/position/position_manager.py:21,35,40`），但只流向信号建议文案
+    （`notification/notifier.py:190,209,225`）与元数据；唯一算股数的
+    `PositionManager.build_position()` 无生产调用者，生产监控链路也不引用 `strategy_engine`。
     实测平均部署率 94.1%、2024Q4 的 61 天里 55 天满 4 仓。**不要按"已预留 25% 现金"做仓位预期。**
+    > 更正（2026-10-14）：原文"全仓库只有写入无读取"不准确；真死键是下游的
+    > `risk_control.position.reserve_cash_ratio`（3 处命中全是写入、0 读取）。
+    > 详见 [2026-10-14 机动现金配置核验](../docs/2026-10-14-机动现金配置核验.md)。
   - **两套回测对闸门处理不一致**：`backtest_winrate.py`（旧）在 `simulate_signal_mode` 里对
     **每个买点**都查闸门、**不分策略**；`research_backtest.py`（新，三策略对照用）**完全不读闸门**
     （0 处引用，仅把 `entry_filters` 列入 `CONFIG_KEYS` 做快照）。因此三策略分批止盈的所有结论
