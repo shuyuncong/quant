@@ -546,5 +546,156 @@ class StockPoolTests(unittest.TestCase):
             )
 
 
+class MarketGateObservabilityScanTests(unittest.TestCase):
+    """scan_zero_axis 日报必须同时给出指数层 blocker 分布与个股层被拦信号数。"""
+
+    def _scan_monitor(self, directory: str, *, gate_open: bool, symbols: list[dict]):
+        monitor = object.__new__(SignalMonitor)
+        monitor.config = {
+            **pool_config(enabled=False),
+            "scan": {"universe_mode": "watchlist"},
+            "entry_filters": {"market_gate_enabled": True, "position_gate_enabled": True},
+        }
+        monitor.market = MagicMock()
+        monitor.market.refresh_daily_histories_from_snapshot.return_value = 0
+        monitor.market.latest_expected_trade_date.return_value = date(2025, 7, 16)
+        monitor.market.get_bars.return_value = history(periods=140)
+        monitor.analyzer = MagicMock()
+        monitor.analyzer.analyze.side_effect = lambda *_: {
+            "event_objects": [],
+            "timeframes": {
+                "1d": {
+                    "latest_time": "2025-07-16",
+                    "latest_price": 10.0,
+                    "buy_score": 70,
+                    "indicators": {
+                        "golden_cross_entry_ready": True,
+                        "golden_cross_entry_zone": "above",
+                        "golden_cross_zone": "above",
+                        "golden_cross_state": "confirmed_pullback",
+                        "dif": 1.2,
+                        "dea": 0.8,
+                        "above_ma_long": True,
+                        "ma_long_up": True,
+                    },
+                    "chan": {"fresh_signals": []},
+                }
+            },
+        }
+        monitor.store = MagicMock()
+        # run_state 用真实的内存 KV 语义：set 之后再 get 必须看得到，
+        # 否则"观测写没写进去"这件事根本测不出来。
+        state: dict[str, str] = {}
+        monitor.store.get_state.side_effect = lambda key, default=None: state.get(key, default)
+        monitor.store.set_state.side_effect = lambda key, value: state.__setitem__(key, value)
+        monitor.notifier = MagicMock()
+        monitor.notifier.active_channels.return_value = []
+        monitor.output_dir = Path(directory)
+        monitor.watchlist = [row["code"] for row in symbols]
+        monitor.max_scan_symbols = 500
+        monitor.min_daily_bars = 120
+        monitor.candidate_ttl = 5
+        monitor.candidate_limit = 100
+        monitor.push_candidate_pool = False
+        monitor._name_map = None
+        monitor.market.get_stock_list.return_value = pd.DataFrame(symbols)
+        monitor._market_entry_context = lambda: {
+            "enabled": True,
+            "allows_entries": gate_open,
+            "blocked": not gate_open,
+            "blocked_by": [] if gate_open else ["ma_long_down", "below_ma_long"],
+            "regime": "bull" if gate_open else "bear",
+            "index_last_day": "2025-07-16",
+        }
+        return monitor
+
+    def test_blocked_signals_are_counted_and_gate_history_is_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._scan_monitor(
+                directory, gate_open=False, symbols=[{"code": "000001", "name": "甲"}]
+            )
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            signals = report["market_gate_signals"]
+            self.assertEqual(1, signals["signals_screened"])
+            self.assertEqual(1, signals["blocked_by_market_gate"])
+            self.assertEqual(1, signals["candidates_published"])
+            self.assertEqual(1, signals["this_run"]["candidates_entry_gate_blocked"])
+            self.assertEqual("2025-07-16", signals["day"])
+            # 指数层：当日 blocker 与逐日分布都落进报告。
+            gate = report["market_gate"]
+            self.assertEqual("2025-07-16", gate["today"]["date"])
+            self.assertFalse(gate["today"]["allows_entries"])
+            self.assertEqual(
+                ["ma_long_down", "below_ma_long"], gate["today"]["active_blockers"]
+            )
+            self.assertEqual(1, gate["days_recorded"])
+            self.assertEqual("1/1", gate["hits"]["ma_long_down"]["display"])
+            # 观测写进了 run_state（web_bridge 侧可读）。
+            written = {
+                call.args[0]: call.args[1] for call in monitor.store.set_state.call_args_list
+            }
+            self.assertIn("market_gate_history", written)
+            self.assertIn("2025-07-16", written["market_gate_history"])
+
+    def test_open_gate_reports_zero_blocked_signals_without_hiding_the_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._scan_monitor(
+                directory, gate_open=True, symbols=[{"code": "000001", "name": "甲"}]
+            )
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            signals = report["market_gate_signals"]
+            self.assertEqual(1, signals["signals_screened"])
+            self.assertEqual(0, signals["blocked_by_market_gate"])
+            gate = report["market_gate"]
+            self.assertTrue(gate["today"]["allows_entries"])
+            self.assertEqual([], gate["today"]["active_blockers"])
+            self.assertEqual(1, gate["days_recorded"])
+            self.assertEqual("0/1", gate["hits"]["ma_long_down"]["display"])
+            lines = SignalMonitor._market_gate_summary_lines(gate, signals)
+            self.assertIn("闸门：开", "\n".join(lines))
+
+    def test_empty_scan_still_reports_the_gate_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._scan_monitor(directory, gate_open=False, symbols=[])
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            signals = report["market_gate_signals"]
+            self.assertEqual(0, signals["signals_screened"])
+            self.assertEqual(0, signals["blocked_by_market_gate"])
+            # 无信号也必须能看出闸门是开是关，否则数据不可解读。
+            lines = SignalMonitor._market_gate_summary_lines(report["market_gate"], signals)
+            self.assertIn("闸门：关", "\n".join(lines))
+            self.assertEqual(1, report["market_gate"]["days_recorded"])
+
+    def test_scan_summary_push_text_carries_the_gate_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._scan_monitor(
+                directory, gate_open=False, symbols=[{"code": "000001", "name": "甲"}]
+            )
+            monitor.push_candidate_pool = True
+            monitor.notifier.active_channels.return_value = ["webhook"]
+            enqueued = []
+            monitor.store.enqueue_event = lambda event, channels: enqueued.append(event) or True
+            monitor.dispatch_outbox = MagicMock(return_value={"delivered": 1, "failed": 0})
+
+            monitor.scan_zero_axis(notify=True)
+
+            self.assertEqual(1, len(enqueued))
+            evidence = enqueued[0].evidence
+            self.assertIn("闸门：关", evidence["content"])
+            self.assertIn("ma_long_down", evidence["content"])
+            self.assertIn("因闸门被拦下的信号：1 只", evidence["content"])
+            self.assertEqual(1, evidence["market_gate_signals"]["blocked_by_market_gate"])
+            self.assertEqual(
+                ["ma_long_down", "below_ma_long"],
+                evidence["market_gate"]["today"]["active_blockers"],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

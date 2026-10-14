@@ -295,6 +295,12 @@ function DataSourceView({ source }: { source: DataSource }) {
             <span>环境 {String(source.market_context.regime ?? "-")}</span>
             <span>允许开仓 {String(source.market_context.allows_entries ?? "-")}</span>
             <span>均线多头 {String(source.market_context.above_ma_long ?? "-")}</span>
+            <span>
+              拦下条件{" "}
+              {Array.isArray(source.market_context.blocked_by) && source.market_context.blocked_by.length
+                ? (source.market_context.blocked_by as unknown[]).map(String).join("、")
+                : "无"}
+            </span>
           </div>
         </div>
       )}

@@ -26,6 +26,11 @@ from strategy.yearline import (
     last_bar_pullback_candidate,
     prepare_yearline_bars,
 )
+from strategy.gate_observability import (
+    MARKET_GATE_BLOCKER_ORDER,
+    classify_market_gate_blockers,
+    summarize_market_gate_history,
+)
 from strategy.macd_divergence import (
     POOL_TYPE_DIVERGENCE,
     add_divergence_indicators,
@@ -62,6 +67,15 @@ EXIT_RULE_PRIORITY = {
     "移动止盈": 5,
     "固定止盈": 6,
 }
+
+# 闸门可观测性：逐交易日追加一条判定（指数级，一天一条），日报按窗口聚合。
+# 记在 run_state KV 而不是新表：数据量 = 交易日数，且 web_bridge 已能读 state。
+MARKET_GATE_HISTORY_KEY = "market_gate_history"
+MARKET_GATE_HISTORY_LIMIT = 1200
+MARKET_GATE_SIGNAL_COUNTS_KEY = "market_gate_signal_counts"
+# 日报聚合窗口：一个自然年 ≈ 244 个交易日，足以回答"闸门是否过严"而不被
+# 更早的市场状态稀释；跨窗口对照仍在回测侧做（见 docs/2026-10-13-闸门跨窗口结论.md）。
+MARKET_GATE_REPORT_WINDOW_DAYS = 240
 
 
 def _is_stale_data_error(message: str) -> bool:
@@ -214,7 +228,13 @@ class SignalMonitor:
         """Evaluate the index once per daily scan and fail closed when enabled."""
         filters = self.config.get("entry_filters", {})
         if not filters.get("market_gate_enabled", False):
-            return {"enabled": False, "allows_entries": True, "regime": "disabled"}
+            return {
+                "enabled": False,
+                "allows_entries": True,
+                "blocked": False,
+                "blocked_by": [],
+                "regime": "disabled",
+            }
 
         index_code = str(
             filters.get("market_index_code")
@@ -258,9 +278,6 @@ class SignalMonitor:
                 macd_slow=macd_settings["slow"],
                 macd_signal=macd_settings["signal"],
             )
-            fast_bear = fast_gate.get("ma10_latch_bear", False) or fast_gate.get(
-                "macd_latch_bear", False
-            )
             # Strict MA20/MA10 regime, aligned with backtest build_market_gate.
             if not closed_index_bars.empty:
                 strict_regime = str(
@@ -276,26 +293,40 @@ class SignalMonitor:
             # 曾经把 blocker 折叠成 regime="bear" 再由 regime 反推 allows_entries，
             # 使 strict_regime 被重复计入闸门：在 blocker 全清但 MA10<MA20 且 MA20 下行
             # 的日子（长期趋势完好、仅短期回调）多拦了一批开仓，与回测口径分歧 28/2103 天。
-            blocked = bool(
-                death_cross
-                or indicators.get("ma_long_down")
-                or not indicators.get("above_ma_long")
-                or not trend_up
-                or fast_bear
+            above_ma_long = bool(indicators.get("above_ma_long"))
+            ma_long_down = bool(indicators.get("ma_long_down"))
+            # blocker 名单由上面这几个布尔值直接推出，blocked 只由名单决定：
+            # 取值与拆分同源，观测口径不可能与判定本身漂移。
+            blocked_by = classify_market_gate_blockers(
+                above_ma_long=above_ma_long,
+                ma_long_down=ma_long_down,
+                death_cross=death_cross,
+                trend_up=trend_up,
+                ma10_latch_bear=bool(fast_gate.get("ma10_latch_bear", False)),
+                macd_latch_bear=bool(fast_gate.get("macd_latch_bear", False)),
             )
+            blocked = bool(blocked_by)
+            # 逐日观测的日期锚点：指数最后一根已收盘日线（列缺失时退回 None，
+            # 由调用方用提醒日兜底 —— 不能让观测层给判定层新增异常路径）。
+            index_last_day = None
+            if not closed_index_bars.empty and "datetime" in closed_index_bars.columns:
+                index_last_day = str(closed_index_bars["datetime"].iloc[-1])[:10]
             return {
                 "enabled": True,
                 "index_code": index_code,
                 "allows_entries": not blocked,
                 "regime": strict_regime,
                 "blocked": blocked,
+                "blocked_by": blocked_by,
                 "death_cross": death_cross,
                 "bearish_structure": bearish_structure,
-                "above_ma_long": bool(indicators.get("above_ma_long")),
+                "above_ma_long": above_ma_long,
                 "ma_long_up": bool(indicators.get("ma_long_up")),
+                "ma_long_down": ma_long_down,
                 "trend_up": trend_up,
                 "ma10_latch_bear": fast_gate.get("ma10_latch_bear", False),
                 "macd_latch_bear": fast_gate.get("macd_latch_bear", False),
+                "index_last_day": index_last_day,
             }
         except Exception as exc:
             fail_open = bool(filters.get("market_gate_fail_open", False))
@@ -304,9 +335,175 @@ class SignalMonitor:
                 "enabled": True,
                 "index_code": index_code,
                 "allows_entries": fail_open,
+                "blocked": not fail_open,
+                # 数据不可用不是"条件成立"，单列名字以免污染六项 blocker 的分布。
+                "blocked_by": [] if fail_open else ["gate_unavailable"],
                 "regime": "unknown",
                 "error": str(exc),
             }
+
+    @staticmethod
+    def _gate_history_day(context: dict[str, Any], fallback_day: str) -> str:
+        """交易日键：指数最后一根已收盘 K 线的日期优先，缺失时退回提醒日。"""
+        index_day = context.get("index_last_day")
+        day = str(index_day) if index_day else str(fallback_day)
+        return day[:10]
+
+    def _record_market_gate_history(self, context: dict[str, Any]) -> list[dict[str, Any]]:
+        """Append today's gate decision to the run_state history; return the tail.
+
+        指数级决策一天只有一条，按日期覆盖写入（同日重跑不会重复计数）。
+        gate 未启用时不写：否则"disabled"会被当成"闸门开着"混进放行率。
+        """
+        if not context.get("enabled"):
+            return self._load_market_gate_history()
+        day = self._gate_history_day(context, self._alert_day())
+        entry = {
+            "date": day,
+            "allows_entries": bool(context.get("allows_entries")),
+            "blocked": bool(context.get("blocked")),
+            "blocked_by": list(context.get("blocked_by") or []),
+            "regime": context.get("regime"),
+            "fail_closed": not bool(context.get("allows_entries")) and "gate_unavailable" in (
+                context.get("blocked_by") or []
+            ),
+        }
+        history = self._load_market_gate_history()
+        recorded = [row for row in history if str(row.get("date")) != day]
+        recorded.append(entry)
+        recorded.sort(key=lambda row: str(row.get("date")))
+        # 先排序再截断，否则保留的是"最旧的一批 + 今天"而不是最近 N 天。
+        recorded = recorded[-MARKET_GATE_HISTORY_LIMIT:]
+        self.store.set_state(
+            MARKET_GATE_HISTORY_KEY,
+            json.dumps(recorded, ensure_ascii=False, default=str),
+        )
+        return recorded
+
+    def _load_market_gate_history(self) -> list[dict[str, Any]]:
+        raw = self.store.get_state(MARKET_GATE_HISTORY_KEY, "[]") or "[]"
+        try:
+            loaded = json.loads(raw)
+        except (TypeError, ValueError):
+            logger.warning("闸门历史不可解析，按空历史处理: %s", MARKET_GATE_HISTORY_KEY)
+            return []
+        if not isinstance(loaded, list):
+            return []
+        return [row for row in loaded if isinstance(row, dict) and row.get("date")]
+
+    def _summarize_market_gate(
+        self, fallback_day: str, context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """日报用闸门块：当日 blocker + 近 N 日逐日分布（指数层，一天一条）。
+
+        只读 ``run_state`` 里已写入的观测（写入点在扫描开始时），不做二次写入。
+        """
+        history = self._load_market_gate_history()
+        summary = summarize_market_gate_history(
+            history, window_days=MARKET_GATE_REPORT_WINDOW_DAYS
+        )
+        day = self._gate_history_day(context, fallback_day)
+        today = next(
+            (row for row in reversed(history) if str(row.get("date")) == day), None
+        )
+        active_blockers = list(
+            (today or {}).get("blocked_by") or context.get("blocked_by") or []
+        )
+        summary["enabled"] = bool(context.get("enabled"))
+        summary["today"] = {
+            "date": day,
+            "allows_entries": bool(
+                today["allows_entries"] if today is not None
+                else context.get("allows_entries", False)
+            ),
+            "blocked": bool(
+                today["blocked"] if today is not None else context.get("blocked", False)
+            ),
+            "blocked_by": active_blockers,
+            "active_blockers": active_blockers,
+            "regime": (today or {}).get("regime", context.get("regime")),
+        }
+        return summary
+
+    def _accumulate_market_gate_signals(
+        self,
+        day: str,
+        counts: dict[str, Any],
+        completed_round: bool,
+    ) -> dict[str, Any]:
+        """把本轮个股层计数累加进"当日"桶，得到跨批次的当日合计数。
+
+        全市场模式下一天要跑多个批次，而日报（完成轮）只看得到最后一批；
+        不累加就会把"这一批拦下几只"当成"今天拦下几只"。完成轮读完即清桶，
+        同一天重跑会重新累计（口径仍是"这一天"）。
+        """
+        raw = self.store.get_state(MARKET_GATE_SIGNAL_COUNTS_KEY, "{}") or "{}"
+        try:
+            state = json.loads(raw)
+        except (TypeError, ValueError):
+            state = {}
+        if not isinstance(state, dict) or state.get("day") != day:
+            state = {"day": day}
+        for key in (
+            "signals_screened",
+            "blocked_by_market_gate",
+            "blocked_by_position_gate",
+            "policy_observe_only",
+            "candidates_published",
+            "batches",
+        ):
+            state[key] = int(state.get(key, 0) or 0) + int(counts.get(key, 0) or 0)
+        state["day"] = day
+        if completed_round:
+            self.store.set_state(MARKET_GATE_SIGNAL_COUNTS_KEY, "{}")
+        else:
+            self.store.set_state(
+                MARKET_GATE_SIGNAL_COUNTS_KEY, json.dumps(state, ensure_ascii=False)
+            )
+        return state
+
+    @staticmethod
+    def _market_gate_summary_lines(
+        gate_summary: dict[str, Any], signal_counts: dict[str, Any]
+    ) -> list[str]:
+        """把闸门块压成推送文案的几行；空场次也看得见闸门开/关。"""
+        today = gate_summary.get("today") or {}
+        if not today:
+            return []
+        if gate_summary.get("enabled") is False:
+            return ["闸门：未启用（entry_filters.market_gate_enabled=false）"]
+        if today.get("allows_entries"):
+            lines = [f"闸门：开（{today.get('date')}，环境 {today.get('regime')}）"]
+        else:
+            blockers = "、".join(today.get("active_blockers") or []) or "unknown"
+            lines = [
+                (
+                    f"闸门：关（{today.get('date')}，环境 {today.get('regime')}，"
+                    f"拦下条件 {blockers}）"
+                )
+            ]
+        days = gate_summary.get("days_recorded") or 0
+        if days:
+            allowed = gate_summary.get("allowed_days") or 0
+            lines.append(
+                f"闸门近 {days} 日：放行 {allowed}/{days}"
+                f"（{gate_summary.get('window_start')}~{gate_summary.get('window_end')}）"
+            )
+            hits = gate_summary.get("hits") or {}
+            fired = [
+                f"{name}:{hits[name]['display']}"
+                for name in MARKET_GATE_BLOCKER_ORDER
+                if name in hits and hits[name]["days"]
+            ]
+            if fired:
+                lines.append("条件命中：" + " ".join(fired))
+        screened = int((signal_counts or {}).get("signals_screened", 0) or 0)
+        blocked = int((signal_counts or {}).get("blocked_by_market_gate", 0) or 0)
+        if screened or blocked:
+            lines.append(
+                f"因闸门被拦下的信号：{blocked} 只（当日零轴信号 {screened} 只，仅日线零轴金叉口径）"
+            )
+        return lines
 
     @staticmethod
     def _daily_macd_notification_events(
@@ -751,12 +948,17 @@ class SignalMonitor:
         completed_round: bool,
         candidates: list[dict[str, Any]] | None = None,
         observed_candidates: list[dict[str, Any]] | None = None,
+        market_gate: dict[str, Any] | None = None,
+        market_gate_signals: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """推送每日扫描完成通知（统一一条汇总，不逐股推送）。
 
         闸门未开时符合指标的候选进入候选池并标记 execution_mode=observe_only
         （列表内标注"观察，闸门未开"）；policy 级 observe_only 的信号进入
         observed_candidates：仍展示，但不作为独立入场依据。
+
+        market_gate / market_gate_signals 为闸门可观测性块：无论当天有无信号，
+        汇总正文都带一行闸门开/关与近 N 日 blocked_by 分布，空场次也能解读。
         """
         channels = self.notifier.active_channels()
         if not channels:
@@ -765,6 +967,9 @@ class SignalMonitor:
         content = f"每日扫描完成，共 {candidate_count} 只符合日线零轴金叉条件"
         if completed_round:
             content += "（全市场轮询完成）"
+        gate_lines = self._market_gate_summary_lines(market_gate or {}, market_gate_signals or {})
+        if gate_lines:
+            content += "\n\n" + "\n".join(gate_lines)
         listed: list[dict[str, Any]] = []
         for item in (candidates or [])[:50]:
             listed.append(
@@ -833,6 +1038,9 @@ class SignalMonitor:
                 "completed_round": completed_round,
                 "candidates": listed,
                 "observed_candidates": observed_listed,
+                # 结构化留存：推送渠道丢了也能从 outbox 里回看当天闸门口径。
+                "market_gate": market_gate or {},
+                "market_gate_signals": market_gate_signals or {},
             },
         )
         inserted = self.store.enqueue_event(event, channels)
@@ -915,11 +1123,19 @@ class SignalMonitor:
         fundamental_rejections: Counter = Counter()
         fundamental_details: list[dict[str, Any]] = []
         observed_candidates: list[dict[str, Any]] = []
+        # 本轮扫描的闸门计数（个股层，口径 = 日线零轴信号成立且 policy 未禁用）。
+        signals_screened = 0
+        signals_blocked_market_gate = 0
+        signals_blocked_position_gate = 0
+        signals_policy_observe_only = 0
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
         market_context = self._market_entry_context()
         entry_filters = self.config.get("entry_filters", {})
         signal_policy = resolve_signal_execution_policy(self.config)
+        # 闸门可观测性：先落一条逐日观测（指数级，同日重跑覆盖）。
+        # 聚合块在报告阶段再取，避免在扫描中途读候选池。
+        self._record_market_gate_history(market_context)
         market_regime = market_context.get("regime")
         if market_regime not in {"bull", "range", "bear"}:
             market_regime = None
@@ -994,7 +1210,10 @@ class SignalMonitor:
                     )
                     if execution_mode == "disabled":
                         continue
+                    # 指标成立且 policy 未禁用 —— 从此往后按"一个信号"计数。
+                    signals_screened += 1
                     if execution_mode == "observe_only":
+                        signals_policy_observe_only += 1
                         observed_candidates.append(
                             {
                                 "symbol": symbol,
@@ -1026,6 +1245,12 @@ class SignalMonitor:
                             if position_gate_enabled and not position_ready
                             else "market_gate_closed"
                         )
+                        # 两个闸门独立计数：市场闸门是"指数层今天不许开仓"，
+                        # 仓位闸门是"这只票自己不在上行长期均线上"，可同时命中。
+                        if not market_context.get("allows_entries", False):
+                            signals_blocked_market_gate += 1
+                        if position_gate_enabled and not position_ready:
+                            signals_blocked_position_gate += 1
                         execution_mode = "observe_only"
                         entry_gate_blocked = True
                     else:
@@ -1247,6 +1472,38 @@ class SignalMonitor:
             reverse=True,
         )
         channels = self.notifier.active_channels()
+        # 闸门可观测性（报告阶段）：
+        #   market_gate          —— 指数层：当日 blocker + 近 N 日逐日分布；
+        #   market_gate_signals  —— 个股层：当日跨批次的信号数/被闸门拦下的信号数。
+        report_day = self._gate_history_day(market_context, self._alert_day())
+        market_gate_summary = self._summarize_market_gate(report_day, market_context)
+        run_signals = {
+            "signals_screened": signals_screened,
+            "blocked_by_market_gate": signals_blocked_market_gate,
+            "blocked_by_position_gate": signals_blocked_position_gate,
+            "policy_observe_only": signals_policy_observe_only,
+            "candidates_published": len(candidates),
+            "batches": 1,
+        }
+        market_gate_signals = {
+            **self._accumulate_market_gate_signals(
+                report_day, run_signals, completed_round
+            ),
+            "strategy": "macd_zero_axis",
+            "day": report_day,
+            "this_run": {
+                **run_signals,
+                "universe_mode": universe_mode,
+                "candidates_entry_gate_blocked": sum(
+                    1 for item in candidates if item.get("entry_gate_blocked")
+                ),
+            },
+            "note": (
+                "signals_screened = 日线零轴信号成立且 policy 未禁用；"
+                "blocked_by_market_gate / blocked_by_position_gate 是两个独立闸门，"
+                "可同时命中；当日合计跨批次（完成轮后归零），本轮明细见 this_run。"
+            ),
+        }
         # 每日扫描入库后只推送一条汇总通知，不逐股推送；候选推送开关关闭时跳过汇总，仅投递队列已有事件
         delivery = {"delivered": 0, "failed": 0}
         if notify and channels:
@@ -1257,6 +1514,8 @@ class SignalMonitor:
                     completed_round=completed_round,
                     candidates=sorted_candidates,
                     observed_candidates=observed_candidates,
+                    market_gate=market_gate_summary,
+                    market_gate_signals=market_gate_signals,
                 )["delivery"]
             else:
                 delivery = self.dispatch_outbox()
@@ -1271,6 +1530,8 @@ class SignalMonitor:
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
             "market_context": market_context,
+            "market_gate": market_gate_summary,
+            "market_gate_signals": market_gate_signals,
             "signal_execution_policy": signal_policy,
             "observed_candidates": observed_candidates,
             "observed_count": len(observed_candidates),

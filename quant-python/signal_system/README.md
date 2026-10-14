@@ -285,6 +285,50 @@ python backtest_macd_divergence.py --limit 0 --start 2023-05-01 `
 
 细节与复现见 [2026-10-13 闸门跨窗口结论](../../docs/2026-10-13-闸门跨窗口结论.md)。
 
+### 闸门可观测性（`market_gate` / `market_gate_signals`）
+
+"闸门是否过严"不再靠临时脚本：每次日线零轴扫描都会把闸门的逐日判定与
+"被拦下的信号数"写进扫描产物与推送汇总。
+
+- **指数层（一天一条）**：`monitor/service.py:_market_entry_context` 现在同时返回
+  `blocked_by`（哪几个条件成立，取值与 `blocked` **同源**：`blocked = bool(blocked_by)`）
+  与 `index_last_day`；`_record_market_gate_history` 按交易日覆盖写入
+  `run_state["market_gate_history"]`（保留 1200 条）。辅助函数在
+  `strategy/gate_observability.py` —— **不要**往 `strategy/market_gate.py` 或
+  `utils/helpers.py` 里加东西：这两个文件被 `canonical_replay_semantics_audit` /
+  `entry_context_batch_audit` 以预注册 SHA256 锁字节。
+- **个股层（一信号一条）**：`signals_screened` / `blocked_by_market_gate` /
+  `blocked_by_position_gate` / `policy_observe_only` 逐批累加进
+  `run_state["market_gate_signal_counts"]`，完成轮读出后清零。
+
+扫描产物 `output/scan_*.json` 新增两个键：
+
+| 键 | 内容 |
+| --- | --- |
+| `market_gate` | `enabled`、`days_recorded`、`allowed_days`/`blocked_days`、`allowed_ratio`、`window_start`/`window_end`、`hits`、`blocked_by_daily`、`today` |
+| `market_gate_signals` | 当日跨批次合计（`signals_screened`、`blocked_by_market_gate`、`blocked_by_position_gate`、`policy_observe_only`、`batches`）+ 本轮明细 `this_run` |
+
+`hits` 每个条件的 `display` 就是"当日分布"口径，例如 `ma_long_down: 118/120`
+= 窗口 120 个交易日里有 118 天 MA250 在下行；计数单位是**交易日**，不是股票
+（闸门是指数级决策，一天只判一次）。`market_gate.today.active_blockers` 是当天的
+名单，闸门开着时为空 —— 空场次（无信号）也能从推送正文看出闸门开/关。
+
+推送汇总（`notify_scan_summary`）正文新增三行，结构化副本同时落在
+outbox 事件的 `evidence.market_gate` / `evidence.market_gate_signals`：
+
+```
+闸门：关（2026-09-14，环境 bear，拦下条件 ma_long_down、below_ma_long）
+闸门近 240 日：放行 61/240（2025-01-02~2026-09-14）
+条件命中：below_ma_long:196/240 ma_long_down:118/240 ...
+因闸门被拦下的信号：12 只（当日零轴信号 17 只，仅日线零轴金叉口径）
+```
+
+Web 控制台（结果页"市场环境"块）也直接展示当天的 `blocked_by`。
+
+**口径边界**：这套观测只覆盖日线零轴金叉（年线趋势、底背离目前不接闸门，
+`entry_gate_blocked` 也不写它们）；`market_gate_fail_open: false` 导致的
+"数据不足按关闭处理"单独记为 `gate_unavailable`，**不计入**六项 blocker 分布。
+
 研究工具（均在 `signal_system/`，不联网写生产配置）：
 
 ```powershell
