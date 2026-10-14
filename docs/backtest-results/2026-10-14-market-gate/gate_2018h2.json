@@ -1,0 +1,44 @@
+{
+ "window": "2018H2",
+ "start": "2018-07-01",
+ "end": "2018-12-31",
+ "semantics": "live",
+ "status": "NOT_RUNNABLE",
+ "reason": "窗口两侧同时为空：闸门全关 + 样本 0 只。六格无法产出（不是「跑出噪声」，而是根本无法运行）。",
+ "gate": {
+  "source": "market_gate_comparison_study.gate_map(config, semantics='live')",
+  "index_cache": "cache/index_000001_sh.pkl (2018-01-02 -> 2026-09-01, 2103 bars)",
+  "window_trading_days": 124,
+  "gate_open_days": 0,
+  "gate_open_ratio": 0.0,
+  "blocker": "insufficient_history (124/124 天)",
+  "year_2018_total_days": 243,
+  "year_2018_open_days": 0,
+  "first_day_not_insufficient_history": "2019-02-14",
+  "first_allows_entries_day": "2019-04-08",
+  "index_270th_bar_date": "2019-02-14",
+  "live_equals_backtest_semantics": true,
+  "live_backtest_identical_days": "2103/2103"
+ },
+ "sample": {
+  "builder": "research_sample_builder.py 2018-07-01 2018-12-31",
+  "cache_files_total": 5008,
+  "universe_total": 5008,
+  "included": 0,
+  "excluded": 5008,
+  "exclusion_reason": "首个交易日前不足 270 根已收盘日线 (100.0%)",
+  "calendar_days": 0
+ },
+ "stock_cache_coverage": {
+  "readable_files": 5008,
+  "first_bar_year_histogram": {"2018": 1292, "2019": 26, "2020": 54, "2021": 34, "2022": 40, "2023": 3346, "2024": 77, "2025": 91, "2026": 48},
+  "median_first_bar": "2023-05-18",
+  "earliest_first_bar": "2018-01-02",
+  "latest_last_bar_min": "2026-08-25",
+  "stocks_with_270warmup_before_2018H2": 0,
+  "stocks_with_270warmup_before_2019H1": 0,
+  "stocks_with_270warmup_before_2019H2_approx": 1263
+ },
+ "cases": {},
+ "note": "既有五窗口（2019H2/2020H2/2021H1/2022/2024H2）不受影响；本格是「无法回答」而非「结果为零」。"
+}
