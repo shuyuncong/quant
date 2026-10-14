@@ -10,7 +10,7 @@ cd /d/development/github/quant/quant-python/signal_system || exit 1
 LOG=/tmp/backfill2016.log
 PROG=cache/daily_history/_backfill_20161201_20230519_progress.json
 SAMPLE=output/backtests/_gate_samples/sample-2018-07-01-2018-12-31
-OUT=/d/tmp/gate_2018h2.json
+OUT="D:/tmp/gate_2018h2.json"
 
 echo "=== 第 1 步：等待个股回填完成 ==="
 last_change=$(date +%s)
@@ -54,7 +54,7 @@ echo "=== 第 4 步：汇总 ==="
 python - <<'PY'
 import json
 from pathlib import Path
-p = Path("/d/tmp/gate_2018h2.json")
+p = Path(r"D:/tmp/gate_2018h2.json")
 if not p.exists():
     print("!! 无输出文件"); raise SystemExit(1)
 d = json.loads(p.read_text(encoding="utf-8")); c = d.get("cases") or {}
