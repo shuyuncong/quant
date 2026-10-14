@@ -81,11 +81,11 @@ PREREGISTERED_CONFIG_SHA256 = (
     "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 )
 PREREGISTERED_INDEX_SHA256 = (
-# 2026-10-13 重新登记：cache/index_000001_sh.pkl 由 2021-09-16 起回填到 2018-01-02
-# (1200 → 2103 根)，供市场闸门在 2018–2021 窗口可判。**口径未变**：
-# 重叠的 1200 天 close 逐行相同（已核对）；attrs 已由 fix_qfq_attrs.py 补回
-# adjust='none'（指数不复权）。旧值 e59364d0…
-    "dc03509b271c5eb0466fc7b6020879f621e321f5ddbc91b7048925da6543f526"
+# 2026-10-14 重新登记：cache/index_000001_sh.pkl 由 2018-01-02 前推到 2016-12-01
+# (2103 → 2369 根)，使市场闸门在 2018 窗口可判（原先 2018 全年 blocked_by
+# 全是 insufficient_history）。**口径未变**：合并用 keep="first"，重叠的 2103 天
+# 逐列完全一致；attrs 保持 adjust='none'。旧值 a8ea074a…（误用 keep="last" 的版本）/ dc03509b…
+    "30e7b8f4d5d57d11f8f5d81ffb9a097487a85f3d317f7d017e4f09d67889ce32"
 )
 PREREGISTERED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"
