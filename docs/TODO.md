@@ -337,6 +337,16 @@ ROE、统一负债率和 log 市值在没有新数据范围或新方法前不重
   在线上按归属生效。回归：`HoldingAttributionTests`（Python，归属生效 / 未归属不借口径）
   + `holding strategy ownership` / `默认未归属，指定归属后能读回`（web，TS）。
   升级需 `npm run db:setup` 且 `SCHEMA_VERSION` 已同步为 5。
+- [x] **生产 500 事故与恢复（2026-10-14 已恢复）**：库停在 v4、`SCHEMA_VERSION=5`（`580c875`，10-12 引入），
+  `validateSchema()` 在 instrumentation hook 抛错 → 进程起不来 → 整站 500（连 `/logo.svg`）。
+  **用户确认已恢复**：`schema_meta` 最高版本 5、web 返回 307（跳登录）、`quant-backtest` `RestartCount=0`。
+  **非本会话代码引入**（未改 `db.ts`/`schema.sql`）；我唯一引入的是漏更 `package-lock.json`（已补 `2b2b17b`），
+  但本次 500 不是它。恢复途中的 `db:setup` 由加固后的 `deploy-quant.sh` 跑通（该脚本现为 fail-closed：
+  重建前校验 `PG_OWNER_PASSWORD`，缺则 `exit 1`，旧容器继续服务）。详见 `docs/2026-10-14-生产500恢复操作单.md`。
+- [x] **分析记录名称回填（2026-10-14，`57af7de`，待上生产）**：批次记录 `stock_analyses.name` 为空，
+  名称在 `jobs.payload.symbol_names` 里；原回退只查 `stock_pool`/`holdings` 故整列只剩代码。
+  回退优先级改为 ① 自带 name → ② 所属任务 payload → ③ 池/持仓 → ④ 留空。
+  踩坑：`jobs.payload` 是 **TEXT 非 jsonb**（`->` 会报 `text -> unknown`）；测试夹具一度用 `::jsonb` 掩盖了它。
 - [x] 分段止盈和回撤保护（2026-10-10：分批减仓 + 尾仓保护引擎与配置已落地，24 组 2024H1 对照 + 2024H2 样本外复核方向一致；**未更改默认参数**）
 - [x] 每日卖出信号与 AI 解读带上分批口径（2026-10-11：`strategy/registry.exit_plan_advice` 给出下一档触发价/建议股数/保本止损位，
   `evaluate_strategies` 在实盘层按当日日线最高价补 `met`，推送 evidence 带 `exit_plan_advice`，`/results` 条件表直接显示执行摘要，
