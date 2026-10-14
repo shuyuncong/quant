@@ -74,6 +74,20 @@ elif printf '%s\n' "$DATABASE_URL_VALUE" | grep -Eq '@quant-db(:[0-9]+)?(/|$)'; 
     exit 1
 fi
 
+# 迁移密码必须在重建容器之前就校验。
+#
+# 原顺序是「先 up -d --build 重建容器，再跑 db:setup」，一旦 PG_OWNER_PASSWORD 缺失，
+# 迁移会被跳过，而新镜像（要求更高 schema 版本）已经起来 —— 应用在 instrumentation 阶段
+# 校验版本失败，进程挂在"端口在听但全部 500"的状态，整站不可用
+# （2026-10-14 生产事故即此：库停在 v4、代码要求 v5，/logo.svg 都是 500）。
+# 缺密码时直接中止：旧容器继续服务，比"部署到一半把站点打挂"安全得多。
+# 确需跳过时用 DEPLOY_PAUSED=1（上面已有出口）。
+if [ "$DB_MODE" = "selfhost" ] && [ -z "$(get_env PG_OWNER_PASSWORD)" ]; then
+    log "ERROR: DB_MODE=selfhost 但 .env 缺少 PG_OWNER_PASSWORD，无法执行 db:setup，中止部署（旧容器继续服务）"
+    log "       补上该变量后重试；或确认 schema 已是最新再部署。"
+    exit 1
+fi
+
 cd "$REPO"
 git fetch origin master 2>&1 | tee -a "$LOG"
 
