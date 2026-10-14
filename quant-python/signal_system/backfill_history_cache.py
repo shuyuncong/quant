@@ -107,7 +107,11 @@ def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path, start:
         return "no_data"
 
     combined = pd.concat([existing, new_rows], ignore_index=True) if not existing.empty else new_rows
-    combined = combined.drop_duplicates("datetime", keep="last").sort_values("datetime").reset_index(drop=True)
+    # keep="first"：重叠日期一律保留**既有缓存值**，只用新数据补齐缺失的更早日期。
+    # 与 backfill_index_history.py 保持同一语义 —— 前推历史没有理由重写既有行。
+    # （本脚本因只抓 --start~--end 这段、与既有缓存重叠极小，实测 0 漂移；
+    #  但语义应当一致，否则一旦改动抓取区间就会静默改写历史。）
+    combined = combined.drop_duplicates("datetime", keep="first").sort_values("datetime").reset_index(drop=True)
     # pd.concat / reset_index 会丢掉 DataFrame.attrs，而下游审计（atr_volatility_audit、
     # canonical_replay_semantics_audit 等）用 frame.attrs["adjust"] == "qfq" 判定口径。
     # 必须显式还原，否则整批缓存会被判为"非 qfq"而拒绝。
