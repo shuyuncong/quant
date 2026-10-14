@@ -23,8 +23,17 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+/** 组件现在先读 text() 再解析 JSON（以免把文本型 500 误报成 JSON 解析错误）。 */
+function jsonResponse(payload: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload),
+  } as unknown as Response;
+}
+
 function response(list: typeof records): Response {
-  return { ok: true, status: 200, json: async () => ({ records: list, total: list.length }) } as Response;
+  return jsonResponse({ records: list, total: list.length });
 }
 
 function articleFor(symbol: string, host: HTMLElement): HTMLButtonElement {
@@ -192,11 +201,7 @@ describe("analysis records pagination", () => {
     return vi.fn((url: string) => {
       const page = Number(new URL(String(url), "http://localhost").searchParams.get("page") ?? "1");
       const pageRecords = many.slice((page - 1) * 5, page * 5);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ records: pageRecords, total: many.length, page, page_size: 5 }),
-      } as Response);
+      return Promise.resolve(jsonResponse({ records: pageRecords, total: many.length, page, page_size: 5 }));
     });
   }
 
@@ -285,5 +290,49 @@ describe("analysis records pagination", () => {
     } finally {
       delete (Element.prototype as unknown as Record<string, unknown>).scrollIntoView;
     }
+  });
+});
+
+describe("analysis records 错误呈现", () => {
+  it("把文本型 500 的响应体转成可读错误，而不是 JSON 解析失败的噪声", async () => {
+    // 线上就是这样：路由抛未捕获异常 → Next.js 返回 text/plain 的 "Internal Server Error"
+    await renderRecords(vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: async () => "Internal Server Error",
+      } as unknown as Response),
+    ));
+
+    const alert = host.querySelector("[role='alert']");
+    expect(alert, "应显示错误提示").toBeDefined();
+    const message = alert!.textContent ?? "";
+    expect(message).toContain("500");
+    expect(message).toContain("Internal Server Error");
+    // 不应再出现让人无从下手的 JSON 解析错误
+    expect(message).not.toContain("Unexpected token");
+  });
+
+  it("接口返回非 JSON 但状态为 200 时给出明确提示", async () => {
+    await renderRecords(vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => "<!DOCTYPE html><html>…",
+      } as unknown as Response),
+    ));
+    const message = host.querySelector("[role='alert']")?.textContent ?? "";
+    expect(message).toContain("非 JSON");
+  });
+
+  it("接口 JSON 里带 error 字段时优先展示它", async () => {
+    await renderRecords(vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: async () => JSON.stringify({ error: "读取分析记录失败：connect ECONNREFUSED 127.0.0.1:5432" }),
+      } as unknown as Response),
+    ));
+    expect(host.querySelector("[role='alert']")?.textContent).toContain("ECONNREFUSED");
   });
 });

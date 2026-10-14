@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { normalizeSymbol } from "@/lib/symbols";
 
 /**
  * 列表只返回摘要：在 SQL 层就把 document 里的大字段剥掉。
@@ -25,29 +26,78 @@ const SUMMARY_DOCUMENT = `jsonb_build_object(
          'synthesis', s.document->'synthesis'
        )`;
 
+/** 名称表：只在这两张表里找，表名是字面量，不来自请求。 */
+const NAME_TABLES = ["quant.stock_pool", "quant.holdings"] as const;
+
+const LIST_PAGE_SIZE = 5;
+
+/** 列表查询只依赖 stock_analyses；名称回退另走查询，失败也不影响列表。 */
+const LIST_QUERY = (where: string) => `SELECT s.id, s.job_id, s.symbol, s.name, s.status, s.created_at, s.updated_at,
+            ${SUMMARY_DOCUMENT} AS document
+     FROM quant.stock_analyses s ${where} ORDER BY s.id DESC LIMIT ${LIST_PAGE_SIZE} OFFSET $3`;
+
+type AnalysisRow = {
+  id: unknown;
+  job_id: unknown;
+  symbol: string;
+  name: string;
+  document: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 /**
  * 归一化成 6 位代码，用于跨表匹配名称。
  *
- * 各表存储格式不统一（`605296` / `605296.SH` / `SH605296` 都出现过），直接相等比较会静默匹配不上，
- * 所以两边都去掉交易所前缀与后缀后再比。
+ * 各表存储格式不统一（`605296` / `605296.SH` / `SH605296` 都出现过），直接相等比较会静默匹配不上。
+ * 这里的取值范围与 `normalizeSymbol` 一致，只是它的输出带交易所后缀、这里只要代码本身。
  */
-function bareCode(column: string): string {
-  return `regexp_replace(regexp_replace(upper(${column}), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '')`;
+function bareCode(value: unknown): string {
+  return normalizeSymbol(String(value ?? "")).split(".")[0];
 }
 
 /**
- * 名称回退：记录自带 name 为空时，用品池/持仓里的名称兜底。
- * 子查询里必须写 `s.symbol` —— 只写 `symbol` 会绑定到内层表的同名列（p.symbol = p.symbol），
- * 子查询返回多行，Postgres 直接报 21000。
+ * 为空名称的记录补上池/持仓名称（best-effort）。
+ *
+ * 刻意不做成列表主查询里的子查询：一旦名称表缺失或结构不同，整个列表就会 500。
+ * 名称只是补充信息，查不到就留空，绝不能让列表跟着挂掉。
  */
-const NAME_FALLBACK = `COALESCE(
-         NULLIF(BTRIM(s.name), ''),
-         (SELECT p.name FROM quant.stock_pool p
-           WHERE ${bareCode("p.symbol")} = ${bareCode("s.symbol")} AND BTRIM(p.name) <> '' LIMIT 1),
-         (SELECT h.name FROM quant.holdings h
-           WHERE ${bareCode("h.symbol")} = ${bareCode("s.symbol")} AND BTRIM(h.name) <> '' LIMIT 1),
-         ''
-       )`;
+async function fillMissingNames(
+  db: { query: (text: string, values?: readonly unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+  rows: AnalysisRow[],
+): Promise<void> {
+  const missing = rows.filter((row) => !String(row.name ?? "").trim());
+  if (missing.length === 0) return;
+  const codes = [...new Set(missing.map((row) => bareCode(row.symbol)).filter(Boolean))];
+  if (codes.length === 0) return;
+
+  const found = new Map<string, string>();
+  for (const table of NAME_TABLES) {
+    try {
+      const result = await db.query(
+        `SELECT regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') AS code,
+                MAX(BTRIM(name)) AS name
+           FROM ${table}
+          WHERE regexp_replace(regexp_replace(upper(symbol), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '') = ANY($1::text[])
+            AND BTRIM(name) <> ''
+          GROUP BY 1`,
+        [codes],
+      );
+      for (const row of result.rows) {
+        const code = String(row.code ?? "");
+        const name = String(row.name ?? "").trim();
+        if (code && name && !found.has(code)) found.set(code, name);
+      }
+    } catch {
+      // 名称是补充信息：该表缺失/结构不同时静默跳过，不影响列表本身。
+    }
+  }
+
+  for (const row of rows) {
+    if (String(row.name ?? "").trim()) continue;
+    const name = found.get(bareCode(row.symbol));
+    if (name) row.name = name;
+  }
+}
 
 export async function GET(request: Request) {
   const search = new URL(request.url).searchParams;
@@ -56,18 +106,18 @@ export async function GET(request: Request) {
   if (jobId !== null && (!Number.isSafeInteger(jobId) || jobId < 1)) return NextResponse.json({ error: "任务编号无效" }, { status: 422 });
   const symbol = search.get("symbol")?.trim() || null;
   const where = "WHERE ($1::bigint IS NULL OR s.job_id=$1) AND ($2::text IS NULL OR s.symbol LIKE '%' || $2 || '%')";
-  const db = await getDb();
-  const total = Number((await db.query(`SELECT COUNT(*) FROM quant.stock_analyses s ${where}`, [jobId, symbol])).rows[0].count);
-  const rows = (await db.query(
-    `SELECT s.id, s.job_id, s.symbol, ${NAME_FALLBACK} AS name, s.status, s.created_at, s.updated_at,
-            ${SUMMARY_DOCUMENT} AS document
-     FROM quant.stock_analyses s ${where} ORDER BY s.id DESC LIMIT 5 OFFSET $3`,
-    [jobId, symbol, (page-1)*5],
-  )).rows;
-  return NextResponse.json({
-    records: rows.map((row) => ({ ...row, id: Number(row.id), job_id: Number(row.job_id) })),
-    total,
-    page,
-    page_size: 5,
-  });
+
+  // 任何失败都要以 JSON 返回：路由未捕获异常时响应体是文本 "Internal Server Error"，
+  // 前端 response.json() 会抛出 "Unexpected token 'I'..." 这种看不出所以然的错。
+  try {
+    const db = await getDb();
+    const total = Number((await db.query(`SELECT COUNT(*) FROM quant.stock_analyses s ${where}`, [jobId, symbol])).rows[0].count);
+    const rows = (await db.query(LIST_QUERY(where), [jobId, symbol, (page - 1) * LIST_PAGE_SIZE])).rows as unknown as AnalysisRow[];
+    const records = rows.map((row) => ({ ...row, id: Number(row.id), job_id: Number(row.job_id) }));
+    await fillMissingNames(db, records);
+    return NextResponse.json({ records, total, page, page_size: LIST_PAGE_SIZE });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `读取分析记录失败：${detail}` }, { status: 500 });
+  }
 }

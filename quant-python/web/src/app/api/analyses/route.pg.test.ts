@@ -15,13 +15,19 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 let db: PGlite;
 
+/** 置为 true 时让 getDb() 直接抛错，用于验证路由仍返回 JSON。 */
+let failConnections = false;
+
 vi.mock("@/lib/db", () => ({
-  getDb: async () => ({
-    query: async (text: string, values?: readonly unknown[]) => {
-      const result = await db.query(text, values ? [...values] : undefined);
-      return { rows: result.rows };
-    },
-  }),
+  getDb: async () => {
+    if (failConnections) throw new Error("connect ECONNREFUSED 127.0.0.1:5432");
+    return {
+      query: async (text: string, values?: readonly unknown[]) => {
+        const result = await db.query(text, values ? [...values] : undefined);
+        return { rows: result.rows };
+      },
+    };
+  },
 }));
 
 import { GET } from "./route";
@@ -136,5 +142,35 @@ describe("GET /api/analyses against real Postgres", () => {
     const record = (body.records as Row[])[0];
     expect(typeof record.id).toBe("number");
     expect(typeof (body.records as unknown as { job_id: unknown }[])[0].job_id).toBe("number");
+  });
+});
+
+describe("GET /api/analyses 在数据库故障时仍返回 JSON", () => {
+  it("returns a JSON error body instead of letting Next.js emit a text 500", async () => {
+    failConnections = true;
+    try {
+      const response = await GET(new Request("http://localhost/api/analyses?page=1&symbol="));
+      expect(response.status).toBe(500);
+      // 关键：响应体必须是 JSON。文本 500 会让前端 response.json() 抛
+      // "Unexpected token 'I', "Internal S"... is not valid JSON"，看不出真实原因。
+      const body = await response.json();
+      expect(typeof body.error).toBe("string");
+      expect(body.error).toContain("读取分析记录失败");
+      expect(body.error).toContain("ECONNREFUSED");
+    } finally {
+      failConnections = false;
+    }
+  });
+
+  it("still lists records when the name lookup tables are unavailable", async () => {
+    // 名称回退是补充信息，不应让列表跟着挂掉：临时改名让回退查询失败。
+    await db.exec("ALTER TABLE quant.stock_pool RENAME TO stock_pool_hidden");
+    try {
+      const { status, body } = await call("page=1&symbol=");
+      expect(status).toBe(200);
+      expect((body.records as Row[]).length).toBeGreaterThan(0);
+    } finally {
+      await db.exec("ALTER TABLE quant.stock_pool_hidden RENAME TO stock_pool");
+    }
   });
 });

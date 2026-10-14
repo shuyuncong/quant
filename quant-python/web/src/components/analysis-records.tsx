@@ -73,33 +73,49 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
     setFetching(true);
     try {
       const response = await fetch(`/api/analyses?${search}`);
-      const result = await response.json();
+      // 先解析文本再试 JSON：接口异常时响应体可能是 "Internal Server Error" 这类文本，
+      // 直接 response.json() 只会抛出 "Unexpected token 'I'..." —— 看不到真实原因。
+      const raw = await response.text();
+      let result: { error?: string; records?: AnalysisRecordSummary[]; total?: number } = {};
+      try {
+        result = raw ? JSON.parse(raw) : {};
+      } catch {
+        if (version !== requestVersion.current) return;
+        throw new Error(
+          response.ok
+            ? "分析记录接口返回了非 JSON 内容，请查看服务端日志"
+            : `分析记录接口失败（HTTP ${response.status}）：${raw.slice(0, 200) || "响应体为空"}`,
+        );
+      }
       if (version !== requestVersion.current) return;
-      if (!response.ok) throw new Error(result.error ?? "读取分析记录失败");
+      if (!response.ok) throw new Error(result.error ?? `读取分析记录失败（HTTP ${response.status}）`);
+      const incoming = result.records;
+      if (!Array.isArray(incoming)) throw new Error("分析记录接口返回的数据缺少 records 字段");
       setRecords((prev) => {
         if (
-          prev.length === result.records.length &&
+          prev.length === incoming.length &&
           prev.every((p: AnalysisRecordSummary, i: number) => {
-            const n = result.records[i];
+            const n = incoming[i];
             return n && p.id === n.id && p.updated_at === n.updated_at;
           })
         ) {
           return prev;
         }
-        return result.records;
+        return incoming;
       });
-      setTotal((prev) => (prev === result.total ? prev : result.total));
+      const incomingTotal = typeof result.total === "number" ? result.total : incoming.length;
+      setTotal((prev) => (prev === incomingTotal ? prev : incomingTotal));
       setError("");
       setLoaded(true);
       // 在弹窗中（有 jobId）默认打开首个记录；在首页大列表（!jobId）保持折叠防止撑爆页面
       setOpen((current) => {
         if (jobId) {
-          if (current !== null && result.records.some((record: AnalysisRecordSummary) => record.id === current)) {
+          if (current !== null && incoming.some((record: AnalysisRecordSummary) => record.id === current)) {
             return current;
           }
-          return result.records[0]?.id ?? null;
+          return incoming[0]?.id ?? null;
         }
-        return current !== null && result.records.some((record: AnalysisRecordSummary) => record.id === current)
+        return current !== null && incoming.some((record: AnalysisRecordSummary) => record.id === current)
           ? current
           : null;
       });
