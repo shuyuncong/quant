@@ -1,42 +1,42 @@
-ubuntu@oracle-cloud:~$ echo "--- 存活探针（正常应 200）---"
-curl -sS -o /dev/null -w 'favicon  %{http_code}\n' http://127.0.0.1:3111/favicon.ico
-curl -sS -o /dev/null -w 'results  %{http_code}\n' http://127.0.0.1:3111/results
-curl -sS -o /dev/null -w 'root     %{http_code}\n' http://127.0.0.1:3111/
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker ps --filter name=quant-web --format '{{.Names}}\t{{.Status}}'
+curl -sS -o /dev/null -w 'results %{http_code}\n' http://127.0.0.1:3111/results
+quant-web       Up 12 minutes (healthy)
+results 200
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ # 容器内路径
+docker exec quant-web rm -f
+/app/signal_system/cache/af5aa0ffb1e8502e71aed0d9973df6c8cfc29d4f825b638fba06e16fc6135ea7.pkl
+# 宿主等价（两者是同一份挂载，选一个即可）
+rm -f /opt/docker/quant/cache/af5aa0ffb1e8502e71aed0d9973df6c8cfc29d4f825b638fba06e16fc6135ea7.pkl
+ 
+-bash: /app/signal_system/cache/af5aa0ffb1e8502e71aed0d9973df6c8cfc29d4f825b638fba06e16fc6135ea7.pkl: No such file or directory
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/signal_system quant-web python -c "
+import sys; sys.path.insert(0,'.')
+from data.market_data import MarketDataClient
+from utils.helpers import load_config
+m = MarketDataClient(load_config('config/config.yaml'))
+df = m.get_stock_list()
+print('get_stock_list ->', len(df), '行')
+print(df[df.code.isin(['300006','603727','600715','600750'])].to_string(index=False))
+"
+OCI runtime exec failed: exec failed: unable to start container process: exec: "python": executable file not found in $PATH
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/signal_system quant-web python -c "
+import sys; sys.path.insert(0,'.')
+from data.market_data import MarketDataClient
+from utils.helpers import load_config
+m = MarketDataClient(load_config('config/config.yaml'))
+df = m.get_stock_list()
+print('get_stock_list ->', len(df), '行')
+print(df[df.code.isin(['300006','603727','600715','600750'])].to_string(index=False))
+"
+OCI runtime exec failed: exec failed: unable to start container process: exec: "python": executable file not found in $PATH
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/web quant-web npm run --silent backfill:names
 
-echo "--- 业务 API（正常应 200 或 307）---"
-curl -sS -o /dev/null -w 'analyses %{http_code}\n' http://127.0.0.1:3111/api/analyses
-curl -sS -o /dev/null -w 'jobs     %{http_code}\n' http://127.0.0.1:3111/api/jobs
-
-echo "--- 带时间戳看最近是否还有 5xx ---"
-sudo tail -50 /var/log/nginx/access.log | awk '{print $4, $6, $7, $9}' | tail -15
-
-echo "--- 容器状态 ---"
-docker ps --filter name=quant --format '{{.Names}}\t{{.Status}}'
---- 存活探针（正常应 200）---
-favicon  200
-results  200
-root     307
---- 业务 API（正常应 200 或 307）---
-analyses 200
-jobs     200
---- 带时间戳看最近是否还有 5xx ---
-[14/Oct/2026:15:59:04 "\x16\x03\x01\x05\xBA\x01\x00\x05\xB6\x03\x03\x08\xEA9r=T\x9E\xF2\x7F\x15\xA0\xBF\x10z\x98\x8E\x82" 400 "-"
-[14/Oct/2026:15:59:04 "\x16\x03\x01\x05\xBA\x01\x00\x05\xB6\x03\x03\xDE\xDC{\xCA\xF7\x1Ejti\x82\xA5\x8C\x98)T\xAF\xAD\xC4yi\xD8}\xA2.\xEC?@\xE6\x01\xF0A\xD0 \xC7\xF6s\xBA\xE6\xEF\x97\x8F\xB3\xC1`\xD31M\xE5\x9A\xDA\xEE!\xE5\xC5\xCA\xE5\x91\xD7S\x0F\xFEU\xFC\xD3\xAB\x00&\xCC\xA8\xCC\xA9\xC0/\xC00\xC0+\xC0,\xC0\x13\xC0\x09\xC0\x14\xC0" 166
-[14/Oct/2026:15:59:05 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:08 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:20 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:28 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:39 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:44 "POST /v1/chat/completions 200
-[14/Oct/2026:15:59:52 "POST /v1/chat/completions 200
-[14/Oct/2026:16:00:07 "POST /v1/chat/completions 200
-[14/Oct/2026:16:00:49 "POST /memos.api.v1.InboxService/ListInboxes 200
-[14/Oct/2026:16:01:17 "\x16\x03\x01\x00\xEE\x01\x00\x00\xEA\x03\x03\x00H\x91\xA7\xEB\xC8\x8Fr\xE3PIw\x06\xDF;x\xC7$\xA9\xC7\xB4\xDC\xE9\x96\x9C\xF2\xFE\xA3+\xC13\x06 \xC0\xCF\xE90\xB1\x91\xCD\x15\xCD*O\x90\xB1\x02\x90 400
-[14/Oct/2026:16:01:17 "\x16\x03\x01\x00\xCA\x01\x00\x00\xC6\x03\x03U\x92\xC5r\xE0\xF6\x22\xC2xgF\xCB\xF0~)i\x9E\xE4\xB7Y\xA4\xF2\x07\xAC|\x7F:\x13G\x0F\x8E#\x00\x00h\xCC\x14\xCC\x13\xC0/\xC0+\xC00\xC0,\xC0\x11\xC0\x07\xC0'\xC0#\xC0\x13\xC0\x09\xC0(\xC0$\xC0\x14\xC0" 400 "-"
-[14/Oct/2026:16:02:29 "GET /.aws/config 444
-[14/Oct/2026:16:02:30 "GET /.aws/config 444
---- 容器状态 ---
-quant-web       Up 15 minutes (healthy)
-quant-backtest  Up 48 minutes
-quant-db        Up 5 weeks (healthy)
-ubuntu@oracle-cloud:~$ 
+# 确认无误再写入
+docker exec -w /app/web quant-web npm run --silent backfill:names -- --apply
+.env.local not found. Continuing without it.
+{"mode":"dry-run","blank_records_distinct_codes":61}
+{"resolved":0,"of":61}
+{"resolved_total":0,"unresolved":61}
+没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。
+.env.local not found. Continuing without it.
+{"mode":"apply","blank_records_distinct_codes":61}

@@ -15,23 +15,29 @@
  *   node scripts/backfill-analysis-names.mjs            # 试运行，只报告
  *   node scripts/backfill-analysis-names.mjs --apply    # 真正写入
  */
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 
 const apply = process.argv.includes("--apply");
-const connectionString = process.env.DATABASE_URL?.trim();
-if (!connectionString) throw new Error("DATABASE_URL is required");
 
-const sslDisabled = process.env.DATABASE_SSL_MODE === "disable";
-const ssl = sslDisabled ? false : undefined;
-const client = new Client({ connectionString, ssl, connectionTimeoutMillis: 15_000 });
+/** 建库连接。延迟到 main —— 模块被 import 时（测试）不应要求 DATABASE_URL。 */
+function makeClient() {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) throw new Error("DATABASE_URL is required");
+  const sslDisabled = process.env.DATABASE_SSL_MODE === "disable";
+  return new Client({
+    connectionString,
+    ssl: sslDisabled ? false : undefined,
+    connectionTimeoutMillis: 15_000,
+  });
+}
 
-/** 调桥接解析名称；失败返回空表，由调用方决定是否继续。 */
+/** 调桥接解析名称。失败时抛错 —— 静默返回空表会把"取数挂了"伪装成"名称表里没有"。 */
 async function resolveNames(symbols) {
-  const { spawn } = await import("node:child_process");
-  const path = await import("node:path");
-  const { fileURLToPath } = await import("node:url");
-  const fs = await import("node:fs");
-  // 自解析路径：本脚本是 .mjs，不能 import TS 模块（Node 不认 .ts 的类型语法）。
+  // 自解析路径：本脚本是 .mjs，不能 import TS 模块（Node 不认 .ts 里的类型语法）。
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const signalSystemDir = path.join(root, "..", "signal_system");
   const bridgeScript = path.join(signalSystemDir, "web_bridge.py");
@@ -39,28 +45,40 @@ async function resolveNames(symbols) {
     throw new Error(`找不到桥接脚本：${bridgeScript}`);
   }
   const payload = JSON.stringify({ symbols });
+  // 镜像里 Python 只在 venv 中（PYTHON_BIN=/opt/venv/bin/python），**不在 PATH 上** ——
+  // 退回到裸 "python" 会 ENOENT。容器内由 compose 提供 PYTHON_BIN。
+  const pythonBin = process.env.PYTHON_BIN?.trim() || "python3";
   const out = await new Promise((resolve) => {
-    const child = spawn(process.env.PYTHON_BIN?.trim() || "python", ["-B", bridgeScript, "resolve-names", "--payload", "-"], {
+    const child = spawn(pythonBin, ["-B", bridgeScript, "resolve-names", "--payload", "-"], {
       cwd: signalSystemDir,
       windowsHide: true,
       env: { ...process.env, PYTHONIOENCODING: "utf-8" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     child.stdout.on("data", (d) => { stdout += d; });
-    child.on("close", () => resolve(stdout));
-    child.on("error", () => resolve(""));
+    child.stderr.on("data", (d) => { stderr += d; });
+    child.on("close", (code) => resolve({ stdout, stderr, code }));
+    child.on("error", (err) => resolve({ stdout: "", stderr: `spawn 失败: ${err.message}`, code: -1 }));
     child.stdin.end(payload);
   });
+  let parsed;
   try {
-    const parsed = JSON.parse(out);
-    return parsed?.data?.names ?? {};
+    parsed = JSON.parse(out.stdout);
   } catch {
-    return {};
+    throw new Error(
+      `桥接未返回可解析的 JSON（exit=${out.code}，bin=${pythonBin}）。stdout=${out.stdout.slice(0, 400) || "(空)"} stderr=${out.stderr.slice(0, 400) || "(空)"}`,
+    );
   }
+  if (!parsed?.ok) {
+    throw new Error(`桥接报错：${parsed?.error ?? "未知"}（stderr=${out.stderr.slice(0, 300) || "(空)"}）`);
+  }
+  return parsed?.data?.names ?? {};
 }
 
 async function main() {
+  const client = makeClient();
   await client.connect();
   try {
     const { rows } = await client.query(
@@ -112,4 +130,9 @@ async function main() {
   }
 }
 
-await main();
+// 仅在直接执行时跑 main —— 被 import 时（测试）不产生副作用。
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) await main();
+
+export { resolveNames };
