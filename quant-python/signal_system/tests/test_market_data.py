@@ -117,6 +117,87 @@ class MarketDataTests(unittest.TestCase):
             result = client.get_stock_list()
             self.assertEqual(["000001"], result["code"].tolist())
 
+    def test_display_name_map_includes_etfs_and_dedupes_blank_names(self):
+        """展示名表 = 股票 + ETF；空名剔除、同码以股票优先。
+
+        ETF 单独取数（`_fetch_eastmoney_etf_list`），**不**并进 `get_stock_list()` ——
+        后者是可交易股票 universe，喂给 scan；混入基金会让策略在基金上选股。
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._cached = lambda *args, **kwargs: None
+            client._save_cache = lambda *args, **kwargs: None
+            client.get_stock_list = lambda: pd.DataFrame(
+                [{"code": "600750", "name": "华润江中"}, {"code": "300006", "name": "莱美药业"}]
+            )
+            client._fetch_eastmoney_etf_list = lambda: pd.DataFrame(
+                [
+                    {"code": "517520", "name": "黄金ETF"},
+                    {"code": "588000", "name": "科创50ETF"},
+                    {"code": "600750", "name": "不应覆盖股票名"},
+                    {"code": "999999", "name": ""},
+                ]
+            )
+            result = client.get_display_name_map()
+            names = dict(zip(result["code"], result["name"]))
+            self.assertEqual("黄金ETF", names["517520"])
+            self.assertEqual("科创50ETF", names["588000"])
+            self.assertEqual("华润江中", names["600750"])  # 股票优先，ETF 表不得覆盖
+            self.assertNotIn("999999", names)  # 空名剔除
+            # 2 只股票 + 2 只 ETF = 4（重复的 600750 被去重、空名的 999999 被剔除）
+            self.assertEqual(4, len(result))
+
+    def test_display_name_map_degrades_to_stocks_when_etf_fetch_fails(self):
+        """ETF 取数失败只降级名字展示，绝不打断调用方（否则报告生成会因展示数据失败）。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._cached = lambda *args, **kwargs: None
+            saved = {}
+            client._save_cache = lambda key, frame: saved.update({key: frame})
+            client.get_stock_list = lambda: pd.DataFrame([{"code": "600750", "name": "华润江中"}])
+
+            def boom():
+                raise RuntimeError("eastmoney unavailable")
+
+            client._fetch_eastmoney_etf_list = boom
+            result = client.get_display_name_map()
+            self.assertEqual(["600750"], result["code"].tolist())
+            self.assertTrue(saved, "降级结果也应缓存，避免每次调用都重试失败的网络")
+
+    def test_etf_list_paginates_until_total(self):
+        """东财 clist 的 pz 硬上限是 100/页，必须按 total 翻页取满。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            pages = {}
+
+            def fake_http(url, params):
+                page = params["pn"]
+                pages[page] = pages.get(page, 0) + 1
+                start = (page - 1) * 100
+                batch = [
+                    {"f12": f"51{i:04d}", "f14": f"ETF{i}"} for i in range(start, min(start + 100, 250))
+                ]
+                return {"data": {"total": 250, "diff": batch}}
+
+            client._http_json = fake_http
+            result = client._fetch_eastmoney_etf_list()
+            self.assertEqual(250, len(result))
+            self.assertEqual([1, 2, 3], sorted(pages), "应恰好翻 3 页（250 条 / 100 每页）")
+
+    def test_etf_list_rejects_truncated_pages(self):
+        """服务端报 total 却只给一页时必须抛错 —— 否则残缺名单会被写进 24h 缓存。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._http_json = lambda *args, **kwargs: {
+                "data": {"total": 1200, "diff": [{"f12": "517520", "f14": "黄金ETF"}]}
+            }
+            with self.assertRaises(RuntimeError):
+                client._fetch_eastmoney_etf_list()
+
     def test_stock_pool_history_parses_turnover_and_causal_market_cap(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient(

@@ -688,7 +688,11 @@ class SignalMonitor:
     def _resolve_names(
         self, symbols: list[str], known: dict[str, str] | None = None
     ) -> dict[str, str]:
-        """Fill in missing stock names from the (cached) A-share list."""
+        """Fill in missing names from the cached display list (stocks + ETFs).
+
+        用 `get_display_name_map()` 而非 `get_stock_list()` —— 后者是可交易股票 universe，
+        不含 ETF，会让 `517520`/`588000` 这类标的在列表里只显示代码。
+        """
         known = known or {}
         resolved = {normalize_symbol(key): value for key, value in known.items()}
         missing = [
@@ -698,7 +702,7 @@ class SignalMonitor:
             return resolved
         if self._name_map is None:
             try:
-                stock_list = self.market.get_stock_list()
+                stock_list = self.market.get_display_name_map()
                 self._name_map = {
                     normalize_symbol(str(row.get("code", ""))): str(row.get("name", ""))
                     for _, row in stock_list.iterrows()

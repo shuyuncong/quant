@@ -400,6 +400,81 @@ class MarketDataClient:
             raise RuntimeError(f"东方财富股票列表疑似被截断：仅取到 {len(rows)} 条（total={total}）")
         return pd.DataFrame(rows)
 
+    def _fetch_eastmoney_etf_list(self) -> pd.DataFrame:
+        """取东方财富 ETF 列表（code / name），**仅供名称展示**。
+
+        为什么不并进 `get_stock_list()`：那个返回值是**可交易股票universe**，喂给扫描、
+        股票池与因子计算。ETF 的行情结构（无财报、无 ST、`list_date` 语义不同）与个股
+        不可混用 —— 放进去会污染 scan 的候选集。
+
+        `fs` 取自 akshare `fund_etf_spot_em`（同一 clist 接口、同一 hard cap 100/页）：
+        `b:MK0021..MK0024,b:MK0827`，覆盖沪市、深市与各类 ETF。
+        """
+        url = "https://82.push2.eastmoney.com/api/qt/clist/get"
+        base = {
+            "po": 1,
+            "np": 1,
+            "fltt": 2,
+            "invt": 2,
+            "fid": "f12",
+            "fs": "b:MK0021,b:MK0022,b:MK0023,b:MK0024,b:MK0827",
+            "fields": "f12,f14",
+        }
+        page_size = 100
+        max_pages = 60          # 该 fs 含 LOF/分级，条数明显多于纯 ETF，留足余量
+        rows: list[dict[str, Any]] = []
+        total: int | None = None
+        for page in range(1, max_pages + 1):
+            self._throttle()
+            payload = self._http_json(url, {**base, "pn": page, "pz": page_size})
+            data = payload.get("data") or {}
+            if total is None:
+                total = int(data.get("total") or 0)
+            batch = data.get("diff") or []
+            if not batch:
+                break
+            rows.extend(
+                {"code": item.get("f12"), "name": item.get("f14", "")} for item in batch
+            )
+            if (total and len(rows) >= total) or len(batch) < page_size:
+                break
+        # ETF 名称是**展示增强**：取不到就让调用方降级，绝不抛错打断报告生成。
+        if not rows or (total and len(rows) < total * 0.9):
+            raise RuntimeError(f"东方财富 ETF 列表疑似被截断：{len(rows)} 条（total={total}）")
+        return pd.DataFrame(rows)
+
+    def get_display_name_map(self) -> pd.DataFrame:
+        """取"用于展示名称"的 (code, name) 表 = 股票名单 + ETF 名单。
+
+        **不要用它做交易过滤**：这份表刻意包含 ETF，也不套 `min_listing_trade_days`
+        （ETF 上市不久也应显示名字）。交易用的 universe 请继续用 `get_stock_list()`。
+
+        ETF 取数失败时静默降级为"只有股票" —— 名字缺失只影响展示，不该让报告生成失败。
+        注：ETF 名单目前只走东方财富（生产配置 `provider: auto`）；`akshare`/`tushare`
+        provider 下本表不含 ETF。
+        """
+        cache_key = (
+            f"display_names_v1_{self.min_listing_trade_days}_"
+            f"{int(self.exclude_st)}_{int(self.exclude_delisting)}"
+        )
+        cached = self._cached(cache_key, 24 * 3600)
+        if cached is not None:
+            return cached
+        frames = [self.get_stock_list()]
+        if self.provider in {"auto", "eastmoney"}:
+            try:
+                frames.append(self._fetch_eastmoney_etf_list())
+            except Exception as exc:
+                logger.warning("ETF 名称列表获取失败，ETF 将只显示代码: %s", exc)
+        result = pd.concat(frames, ignore_index=True)
+        result["code"] = result["code"].map(normalize_symbol)
+        result["name"] = result["name"].astype(str)
+        # 股票优先：ETF 表在后，同码冲突时保留股票那条（理论上不会重叠）。
+        result = result[result["name"].str.strip() != ""]
+        result = result.drop_duplicates("code", keep="first").reset_index(drop=True)
+        self._save_cache(cache_key, result)
+        return result
+
     def _fetch_sina_stock_snapshot(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for page in range(1, 100):
