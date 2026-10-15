@@ -343,10 +343,27 @@ ROE、统一负债率和 log 市值在没有新数据范围或新方法前不重
   **非本会话代码引入**（未改 `db.ts`/`schema.sql`）；我唯一引入的是漏更 `package-lock.json`（已补 `2b2b17b`），
   但本次 500 不是它。恢复途中的 `db:setup` 由加固后的 `deploy-quant.sh` 跑通（该脚本现为 fail-closed：
   重建前校验 `PG_OWNER_PASSWORD`，缺则 `exit 1`，旧容器继续服务）。详见 `docs/2026-10-14-生产500恢复操作单.md`。
-- [x] **分析记录名称回填（2026-10-14，`57af7de`，待上生产）**：批次记录 `stock_analyses.name` 为空，
+- [x] **分析记录名称回填（2026-10-15 已上线并生效）**：批次记录 `stock_analyses.name` 为空，
   名称在 `jobs.payload.symbol_names` 里；原回退只查 `stock_pool`/`holdings` 故整列只剩代码。
   回退优先级改为 ① 自带 name → ② 所属任务 payload → ③ 池/持仓 → ④ 留空。
   踩坑：`jobs.payload` 是 **TEXT 非 jsonb**（`->` 会报 `text -> unknown`）；测试夹具一度用 `::jsonb` 掩盖了它。
+  **真实根因是两个独立缺陷叠加**，此前只修了前者：
+  ① `persistSymbolNames` 是**不可达代码**（`startJob` 先 return，`jobs.ts:287-290` 永不到达）→
+  生产库 `payload.symbol_names` **从不存在**，`/api/jobs` 的读取同样是死的（`b302c1f` 修）；
+  ② **全市场名称表被截断成 98 行并缓存 24h** —— 东财接口 `pz` 有**硬上限 100/页**，
+  原代码只请求 `pn=1` 便当作全市场列表，且腾讯 24h TTL 使其在网络恢复后也不自愈（`59fc477` 修，
+  改为分页抓取，现 5026 行）。
+  历史记录三条回退路全断，故新增 `npm run backfill:names`（`--apply` 才写入；只填空值、
+  不覆盖已有名字；可重复执行）——**服务器实测 `blank_records_distinct_codes` 61 → 2**。
+  剩余 2 个（`517520` 黄金ETF、`588000` 科创50ETF）**属设计如此**：名称表刻意只含股票，
+  排除 ETF / ST（`exclude_st=True`）/ 退市整理 / 北交所（`bj`）/ 上市不足 120 交易日。
+  这两个在 `/results` 仍显示名称，因为 API 回退链第 ③ 步（池/持仓）命中。
+- [ ] **给运维的命令必须单行且本地实测**（2026-10-15，本会话同一错误犯 4 次）：
+  多行 heredoc / 超过约 140 字符的命令在服务器终端上被折行 → shell 把参数当命令执行
+  （症状：`flag needs an argument: 'f' in -f`、`SyntaxError: invalid syntax`、
+  `Permission denied`、`command not found`）。已因此误判两次（`/logo.svg`、`/login` 探针）
+  并浪费两轮部署。规则：**① 单行；② 超过约 80 字符就拆成多条 `cd` + 短命令；
+  ③ 每条命令先在本地实测出期望输出再交付。**
 - [x] 分段止盈和回撤保护（2026-10-10：分批减仓 + 尾仓保护引擎与配置已落地，24 组 2024H1 对照 + 2024H2 样本外复核方向一致；**未更改默认参数**）
 - [x] 每日卖出信号与 AI 解读带上分批口径（2026-10-11：`strategy/registry.exit_plan_advice` 给出下一档触发价/建议股数/保本止损位，
   `evaluate_strategies` 在实盘层按当日日线最高价补 `met`，推送 evidence 带 `exit_plan_advice`，`/results` 条件表直接显示执行摘要，

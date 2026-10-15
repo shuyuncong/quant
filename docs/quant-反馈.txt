@@ -1,4 +1,3 @@
-ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ rm -f /opt/docker/quant/cache/af5aa0ffb1e8502e71aed0d9973df6c8cfc29d4f825b638fba06e16fc6135ea7.pkl
 ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/signal_system quant-web /opt/venv/bin/python -c 'import sys;sys.path.insert(0,".");from
 data.market_data import MarketDataClient;from utils.helpers import
 load_config;df=MarketDataClient(load_config("config/config.yaml")).get_stock_list();print("ROWS",len(df));print(df[
@@ -10,3 +9,27 @@ SyntaxError: invalid syntax
 ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/web quant-web npm run --silent backfill:names
 .env.local not found. Continuing without it.
 {"mode":"dry-run","blank_records_distinct_codes":2}
+{"resolved":0,"of":2}
+{"resolved_total":0,"unresolved":2}
+没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ cd /opt/docker/quant/quant-python && git pull && docker compose -f quant-python/docker-compose.oracle.yml -f
+quant-python/docker-compose.oracle.db.yml up -d --build
+Already up to date.
+flag needs an argument: 'f' in -f
+-bash: quant-python/docker-compose.oracle.db.yml: Permission denied
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python$ cd /opt/docker/quant/quant-python && git pull && docker compose -f quant-python/docker-compose.oracle.yml -f
+Already up to date.
+flag needs an argument: 'f' in -f
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python$ sudo quant-python/docker-compose.oracle.db.yml up -d --build
+sudo: quant-python/docker-compose.oracle.db.yml: command not found
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python$ cd quant-python/
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ sudo quant-python/docker-compose.oracle.db.yml up -d --build
+sudo: quant-python/docker-compose.oracle.db.yml: command not found
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/web quant-web npm run --silent backfill:names -- --apply
+.env.local not found. Continuing without it.
+{"mode":"apply","blank_records_distinct_codes":2}
+{"resolved":0,"of":2}
+{"resolved_total":0,"unresolved":2}
+{"unresolved_codes":["517520","588000"]}
+没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ 
