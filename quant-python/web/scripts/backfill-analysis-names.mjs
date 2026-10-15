@@ -77,6 +77,50 @@ async function resolveNames(symbols) {
   return parsed?.data?.names ?? {};
 }
 
+/**
+ * 名称回退表 —— 必须与 `/api/analyses` 的 `NAME_TABLES` 一致。
+ *
+ * 页面显示名字走的是 `stock_analyses.name` → `payload.symbol_names` → **这两张表**；
+ * 而只查行情名称表的本脚本解析不出 ETF（`get_stock_list()` 是可交易股票 universe，
+ * 刻意不含 ETF）。两边对不上时，用户看到的就是自相矛盾的
+ * 「页面明明有名字，脚本却说名称表不可用」—— 持仓里的 `588000.SZ -> 科创50ETF`
+ * 就是这种情形。所以这里补上同一条回退路，让脚本与页面口径一致。
+ */
+const NAME_TABLES = ["quant.stock_pool", "quant.holdings"];
+
+/** 与路由 `lookupTableNames` 同一条代码归一化表达式（6 位代码，跨 `SH600000`/`600000.SH` 等写法）。 */
+const CODE_EXPR = (column) =>
+  `regexp_replace(regexp_replace(upper(${column}), '^(SH|SZ|BJ)\\.?', ''), '\\.[A-Z]{2,3}$', '')`;
+
+/**
+ * 从股票池/持仓补齐仍然没有名字的代码；同一代码以在先的表为准。
+ *
+ * @param {{ query: (text: string, values?: readonly unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> }} client
+ * @param {string[]} codes
+ * @returns {Promise<Record<string, string>>}
+ */
+async function lookupTableNames(client, codes) {
+  /** @type {Record<string, string>} */
+  const found = {};
+  if (codes.length === 0) return found;
+  for (const table of NAME_TABLES) {
+    const result = await client.query(
+      `SELECT ${CODE_EXPR("symbol")} AS code, MAX(BTRIM(name)) AS name
+         FROM ${table}
+        WHERE ${CODE_EXPR("symbol")} = ANY($1::text[])
+          AND BTRIM(name) <> ''
+        GROUP BY 1`,
+      [codes],
+    );
+    for (const row of result.rows) {
+      const code = String(row.code ?? "");
+      const name = String(row.name ?? "").trim();
+      if (code && name && !found[code]) found[code] = name;
+    }
+  }
+  return found;
+}
+
 async function main() {
   const client = makeClient();
   await client.connect();
@@ -100,18 +144,33 @@ async function main() {
       console.log(JSON.stringify({ resolved: Object.keys(names).length, of: codes.length }));
     }
 
+    // 仍没名字的走股票池/持仓 —— 与页面完全同源（ETF 只可能从这里取到）。
+    const stillMissing = codes.filter((c) => !names[c]);
+    if (stillMissing.length > 0) {
+      const fromTables = await lookupTableNames(client, stillMissing);
+      Object.assign(names, fromTables);
+      console.log(
+        JSON.stringify({
+          resolved_from_pool_or_holdings: Object.keys(fromTables).length,
+          of_missing: stillMissing.length,
+        }),
+      );
+    }
+
     const resolved = Object.keys(names);
     const unresolvedCodes = codes.filter((c) => !names[c]);
     console.log(
       JSON.stringify({ resolved_total: resolved.length, unresolved: unresolvedCodes.length }),
     );
     // 把解不出来的代码点名 —— 否则无法区分"名称表取数挂了"与"这些标的本来就不在表里"
-    // （名称表刻意排除 ST / 退市整理 / 北交所 / ETF）。
+    // （行情名称表刻意排除 ST / 退市整理 / 北交所 / ETF）。
     if (unresolvedCodes.length > 0) {
       console.log(JSON.stringify({ unresolved_codes: unresolvedCodes.slice(0, 40) }));
     }
     if (resolved.length === 0) {
-      console.log("没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。");
+      console.log(
+        "行情名称表与股票池/持仓都没能解析出名称 —— 先确认 get_display_name_map() 的规模，再确认这两张表里是否有这些代码。",
+      );
       return;
     }
 
@@ -143,4 +202,4 @@ const invokedDirectly =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) await main();
 
-export { resolveNames };
+export { lookupTableNames, resolveNames };

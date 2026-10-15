@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
 from datetime import date, datetime
 from unittest.mock import MagicMock, call, patch
@@ -149,7 +150,11 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(4, len(result))
 
     def test_display_name_map_degrades_to_stocks_when_etf_fetch_fails(self):
-        """ETF 取数失败只降级名字展示，绝不打断调用方（否则报告生成会因展示数据失败）。"""
+        """ETF 取数失败只降级名字展示，绝不打断调用方（否则报告生成会因展示数据失败）。
+
+        且降级结果必须写**单独的短 TTL 缓存键** —— 与正常结果共用 24h 缓存会让
+        一次网络抖动钉住一整天、网络恢复也不自愈（本项目踩过同类故障）。
+        """
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient({"market_data": {"cache_dir": directory}})
             client._throttle = lambda: None
@@ -164,7 +169,43 @@ class MarketDataTests(unittest.TestCase):
             client._fetch_eastmoney_etf_list = boom
             result = client.get_display_name_map()
             self.assertEqual(["600750"], result["code"].tolist())
-            self.assertTrue(saved, "降级结果也应缓存，避免每次调用都重试失败的网络")
+            keys = list(saved)
+            self.assertEqual(1, len(keys))
+            self.assertTrue(keys[0].endswith("_degraded"), f"降级应写独立缓存键，实际 {keys[0]}")
+            self.assertNotEqual("display_names_v1_120_1_1", keys[0], "降级不得占用正常缓存键")
+
+    def test_display_name_map_degrades_for_non_eastmoney_provider(self):
+        """akshare/tushare provider 下不含 ETF 是既定行为，不产生降级缓存键。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "akshare"}}
+            )
+            client._throttle = lambda: None
+            client._cached = lambda *args, **kwargs: None
+            saved = {}
+            client._save_cache = lambda key, frame: saved.update({key: frame})
+            client.get_stock_list = lambda: pd.DataFrame([{"code": "600750", "name": "华润江中"}])
+            client._fetch_eastmoney_etf_list = lambda: (_ for _ in ()).throw(
+                AssertionError("非东财 provider 不该去抓 ETF")
+            )
+            result = client.get_display_name_map()
+            self.assertEqual(["600750"], result["code"].tolist())
+            self.assertEqual(1, len(saved))
+            self.assertFalse(list(saved)[0].endswith("_degraded"))
+
+    def test_display_name_map_retries_after_degraded_cache_expires(self):
+        """降级缓存的 TTL 必须短于正常缓存 —— 用真实 _cached 验证窗口。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            normal = f"display_names_v1_{client.min_listing_trade_days}_{int(client.exclude_st)}_{int(client.exclude_delisting)}"
+            client._save_cache(normal, pd.DataFrame([{"code": "600750", "name": "华润江中"}]))
+            client._save_cache(f"{normal}_degraded", pd.DataFrame([{"code": "600750", "name": "华润江中"}]))
+            # 用 mtime 制造"45 分钟前"——已超出降级 TTL(10min)，远小于正常 TTL(24h)
+            old = time.time() - 45 * 60
+            os.utime(client._cache_path(f"{normal}_degraded"), (old, old))
+            os.utime(client._cache_path(normal), (old, old))
+            self.assertIsNone(client._cached(f"{normal}_degraded", 10 * 60))
+            self.assertIsNotNone(client._cached(normal, 24 * 3600))
 
     def test_etf_list_paginates_until_total(self):
         """东财 clist 的 pz 硬上限是 100/页，必须按 total 翻页取满。"""

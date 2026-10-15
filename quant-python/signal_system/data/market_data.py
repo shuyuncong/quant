@@ -460,10 +460,22 @@ class MarketDataClient:
         cached = self._cached(cache_key, 24 * 3600)
         if cached is not None:
             return cached
+        # 降级结果（没并上 ETF）单独放一个键、只缓存 10 分钟。
+        # 若与正常结果共用 24h 缓存，一次网络抖动就会把"缺 ETF 的名字表"钉住一整天、
+        # 网络恢复也不自愈 —— 本项目已因这类"残表写进长期缓存"踩过一次生产故障
+        # （get_stock_list 分页修复：98 行的残缺列表被当成全市场缓存 24h）。
+        degraded_key = f"{cache_key}_degraded"
+        degraded = self._cached(degraded_key, 10 * 60)
+        if degraded is not None:
+            return degraded
         frames = [self.get_stock_list()]
-        if self.provider in {"auto", "eastmoney"}:
+        # ETF 只在东财系 provider 下可取；其他 provider 下"不含 ETF"是既定行为，不算降级。
+        want_etf = self.provider in {"auto", "eastmoney"}
+        etf_ok = not want_etf
+        if want_etf:
             try:
                 frames.append(self._fetch_eastmoney_etf_list())
+                etf_ok = True
             except Exception as exc:
                 logger.warning("ETF 名称列表获取失败，ETF 将只显示代码: %s", exc)
         result = pd.concat(frames, ignore_index=True)
@@ -472,7 +484,7 @@ class MarketDataClient:
         # 股票优先：ETF 表在后，同码冲突时保留股票那条（理论上不会重叠）。
         result = result[result["name"].str.strip() != ""]
         result = result.drop_duplicates("code", keep="first").reset_index(drop=True)
-        self._save_cache(cache_key, result)
+        self._save_cache(cache_key if etf_ok else degraded_key, result)
         return result
 
     def _fetch_sina_stock_snapshot(self) -> list[dict[str, Any]]:
