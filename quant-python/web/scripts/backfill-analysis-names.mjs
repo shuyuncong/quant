@@ -101,7 +101,15 @@ async function main() {
     }
 
     const resolved = Object.keys(names);
-    console.log(JSON.stringify({ resolved_total: resolved.length, unresolved: codes.length - resolved.length }));
+    const unresolvedCodes = codes.filter((c) => !names[c]);
+    console.log(
+      JSON.stringify({ resolved_total: resolved.length, unresolved: unresolvedCodes.length }),
+    );
+    // 把解不出来的代码点名 —— 否则无法区分"名称表取数挂了"与"这些标的本来就不在表里"
+    // （名称表刻意排除 ST / 退市整理 / 北交所 / ETF）。
+    if (unresolvedCodes.length > 0) {
+      console.log(JSON.stringify({ unresolved_codes: unresolvedCodes.slice(0, 40) }));
+    }
     if (resolved.length === 0) {
       console.log("没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。");
       return;
