@@ -15,6 +15,7 @@
     "db:rollback-snapshot": "node --env-file-if-exists=.env.local scripts/migrate-database.mjs postgres-to-sqlite",
     "db:sync-from-prod": "node --env-file-if-exists=.env.local scripts/sync-prod-to-local.mjs",
     "db:verify": "node --env-file-if-exists=.env.local scripts/verify-postgres.mjs",
+    "backfill:names": "node --env-file-if-exists=.env.local scripts/backfill-analysis-names.mjs",
     "backtest:worker": "node --import tsx src/backtest-worker.mts"
   },
   "dependencies": {
