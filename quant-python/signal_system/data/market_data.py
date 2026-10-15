@@ -349,6 +349,57 @@ class MarketDataClient:
             self._tushare = ts.pro_api()
         return self._tushare
 
+    def _fetch_eastmoney_stock_list(self) -> pd.DataFrame:
+        """取东方财富全市场股票列表（code / name / list_date）。
+
+        **必须翻页**：`push2.eastmoney.com/api/qt/clist/get` 现在对 `pz` 是硬上限 100 条，
+        传 `pz=6000` 也只会返回 100 条。原实现只请求第一页且把结果缓存 24 小时，
+        于是全市场名称表被静默截断成约 100 条 —— 实测表现为 `get_stock_list()` 只返回 98 行，
+        进而让"按代码查名称"的链路（`MonitorService._resolve_names`）几乎全部查不到，
+        个股分析记录列表里就只有部分标的能显示中文名。
+        这里改为按 `total` 逐页取满，并对异常偏小的结果直接抛错（交给上层降级新浪），
+        避免再把残缺列表写进缓存。
+        """
+        url = "https://82.push2.eastmoney.com/api/qt/clist/get"
+        base = {
+            "po": 1,
+            "np": 1,
+            "fltt": 2,
+            "invt": 2,
+            "fid": "f3",
+            "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+            "fields": "f12,f14,f26",
+        }
+        page_size = 100          # 服务端硬上限，传更大也无效
+        max_pages = 90           # 6000+ 只 / 100 = 60 页，留足余量
+        rows: list[dict[str, Any]] = []
+        total: int | None = None
+        for page in range(1, max_pages + 1):
+            self._throttle()
+            payload = self._http_json(url, {**base, "pn": page, "pz": page_size})
+            data = payload.get("data") or {}
+            if total is None:
+                total = int(data.get("total") or 0)
+            batch = data.get("diff") or []
+            if not batch:
+                break
+            rows.extend(
+                {"code": item.get("f12"), "name": item.get("f14", ""), "list_date": item.get("f26")}
+                for item in batch
+            )
+            # 翻页终止：取满 total，或本页不满一页（说明已到末页）。
+            # 后者同时防止服务端重复返回同一页时把循环跑满 max_pages。
+            if (total and len(rows) >= total) or len(batch) < page_size:
+                break
+        if not rows:
+            raise RuntimeError("东方财富股票列表返回空")
+        # 防御：服务端**会**在 total 里报全量（实测 total=5562 而单页只给 100 条）。
+        # 若翻完页仍明显没取满，说明分页失效——宁可降级新浪，也不要把残缺列表写进 24h 缓存
+        # （旧实现正是把 100 条当成全市场缓存，导致名称解析只剩 98 只可用）。
+        if total and len(rows) < total * 0.9:
+            raise RuntimeError(f"东方财富股票列表疑似被截断：仅取到 {len(rows)} 条（total={total}）")
+        return pd.DataFrame(rows)
+
     def _fetch_sina_stock_snapshot(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for page in range(1, 100):
@@ -635,31 +686,8 @@ class MarketDataClient:
         else:
             self._throttle()
             try:
-                payload = self._http_json(
-                    "https://82.push2.eastmoney.com/api/qt/clist/get",
-                    {
-                        "pn": 1,
-                        "pz": 6000,
-                        "po": 1,
-                        "np": 1,
-                        "fltt": 2,
-                        "invt": 2,
-                        "fid": "f3",
-                        "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
-                        "fields": "f12,f14,f26",
-                    },
-                )
-                items = (payload.get("data") or {}).get("diff") or []
-                result = pd.DataFrame(
-                    [
-                        {
-                            "code": item.get("f12"),
-                            "name": item.get("f14", ""),
-                            "list_date": item.get("f26"),
-                        }
-                        for item in items
-                    ]
-                )
+                result = self._fetch_eastmoney_stock_list()
+                items = None
             except Exception as exc:
                 logger.warning("东方财富股票列表失败，降级新浪财经: %s", exc)
                 items = self._fetch_sina_stock_snapshot()
