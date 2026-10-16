@@ -473,6 +473,64 @@ crontab -e
 > 否则只在 Web 原本运行时短暂停止，并恢复到备份前状态。
 > `umask 077` 保护本地 dump、14 天清理启用、pg_dump 输出重定向宿主机、quant-web 最多停一次；
 > Web 恢复失败会中止上传/清理并明确告警，不再吞错后误报成功。
+### 8.4 历史行情缓存同步到 R2（换电脑也能拿到数据）
+
+`cache/` 与 `output/` 都被 `.gitignore` 排除（实测 `git ls-files` = 0），
+所以 **`git clone` 到新电脑一个字节行情都没有**；而实测重跑回填要
+**1318 只 / 74.3 分钟**。脚本 `docs/ops/sync-history-r2.sh` 把"值得留的那份"归档到
+R2，任何机器都能下回来。
+
+**只归档值得留的**（这是脚本的主要理由）：
+
+| 路径 | 体积 | 重跑成本 | 归档 |
+|---|---:|---|---|
+| `cache/daily_history/` | 553M（10016 文件） | ~74 分钟 | ✅ |
+| `cache/index_*.pkl` | 134K | 切片 + 重登记哈希，很贵 | ✅ |
+| `cache/<64位sha256>.pkl` | **318M（10733 文件）** | 24h TTL，自动重取 | ❌ |
+| `output/backtests/` | 1.6G | 回测可重跑 | ❌（`--with-backtests` 才收） |
+
+默认只归档前两项 ≈ **554M**，而不是全量 2.6G。
+
+**为什么是 tar 分片而不是逐文件 sync**：10016 个小文件逐个 PUT 在 R2 上是
+10016 次 Class A 操作、首轮很慢。实测打 3 个 tar.gz 后共 **172M**（压缩到 31%）、
+本地耗时 42s；分片各自附带 `.list`，新电脑可只下需要的分片。
+
+**用法**（打包机，通常是数据最全的那台）：
+
+```bash
+# 只打包 + 生成 MANIFEST.json（不上传）
+CACHE_DIR=/path/to/signal_system/cache ./sync-history-r2.sh --pack
+# 打包并上传（失败即报错，本地包不删）
+CACHE_DIR=/path/to/signal_system/cache ./sync-history-r2.sh --upload
+# 校验本地包与 MANIFEST 是否一致
+./sync-history-r2.sh --check
+```
+
+**用法**（新电脑）：
+
+```bash
+./sync-history-r2.sh --list                    # 看远端有哪些包
+./sync-history-r2.sh --fetch /path/to/signal_system   # 下载+校验+解包
+```
+
+> `--fetch` 的目标目录是**包含 `cache` 的那一层**，即 `signal_system/` 本身
+> （包内路径形如 `cache/daily_history/xxx.pkl`），与 `config.yaml` 的
+> `cache_dir: ./cache` 对得上。
+
+环境变量：`CACHE_DIR`（默认自动探测 `/opt/docker/quant/cache` 与仓库内布局）、
+`R2_REMOTE`（默认 `r2-oracle-backup:oracle-backup/quant-cache/v1`，沿用
+`backup-quant.sh` 已在用的远端）、`R2_CONFIG`、`RCLONE`、`PACK_DIR`。
+
+**存储位置建议：独立的 bucket，不要与 DB 备份同桶同 token。**
+DB dump 里含 `quant.ai_providers.api_key`，属于敏感数据；而行情缓存是公开市场数据。
+把数据集单独放一个 bucket（或至少单独前缀），给开发机的 R2 token 只授该 bucket 的
+**只读**权限 —— 这样开发机即使凭据泄露也拿不到数据库备份。
+
+**完整性**：`MANIFEST.json` 记录每个分片的 `sha256` 与成员数；`--fetch` 会
+逐片校验 sha256、并在解包后断言"解出的文件数 == MANIFEST 声明数"，不符即失败。
+`--pack` 同样做覆盖性断言（分片成员并集必须精确等于目标清单，多一个少一个都 fail）——
+否则"分片少一个"对外只表现为"少了一些股票"，极难发现。
+
 ## 更新代码与迁移数据
 
 ### 从 SQLite 版升级到 Supabase 版
