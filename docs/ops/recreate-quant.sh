@@ -27,7 +27,12 @@ REPO=/opt/docker/quant/quant-python
 COMPOSE_DIR="$REPO/quant-python"
 ENV_FILE="$COMPOSE_DIR/.env"
 COMPOSE_FILES=(-f docker-compose.oracle.yml -f docker-compose.oracle.db.yml)
-LOG=/home/ubuntu/ops/recreate-quant.log
+# 日志目录：默认 /home/ubuntu/ops（部署形态）；不可写时退回 /tmp。
+# 此前硬编码 /home/ubuntu/ops，导致"直接从仓库跑"会在第一条 log() 上
+# 因 tee 无法创建文件而 exit（set -e + pipefail）—— 2026-10-16 实测踩到。
+LOG_DIR="${QUANT_OPS_LOG_DIR:-/home/ubuntu/ops}"
+mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
+LOG="$LOG_DIR/recreate-quant.log"
 
 # 巡检用的探针。必须是**实际存在**的路径：
 #   /favicon.ico -> 200（src/app/favicon.ico）

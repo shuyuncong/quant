@@ -1,8 +1,60 @@
-ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ rm -f /opt/docker/quant/cache/*.pkl
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ unset COMPOSE_FILE
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ bash /home/ubuntu/ops/recreate-quant.sh
+bash: /home/ubuntu/ops/recreate-quant.sh: No such file or directory
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ git pull
+Already up to date.
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ cd /opt/docker/quant/quant-python/quant-python
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ unset COMPOSE_FILE
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d --build
+[+] Building 2.6s (22/22) FINISHED                                                                                                                                                  
+ => [internal] load local bake definitions                                                                                                                                     0.0s
+ => => reading from stdin 554B                                                                                                                                                 0.0s
+ => [internal] load build definition from Dockerfile                                                                                                                           0.0s
+ => => transferring dockerfile: 2.17kB                                                                                                                                         0.0s
+ => resolve image config for docker-image://docker.io/docker/dockerfile:1                                                                                                      1.1s
+ => CACHED docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e                                                0.0s
+ => => resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e                                                           0.0s
+ => [internal] load metadata for docker.io/library/node:22-bookworm-slim                                                                                                       1.0s
+ => [internal] load .dockerignore                                                                                                                                              0.0s
+ => => transferring context: 301B                                                                                                                                              0.0s
+ => [internal] load build context                                                                                                                                              0.0s
+ => => transferring context: 30.21kB                                                                                                                                           0.0s
+ => [build 1/7] FROM docker.io/library/node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392                                           0.0s
+ => => resolve docker.io/library/node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392                                                 0.0s
+ => CACHED [runtime 2/7] RUN apt-get update     && apt-get install -y --no-install-recommends python3 python3-pip python3-venv ca-certificates tzdata     && rm -rf /var/lib/  0.0s
+ => CACHED [runtime 3/7] WORKDIR /app/web                                                                                                                                      0.0s
+ => CACHED [build 2/7] WORKDIR /app                                                                                                                                            0.0s
+ => CACHED [build 3/7] RUN apt-get update     && apt-get install -y --no-install-recommends python3 make g++     && rm -rf /var/lib/apt/lists/*                                0.0s
+ => CACHED [build 4/7] COPY web/package.json web/package-lock.json ./web/                                                                                                      0.0s
+ => CACHED [build 5/7] RUN cd web && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org                                                                         0.0s
+ => CACHED [build 6/7] COPY web/ ./web/                                                                                                                                        0.0s
+ => CACHED [build 7/7] RUN cd web && npm run build                                                                                                                             0.0s
+ => CACHED [runtime 4/7] COPY --from=build /app/web /app/web                                                                                                                   0.0s
+ => CACHED [runtime 5/7] COPY signal_system /app/signal_system                                                                                                                 0.0s
+ => CACHED [runtime 6/7] COPY core /app/core                                                                                                                                   0.0s
+ => CACHED [runtime 7/7] RUN /opt/venv/bin/pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/signal_system/requirements-akshare.txt     && mkdir -p /app  0.0s
+ => exporting to image                                                                                                                                                         0.1s
+ => => exporting layers                                                                                                                                                        0.0s
+ => => exporting manifest sha256:401f49a10de9e91159f1b3aecd4b480621459141bc019a7ae2deae8e60b255e5                                                                              0.0s
+ => => exporting config sha256:a0e2c815682ed80dfa8264b705e9b52236857ff999088182e6d06ea38bbe78c0                                                                                0.0s
+ => => exporting attestation manifest sha256:7fee144bd8fc6b66e27954da364a957efe90c4e4ed64c73dfe12db8ad8c6bb8f                                                                  0.0s
+ => => exporting manifest list sha256:3d0d3f89ca52d299a7a493ba7ea9cbf7c18d495eb58fb5864f919d316900e8ea                                                                         0.0s
+ => => naming to docker.io/library/quant-web:latest                                                                                                                            0.0s
+ => => unpacking to docker.io/library/quant-web:latest                                                                                                                         0.0s
+ => resolving provenance for metadata file                                                                                                                                     0.0s
+[+] up 4/4
+ ✔ Image quant-web:latest   Built                                                                                                                                               2.7s
+ ✔ Container quant-db       Running                                                                                                                                             0.0s
+ ✔ Container quant-backtest Started                                                                                                                                             0.6s
+ ✔ Container quant-web      Started                                                                                                                                             0.6s
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/web quant-web node -e "console.log(process.env.DATABASE_URL)"
+postgresql://quant_app:Y97aqgOZq7dpvwwCmbrY7oz9Uhn1@quant-db:5432/quant
+ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec quant-web getent hosts quant-db
+172.28.0.2      quant-db
 ubuntu@oracle-cloud:/opt/docker/quant/quant-python/quant-python$ docker exec -w /app/web quant-web npm run --silent backfill:names -- --apply
 .env.local not found. Continuing without it.
 {"mode":"apply","blank_records_distinct_codes":2}
 {"resolved":0,"of":2}
-{"resolved_total":0,"unresolved":2}
-{"unresolved_codes":["517520","588000"]}
-没有任何代码解析出名称 —— 名称表可能仍不可用，先确认 get_stock_list() 的规模。
+{"resolved_from_pool_or_holdings":2,"of_missing":2}
+{"resolved_total":2,"unresolved":0}
+{"updated_rows":34}
