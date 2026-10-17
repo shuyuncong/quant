@@ -38,6 +38,28 @@ from candidate_integrity import (
 from utils.helpers import load_config
 
 VERSION = "volume_unit_continuity_audit.v1"
+
+
+def source_text_sha256(path: Path) -> str:
+    """按行尾归一后的字节计算 sha256（\r\n -> \n），用于**源码文件**的契约锁定。
+
+    为什么不用共享的 file_sha256：那个读的是工作区原始字节，因此哈希取决于检出
+    时的行尾 —— Windows(CRLF) 与 Linux/Mac(LF) 会得到不同结果，
+    同一个常量不可能同时满足两个平台。
+
+    实测证据：本仓库 EXPECTED_MARKET_DATA_SHA256 的登记值
+    488f91c4… 恰好等于 market_data.py 在 7835a04 时的 **CRLF** 形态
+    （其 LF 形态为 f215eeb1…），即该常量是在 Windows 工作区上算出来的；
+    而 EXPECTED_CONFIG_SHA256 却是按 LF 登记的 —— 同一套机制两个口径。
+
+    用本函数后，哈希与行尾无关，「口径未变」才是真正被断言的东西。
+    注意：**不要**改 candidate_integrity.file_sha256 —— 它被候选/留出集完整性
+    清单复用，比对的是数据文件（JSON/JSONL/pkl），语义不同。
+    本函数只用于文本源码。
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 SPLITS = ("train", "val", "test")
 CANONICAL_INPUT_DIR = Path(r"D:\tmp\candidates_fullpool_canonical")
 CONFIG_PATH = BASE_DIR / "config" / "config.yaml"
@@ -55,9 +77,18 @@ EXPECTED_CONFIG_SHA256 = (
 # (分批止盈计划, 默认 null)；不动成交、因子、回测与既有策略口径，旧值 39771129…
     "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 )
-# 2026-09-17 重新登记：新增主源故障降级链（腾讯→东财→新浪），新浪成交量(股)折算为手；旧值 07cc9e23…
+# 2026-10-17 重新登记（行尾归一后重登记，旧值 488f91c4…）：
+#   ① 改用 source_text_sha256（\r\n 归一为 \n），使哈希与检出平台无关。
+#      旧值 488f91c4… 实测等于市场数据文件在 7835a04 时的 **CRLF** 形态
+#      （其 LF 形态为 f215eeb1…）—— 即旧值是 Windows 工作区的产物，
+#      在 Linux/Mac 上永远不可能通过。
+#   ② 同一变更顺带补上 7835a04 之后的登记缺口：9d55e98（该文件仅改动
+#      get_trade_dates 签名，加 strict 参数）、59fc477 / 191c169（新增名称
+#      解析：全市场分页股票列表、ETF 列表、get_display_name_map）、
+#      ff3c24e（无该文件改动）。上述均**不涉及成交量/因子/回测口径**。
+#   成交量口径本身仍由 volume_unit_shares=100 与其它断言独立校验，未放宽。
 EXPECTED_MARKET_DATA_SHA256 = (
-    "488f91c457c60d56c611e0a01532e70d723c80f381cdede769ea3ca33de9093d"
+    "530b37c9f2507b1d5358d54bf7c672173d8fd0c591969a82b96deb85cfe12bfb"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"
@@ -358,8 +389,8 @@ def _volume_features(volume: np.ndarray) -> dict[str, float | int]:
 
 
 def _validate_producer_contract(config_path: Path) -> dict[str, Any]:
-    config_sha = file_sha256(config_path)
-    market_data_sha = file_sha256(MARKET_DATA_PATH)
+    config_sha = source_text_sha256(config_path)
+    market_data_sha = source_text_sha256(MARKET_DATA_PATH)
     config = load_config(str(config_path))
     if config is None:
         raise RuntimeError(f"unable to load config: {config_path}")
