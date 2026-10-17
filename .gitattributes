@@ -1,0 +1,35 @@
+# 统一行尾为 LF —— 跨平台（Windows / macOS / Linux）字节一致
+#
+# 背景：仓库存 LF，但 core.autocrlf=true 的 Windows 检出会变成 CRLF，
+# 导致同一提交在两台机器上字节不同，令按 read_bytes() 算 sha256 的冻结契约漂移
+# （曾致 volume_unit_continuity_audit 的 market_data_sha_match 失败）。
+#
+# 关键：必须写 eol=lf。只写 `text=auto` 不解决问题 —— 它仍按平台检出
+# （Windows 依旧是 CRLF，实测 CR=3/3 行）。eol=lf 的优先级高于
+# core.autocrlf，因此与各机器的 autocrlf 配置无关。
+#
+# 详见 docs/2026-10-17-行尾统一LF方案.md
+
+* text=auto eol=lf
+
+# 归档的回测结果 CSV 含历史遗留的 \r\r\n（双 CR，非本政策产物）。
+# git 的行尾归一只处理 \r\n，对 \r\r\n 只能得到 \r\n（残留孤立 CR），
+# 既不能真正修好，又会改写已归档产物的字节 —— 故显式排除转换，保持原样。
+# 注：该文件经实测可正常解析（csv.reader 得到 30 行），不影响使用。
+# 其余 CSV 的 blob 本就是纯 LF，正常纳入 eol=lf 转换。
+docs/backtest-results/2026-10-07-three-strategies-stop-loss/metrics.csv -text
+
+# 二进制：禁止任何行尾转换（否则会破坏文件内容）
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.pdf   binary
+*.gz    binary
+*.tgz   binary
+*.zip   binary
+*.pkl   binary
+*.woff  binary
+*.woff2 binary
