@@ -11,9 +11,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 VERSION = "candidate_integrity.v1"
 DEFAULT_SPLITS = ("train", "val", "test")
@@ -36,6 +36,20 @@ def guard_development_path(path: Path, allow_holdout: bool = False) -> Path:
 
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def source_text_sha256(path: Path) -> str:
+    """按行尾归一的字节算 sha256（\\r\\n -> \\n），用于**源码文件**的契约锁定。
+
+    为什么需要它：file_sha256 读工作区原始字节，哈希因此取决于检出时的行尾 ——
+    Windows(core.autocrlf=true) 得 CRLF、Linux/macOS 得 LF，同一个常量不可能同时
+    满足两个平台。实证：多个审计的登记值实测等于目标文件的 CRLF 形态
+    （如 strategy_macd / strategy_chan），即当年是在 Windows 工作区上算的。
+
+    仅用于文本源码。**数据文件（JSON/JSONL/pkl）必须继续用 file_sha256** ——
+    对它们做行尾归一会改变内容与语义。
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def candidate_id(row: dict[str, Any]) -> str:

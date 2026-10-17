@@ -38,6 +38,12 @@ from attribution_audit import (
 from attribution_audit import (
     _replay_split as _production_replay_split,
 )
+from audit_dependency_contract import (
+    DEPENDENCY_EXPECTED_SHA256 as _SHARED_DEPENDENCY_EXPECTED_SHA256,
+)
+from audit_dependency_contract import (
+    protected_sha256,
+)
 from backtest_winrate import HISTORY_DIR
 from candidate_integrity import (
     VERSION as INTEGRITY_VERSION,
@@ -102,19 +108,8 @@ DEPENDENCY_PATHS = {
 }
 # 2026-09-17 重新登记 backtest_winrate（日线获取统一走降级链，分派等价）旧值 586e21d8…
 DEPENDENCY_EXPECTED_SHA256 = {
-    "attribution_audit": "fdb13ef7d20bdf024a14f6dffe17d47c14ec73ddcfd72044bca527eb34154f4d",
-    "backtest_winrate": "eaada196c504cb9b0fd8cccb392c838a88780607672f1291544090e42e9d4fd3",
-    "candidate_integrity": "fb7e197a7bb11963b5f6b2042965f946b48bef4ab89789ca1d7c5ad4cfb4e53f",
-    "macd_divergence_audit": "ae17dd4906b52fc07058156ab229c3fe264dbde83183c482e5a6fb6ac919ca1e",
-    "strategy_chan": "af70eab3207c168254f70e8674fd1ce6293e0b7937a8a2fb8a842640b306d058",
-    "strategy_macd": "cb1e5ff36086fca041d899199c7ed8a093929feff294bc0f40da2c65522866c9",
-    "strategy_signal_policy": "2288fd4492f860a1705d1539d7b1b5b396a44f81c9e333cb6fafdc3ea2b56d34",
-    "strategy_market_gate": "fa69dbee01817e44b7b4bc73c50c9a37fa5b4f8b4eb08460dc134979d6d7abe6",
-    "utils_helpers": "3ec75b774efe60cbe678f5dbda78a84a70a6a12442a1f458e121bc33e6804ae1",
-    "volume_unit_continuity_audit": "2aef3b363f9dd53c9feada345a6bf35efefb3d9141c0ae71eba3f0711442f53a",
-    "market_data": "07cc9e23d1686811a6ef188ae44233b07e4ff293f3572479ba168982a7ab4f82",
+    name: _SHARED_DEPENDENCY_EXPECTED_SHA256[name] for name in DEPENDENCY_PATHS
 }
-
 PRIMARY_FACTOR = "volume_instability_cv_6x10"
 FACTOR_SPECS: dict[str, dict[str, Any]] = {
     PRIMARY_FACTOR: {"larger_is_better": False, "role": "primary"},
@@ -173,7 +168,7 @@ def _snapshot_named_paths(paths: dict[str, Path]) -> dict[str, dict[str, Any]]:
         snapshot[name] = {
             "path": str(path),
             "size_bytes": path.stat().st_size,
-            "sha256": file_sha256(path),
+            "sha256": protected_sha256(path),
         }
     return snapshot
 

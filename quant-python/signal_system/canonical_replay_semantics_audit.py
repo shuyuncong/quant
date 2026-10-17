@@ -16,9 +16,10 @@ import statistics
 import sys
 import time
 from collections import Counter
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 
@@ -30,16 +31,19 @@ import attribution_audit
 import backtest_winrate
 import candidate_integrity
 from attribution_audit import _config_snapshot, _replay_split
+from audit_dependency_contract import DEPENDENCY_EXPECTED_SHA256, protected_sha256
 from backtest_winrate import HISTORY_DIR, prepare_closed_bars
 from candidate_integrity import (
     VERSION as INTEGRITY_VERSION,
+)
+from candidate_integrity import (
     candidate_id,
     candidate_ids_sha256,
     file_sha256,
     load_jsonl,
+    source_text_sha256,
 )
 from utils.helpers import load_config
-
 
 VERSION = "canonical_replay_semantics_audit.v1"
 PREREGISTERED_LABEL = "canonical-replay-semantics-drift-audit"
@@ -69,30 +73,14 @@ PREREGISTERED_CONFIG_SHA256 = (
     "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
 )
 # 2026-09-17 重新登记：日线获取统一走降级链，分派等价；旧值 586e21d8…
-PREREGISTERED_BACKTEST_SHA256 = (
-    "eaada196c504cb9b0fd8cccb392c838a88780607672f1291544090e42e9d4fd3"
-)
-PREREGISTERED_ATTRIBUTION_SHA256 = (
-    "fdb13ef7d20bdf024a14f6dffe17d47c14ec73ddcfd72044bca527eb34154f4d"
-)
-PREREGISTERED_CANDIDATE_INTEGRITY_SHA256 = (
-    "fb7e197a7bb11963b5f6b2042965f946b48bef4ab89789ca1d7c5ad4cfb4e53f"
-)
-PREREGISTERED_CHAN_STRATEGY_SHA256 = (
-    "af70eab3207c168254f70e8674fd1ce6293e0b7937a8a2fb8a842640b306d058"
-)
-PREREGISTERED_MACD_STRATEGY_SHA256 = (
-    "cb1e5ff36086fca041d899199c7ed8a093929feff294bc0f40da2c65522866c9"
-)
-PREREGISTERED_SIGNAL_POLICY_SHA256 = (
-    "2288fd4492f860a1705d1539d7b1b5b396a44f81c9e333cb6fafdc3ea2b56d34"
-)
-PREREGISTERED_MARKET_GATE_SHA256 = (
-    "fa69dbee01817e44b7b4bc73c50c9a37fa5b4f8b4eb08460dc134979d6d7abe6"
-)
-PREREGISTERED_UTILS_HELPERS_SHA256 = (
-    "3ec75b774efe60cbe678f5dbda78a84a70a6a12442a1f458e121bc33e6804ae1"
-)
+#
+# 2026-10-17 起，8 个**依赖源码**的登记值不再逐个在此声明，改为从
+# audit_dependency_contract.DEPENDENCY_EXPECTED_SHA256 取用（单一事实来源）。
+# 原因：原先 9 个审计脚本各自内嵌同一份表，值已实质漂移 —— 实测其中
+#   · strategy_macd / strategy_chan 的旧值是目标文件在旧提交的 **CRLF** 形态
+#   · backtest_winrate / utils_helpers 的旧值与任何历史版本的 LF/CRLF 形态都不匹配
+# 即登记口径在不同时间、不同机器上是混的，不存在能同时成立的行尾形态。
+# 现统一改用 source_text_sha256（\r\n 归一为 \n），与检出平台无关。
 NUMERIC_TOLERANCE_PP = 0.05
 
 IDENTITY_FIELDS = frozenset(("symbol", "signal_day", "signal_type"))
@@ -636,7 +624,7 @@ def _paths_snapshot(paths: Iterable[Path]) -> dict[str, dict[str, Any]]:
         if not path.exists() or not path.is_file():
             raise RuntimeError(f"protected input file does not exist: {path}")
         snapshot[str(path)] = {
-            "sha256": file_sha256(path),
+            "sha256": protected_sha256(path),
             "size": path.stat().st_size,
         }
     return snapshot
@@ -887,14 +875,8 @@ def _dependency_definitions() -> dict[str, tuple[Path, str]]:
         "utils_helpers": (BASE_DIR / "utils" / "helpers.py").resolve(),
     }
     expected = {
-        "backtest_winrate": PREREGISTERED_BACKTEST_SHA256,
-        "attribution_audit": PREREGISTERED_ATTRIBUTION_SHA256,
-        "candidate_integrity": PREREGISTERED_CANDIDATE_INTEGRITY_SHA256,
-        "strategy_chan": PREREGISTERED_CHAN_STRATEGY_SHA256,
-        "strategy_macd": PREREGISTERED_MACD_STRATEGY_SHA256,
-        "strategy_signal_policy": PREREGISTERED_SIGNAL_POLICY_SHA256,
-        "strategy_market_gate": PREREGISTERED_MARKET_GATE_SHA256,
-        "utils_helpers": PREREGISTERED_UTILS_HELPERS_SHA256,
+        name: DEPENDENCY_EXPECTED_SHA256[name]
+        for name in paths
     }
     return {
         name: (path, expected[name])
@@ -908,11 +890,9 @@ def _dependency_contract(
     report: dict[str, Any] = {}
     for name, (path, expected) in _dependency_definitions().items():
         resolved = str(path.resolve())
-        actual = (
-            str(initial_snapshot[resolved]["sha256"])
-            if initial_snapshot is not None
-            else file_sha256(path)
-        )
+        # 必须用 source_text_sha256（行尾归一），不能取 initial_snapshot 里的值：
+        # 快照对 .py 已归一，但显式重算可让本函数独立成立（并被单测直接调用）。
+        actual = source_text_sha256(path)
         report[name] = {
             "path": resolved,
             "expected_sha256": expected,
