@@ -88,14 +88,14 @@ async function call(query: string) {
 type Row = { id: number; symbol: string; name: string; document: Record<string, unknown> };
 
 describe("GET /api/analyses against real Postgres", () => {
-  it("pages with LIMIT 5 / OFFSET and reports the full total", async () => {
+  it("pages with LIMIT 10 / OFFSET and reports the full total", async () => {
     const first = await call("page=1&symbol=");
     expect(first.status).toBe(200);
     expect(first.body.total).toBe(7);
-    expect((first.body.records as Row[]).map((r) => r.symbol)).toHaveLength(5);
+    expect(first.body.records as Row[]).toHaveLength(7);
 
     const second = await call("page=2&symbol=");
-    expect((second.body.records as Row[]).map((r) => r.symbol)).toEqual(["600051.SH", "600050.SH"]);
+    expect((second.body.records as Row[])).toHaveLength(0);
   });
 
   it("filters by job and symbol with matching counts", async () => {
@@ -201,8 +201,72 @@ describe("名称回退优先级", () => {
 
   it("任务 payload 里的名称优先于池/持仓", async () => {
     // 600050 同时在 payload（任务名甲）与池（池内名称甲）里
-    const { body } = await call("page=2&symbol=");
+    const { body } = await call("page=1&symbol=");
     const row = (body.records as Row[]).find((r) => r.symbol === "600050.SH");
     expect(row?.name).toBe("任务名甲");
+  });
+});
+
+describe("持仓状态", () => {
+  it("从记录自己的持仓快照判断有/无持仓，缺失快照则为未知", async () => {
+    await db.query(
+      "UPDATE quant.stock_analyses SET document=jsonb_set(document,'{portfolio}',$1::jsonb) WHERE symbol='600055.SH'",
+      [JSON.stringify({ holdings: [{ symbol: "600055.SH", shares: 100 }] })],
+    );
+    await db.query(
+      "UPDATE quant.stock_analyses SET document=jsonb_set(document,'{portfolio}',$1::jsonb) WHERE symbol='600053.SH'",
+      [JSON.stringify({ holdings: [] })],
+    );
+
+    const held = await call("page=1&symbol=600055");
+    expect((held.body.records as (Row & { held: boolean | null })[])[0].held).toBe(true);
+
+    const flat = await call("page=1&symbol=600053");
+    expect((flat.body.records as (Row & { held: boolean | null })[])[0].held).toBe(false);
+
+    // 夹具 600051 的 portfolio 没有 holdings 键：不能当成空仓。
+    const unknown = await call("page=1&symbol=600051");
+    expect((unknown.body.records as (Row & { held: boolean | null })[])[0].held).toBeNull();
+  });
+});
+
+describe("买卖信号筛选", () => {
+  it("信号与策略可单独或组合过滤，并拒绝未知参数", async () => {
+    await db.query(
+      "UPDATE quant.stock_analyses SET document=jsonb_set(document,'{strategies}',$1::jsonb) WHERE symbol='600055.SH'",
+      [JSON.stringify([{ strategy_id: "yearline_pullback", name: "年线趋势", buy: true, sell: false }])],
+    );
+    await db.query(
+      "UPDATE quant.stock_analyses SET document=jsonb_set(document,'{strategies}',$1::jsonb) WHERE symbol='600053.SH'",
+      [JSON.stringify([{ strategy_id: "yearline_pullback", name: "年线趋势", buy: false, sell: true }])],
+    );
+
+    const buyYearly = await call("page=1&symbol=&signal=buy&strategy=yearline_pullback");
+    expect(buyYearly.body.total).toBe(1);
+    expect((buyYearly.body.records as Row[])[0].symbol).toBe("600055.SH");
+
+    const sellYearly = await call("page=1&symbol=&signal=sell&strategy=yearline_pullback");
+    expect(sellYearly.body.total).toBe(1);
+    expect((sellYearly.body.records as Row[])[0].symbol).toBe("600053.SH");
+
+    // 只选策略、不选信号：该策略买或卖任一侧触发都算。
+    const eitherYearly = await call("page=1&symbol=&strategy=yearline_pullback");
+    expect(eitherYearly.body.total).toBe(2);
+    expect((eitherYearly.body.records as Row[]).map((row) => row.symbol).sort()).toEqual([
+      "600053.SH",
+      "600055.SH",
+    ]);
+
+    const none = await call("page=1&symbol=&signal=buy&strategy=macd_divergence");
+    expect(none.body.total).toBe(0);
+
+    const anySell = await call("page=1&symbol=&signal=sell");
+    expect(anySell.body.total).toBe(1);
+    expect((anySell.body.records as Row[])[0].symbol).toBe("600053.SH");
+
+    const badSignal = await GET(new Request("http://localhost/api/analyses?page=1&symbol=&signal=hold"));
+    expect(badSignal.status).toBe(422);
+    const badStrategy = await GET(new Request("http://localhost/api/analyses?page=1&symbol=&strategy=bogus"));
+    expect(badStrategy.status).toBe(422);
   });
 });

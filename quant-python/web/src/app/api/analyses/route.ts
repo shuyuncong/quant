@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { normalizeSymbol } from "@/lib/symbols";
+import { isStrategyId, ANALYSIS_PAGE_SIZE } from "@/lib/analysis-types";
 
 /**
  * 列表只返回摘要：在 SQL 层就把 document 里的大字段剥掉。
  *
  * 单条 document 实测 ~129KB，其中 `report.results[0].timeframes`（1m/5m/15m/30m/60m/120m）
- * 占 118KB；列表按 5 条翻页若整份取回，每页 ~0.6–1.2MB，且 10 分钟静默轮询会再重传一遍。
+ * 占 118KB；列表按 10 条翻页若整份取回，每页 ~1.2–2.4MB，且 10 分钟静默轮询会再重传一遍。
  * 更大的问题是 `SELECT *` 会让 Postgres 把整份 document（含正文）读进内存并传给应用，
  * 一旦某条记录的正文特别大，接口就可能在被拖垮后返回 500
  * （线上页面报 "Unexpected token 'I', "Internal S"... is not valid JSON" 即此：
@@ -29,12 +30,33 @@ const SUMMARY_DOCUMENT = `jsonb_build_object(
 /** 名称表：只在这两张表里找，表名是字面量，不来自请求。 */
 const NAME_TABLES = ["quant.stock_pool", "quant.holdings"] as const;
 
-const LIST_PAGE_SIZE = 5;
-
 /** 列表查询只依赖 stock_analyses；名称回退另走查询，失败也不影响列表。 */
 const LIST_QUERY = (where: string) => `SELECT s.id, s.job_id, s.symbol, s.name, s.status, s.created_at, s.updated_at,
-            ${SUMMARY_DOCUMENT} AS document
-     FROM quant.stock_analyses s ${where} ORDER BY s.id DESC LIMIT ${LIST_PAGE_SIZE} OFFSET $3`;
+            ${SUMMARY_DOCUMENT} AS document,
+            CASE WHEN jsonb_typeof(s.document->'portfolio'->'holdings') = 'array'
+                 THEN jsonb_array_length(s.document->'portfolio'->'holdings') > 0
+                 ELSE NULL END AS held
+     FROM quant.stock_analyses s ${where} ORDER BY s.id DESC LIMIT ${ANALYSIS_PAGE_SIZE} OFFSET $5`;
+
+/**
+ * 按策略和/或买卖信号过滤记录。
+ *
+ * `signal` 只会是 `buy` / `sell`（路由先校验）；它对应 `strategies[]` 里的
+ * `buy` / `sell` 布尔字段。策略与信号同时给出时，要求同一个策略对象同时满足
+ * 两者（例如「年线趋势触发买点」），而不是一条记录里 A 策略买、B 策略卖。
+ *
+ * `strategies` 是文档内的数组；先判类型，避免旧记录/异常文档让
+ * `jsonb_array_elements` 直接报错。参数在调用方校验后传入。
+ */
+const SIGNAL_FILTER = `(($3::text IS NULL AND $4::text IS NULL) OR EXISTS (
+            SELECT 1
+              FROM jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(s.document->'strategies') = 'array'
+                          THEN s.document->'strategies' ELSE '[]'::jsonb END
+                   ) AS entry
+             WHERE ($3::text IS NULL OR entry->>'strategy_id' = $3)
+               AND ($4::text IS NULL OR entry->>$4 = 'true')
+          ))`;
 
 type AnalysisRow = {
   id: unknown;
@@ -42,6 +64,8 @@ type AnalysisRow = {
   symbol: string;
   name: string;
   document: Record<string, unknown>;
+  /** true/false = 分析时点有/无持仓；null = 记录缺少持仓快照。 */
+  held: boolean | null;
   [key: string]: unknown;
 };
 
@@ -164,17 +188,32 @@ export async function GET(request: Request) {
   const jobId = Number(search.get("job_id")) || null;
   if (jobId !== null && (!Number.isSafeInteger(jobId) || jobId < 1)) return NextResponse.json({ error: "任务编号无效" }, { status: 422 });
   const symbol = search.get("symbol")?.trim() || null;
-  const where = "WHERE ($1::bigint IS NULL OR s.job_id=$1) AND ($2::text IS NULL OR s.symbol LIKE '%' || $2 || '%')";
+  const strategy = search.get("strategy")?.trim() || null;
+  if (strategy !== null && !isStrategyId(strategy)) {
+    return NextResponse.json({ error: `不支持的策略：${strategy}` }, { status: 422 });
+  }
+  const signal = search.get("signal")?.trim() || null;
+  if (signal !== null && signal !== "buy" && signal !== "sell") {
+    return NextResponse.json({ error: `不支持的信号类型：${signal}` }, { status: 422 });
+  }
+  const where = `WHERE ($1::bigint IS NULL OR s.job_id=$1)
+           AND ($2::text IS NULL OR s.symbol LIKE '%' || $2 || '%')
+           AND ${SIGNAL_FILTER}`;
 
   // 任何失败都要以 JSON 返回：路由未捕获异常时响应体是文本 "Internal Server Error"，
   // 前端 response.json() 会抛出 "Unexpected token 'I'..." 这种看不出所以然的错。
   try {
     const db = await getDb();
-    const total = Number((await db.query(`SELECT COUNT(*) FROM quant.stock_analyses s ${where}`, [jobId, symbol])).rows[0].count);
-    const rows = (await db.query(LIST_QUERY(where), [jobId, symbol, (page - 1) * LIST_PAGE_SIZE])).rows as unknown as AnalysisRow[];
-    const records = rows.map((row) => ({ ...row, id: Number(row.id), job_id: Number(row.job_id) }));
+    const total = Number((await db.query(`SELECT COUNT(*) FROM quant.stock_analyses s ${where}`, [jobId, symbol, strategy, signal])).rows[0].count);
+    const rows = (await db.query(LIST_QUERY(where), [jobId, symbol, strategy, signal, (page - 1) * ANALYSIS_PAGE_SIZE])).rows as unknown as AnalysisRow[];
+    const records = rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+      job_id: Number(row.job_id),
+      held: typeof row.held === "boolean" ? row.held : null,
+    }));
     await fillMissingNames(db, records);
-    return NextResponse.json({ records, total, page, page_size: LIST_PAGE_SIZE });
+    return NextResponse.json({ records, total, page, page_size: ANALYSIS_PAGE_SIZE });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: `读取分析记录失败：${detail}` }, { status: 500 });

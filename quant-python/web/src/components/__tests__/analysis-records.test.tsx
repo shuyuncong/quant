@@ -10,6 +10,7 @@ vi.mock("@/components/five-tab-analysis", () => ({
 }));
 
 import { AnalysisRecords } from "../analysis-records";
+import { ANALYSIS_PAGE_SIZE } from "@/lib/analysis-types";
 
 const records = [
   { id: 11, job_id: 1, symbol: "600036.SH", name: "招商银行", status: "success", created_at: "2026-09-01T15:00:00", updated_at: "2026-09-01T15:00:00", document: { symbol: "600036.SH" } },
@@ -121,12 +122,26 @@ describe("analysis records expansion", () => {
   });
 
   it("collapses the open report when paging", async () => {
-    const many = [...records, maotai, { ...records[0], id: 13 }, { ...records[0], id: 14 }, { ...records[0], id: 15 }];
-    const fetchMock = vi.fn((url: string) => Promise.resolve(response(String(url).includes("page=2") ? [many[4]] : many)));
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...records[0],
+      id: 100 + i,
+      symbol: `6001${String(i).padStart(2, "0")}.SH`,
+      name: `股票${i}`,
+      document: { ...records[0].document, symbol: `6001${String(i).padStart(2, "0")}.SH` },
+    }));
+    const fetchMock = vi.fn((url: string) => {
+      const page = Number(new URL(String(url), "http://localhost").searchParams.get("page") ?? "1");
+      return Promise.resolve(jsonResponse({
+        records: many.slice((page - 1) * ANALYSIS_PAGE_SIZE, page * ANALYSIS_PAGE_SIZE),
+        total: many.length,
+        page,
+        page_size: ANALYSIS_PAGE_SIZE,
+      }));
+    });
     await renderRecords(fetchMock);
 
-    await act(async () => articleFor("平安银行", host).click());
-    expect(expandedSymbols(host)).toEqual(["000001.SZ"]);
+    await act(async () => articleFor("股票1", host).click());
+    expect(expandedSymbols(host)).toEqual(["600101.SH"]);
 
     await act(async () => buttonIn(host, "下一页").click());
     await settle();
@@ -200,29 +215,27 @@ describe("analysis records pagination", () => {
   function pagedFetch() {
     return vi.fn((url: string) => {
       const page = Number(new URL(String(url), "http://localhost").searchParams.get("page") ?? "1");
-      const pageRecords = many.slice((page - 1) * 5, page * 5);
-      return Promise.resolve(jsonResponse({ records: pageRecords, total: many.length, page, page_size: 5 }));
+      const pageRecords = many.slice((page - 1) * ANALYSIS_PAGE_SIZE, page * ANALYSIS_PAGE_SIZE);
+      return Promise.resolve(jsonResponse({ records: pageRecords, total: many.length, page, page_size: ANALYSIS_PAGE_SIZE }));
     });
   }
 
   it("shows the next page records and hides the previous page", async () => {
     await renderRecords(pagedFetch());
     expect(host.textContent).toContain("股票0");
-    expect(host.textContent).not.toContain("股票6");
+    expect(host.textContent).not.toContain("股票10");
 
     await act(async () => buttonIn(host, "下一页").click());
     await settle();
 
-    expect(host.textContent).toContain("股票5");
+    expect(host.textContent).toContain("股票10");
     expect(host.textContent).not.toContain("股票0");
   });
 
   it("counts pages from total and disables 下一页 on the last page", async () => {
     await renderRecords(pagedFetch());
-    expect(host.textContent).toContain("/ 3");
+    expect(host.textContent).toContain("/ 2");
 
-    await act(async () => buttonIn(host, "下一页").click());
-    await settle();
     await act(async () => buttonIn(host, "下一页").click());
     await settle();
 
@@ -238,7 +251,7 @@ describe("analysis records pagination", () => {
     await settle();
 
     expect(host.textContent).toContain("股票0");
-    expect(host.textContent).not.toContain("股票5");
+    expect(host.textContent).not.toContain("股票10");
   });
 
   it("ignores a second 下一页 click while the page request is still in flight", async () => {
@@ -250,7 +263,7 @@ describe("analysis records pagination", () => {
       return paged(url);
     });
     await renderRecords(slowFetch);
-    expect(host.textContent).toContain("1 / 3");
+    expect(host.textContent).toContain("1 / 2");
 
     const next = buttonIn(host, "下一页");
     await act(async () => {
@@ -265,8 +278,8 @@ describe("analysis records pagination", () => {
     await settle();
 
     // 关键：只前进一页（不是两页），且只发一次 page=2。
-    expect(host.textContent).toContain("2 / 3");
-    expect(host.textContent).toContain("股票5");
+    expect(host.textContent).toContain("2 / 2");
+    expect(host.textContent).toContain("股票10");
     const pageTwoRequests = slowFetch.mock.calls.filter(([url]) => String(url).includes("page=2"));
     expect(pageTwoRequests).toHaveLength(1);
   });
@@ -334,5 +347,115 @@ describe("analysis records 错误呈现", () => {
       } as unknown as Response),
     ));
     expect(host.querySelector("[role='alert']")?.textContent).toContain("ECONNREFUSED");
+  });
+});
+
+describe("analysis records 信号与策略筛选", () => {
+  it("点击策略按钮后把 strategy 传给接口并回到第一页", async () => {
+    const urls: string[] = [];
+    await renderRecords(vi.fn((url: string) => {
+      urls.push(url);
+      return Promise.resolve(response(records));
+    }));
+
+    await act(async () => buttonIn(host, "年线趋势").click());
+    await settle();
+
+    const last = urls.at(-1) ?? "";
+    expect(last).toContain("strategy=yearline_pullback");
+    expect(last).toContain("page=1");
+  });
+
+  it("买点/卖点信号可以和策略组合筛选", async () => {
+    const urls: string[] = [];
+    await renderRecords(vi.fn((url: string) => {
+      urls.push(url);
+      return Promise.resolve(response(records));
+    }));
+
+    await act(async () => buttonIn(host, "买点").click());
+    await settle();
+    expect(urls.at(-1)).toContain("signal=buy");
+
+    await act(async () => buttonIn(host, "年线趋势").click());
+    await settle();
+    const combined = urls.at(-1) ?? "";
+    expect(combined).toContain("signal=buy");
+    expect(combined).toContain("strategy=yearline_pullback");
+
+    await act(async () => buttonIn(host, "卖点").click());
+    await settle();
+    expect(urls.at(-1)).toContain("signal=sell");
+  });
+
+  it("徽标列出所有触发卖点的策略名", async () => {
+    const record = {
+      ...records[0],
+      held: true,
+      document: {
+        ...records[0].document,
+        strategies: [
+          { strategy_id: "macd_zero_axis", name: "日线零轴金叉", buy: false, sell: true },
+          { strategy_id: "yearline_pullback", name: "年线趋势", buy: false, sell: true },
+          { strategy_id: "macd_divergence", name: "零轴＋底背离", buy: false, sell: false },
+        ],
+      },
+    };
+    await renderRecords(vi.fn(() => Promise.resolve(response([record]))));
+
+    expect(host.textContent).toContain("建议离场 · 日线零轴金叉、年线趋势");
+  });
+
+  it("徽标列出所有触发买点的策略名", async () => {
+    const record = {
+      ...records[0],
+      held: false,
+      document: {
+        ...records[0].document,
+        strategies: [
+          { strategy_id: "macd_zero_axis", name: "日线零轴金叉", buy: true, sell: false },
+          { strategy_id: "yearline_pullback", name: "年线趋势", buy: true, sell: false },
+          { strategy_id: "macd_divergence", name: "零轴＋底背离", buy: false, sell: false },
+        ],
+      },
+    };
+    await renderRecords(vi.fn(() => Promise.resolve(response([record]))));
+
+    expect(host.textContent).toContain("买入共振 · 日线零轴金叉、年线趋势");
+  });
+});
+
+describe("analysis records 持仓口径", () => {
+  function sellRecord(held: boolean | null) {
+    return {
+      ...records[0],
+      held,
+      document: {
+        ...records[0].document,
+        strategies: [
+          { strategy_id: "macd_zero_axis", name: "日线零轴金叉", buy: false, sell: true },
+        ],
+      },
+    };
+  }
+
+  it("未持仓时只提示退出条件触发，不给出离场建议", async () => {
+    await renderRecords(vi.fn(() => Promise.resolve(response([sellRecord(false)]))));
+
+    expect(host.textContent).toContain("退出条件触发 · 未持仓");
+    expect(host.textContent).not.toContain("建议离场");
+  });
+
+  it("有持仓时才显示建议离场", async () => {
+    await renderRecords(vi.fn(() => Promise.resolve(response([sellRecord(true)]))));
+
+    expect(host.textContent).toContain("建议离场 · 日线零轴金叉");
+  });
+
+  it("缺少持仓快照时标记为持仓未知，而不是当作空仓", async () => {
+    await renderRecords(vi.fn(() => Promise.resolve(response([sellRecord(null)]))));
+
+    expect(host.textContent).toContain("退出条件触发 · 持仓未知");
+    expect(host.textContent).not.toContain("建议离场");
   });
 });

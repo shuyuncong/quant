@@ -3,6 +3,9 @@ export const STRATEGIES = [
   { id: "yearline_pullback", name: "年线趋势" },
   { id: "macd_divergence", name: "零轴＋底背离" },
 ] as const;
+
+/** 个股分析记录列表每页条数；服务端分页，前后端共用同一个值。 */
+export const ANALYSIS_PAGE_SIZE = 10;
 export type StrategyId = typeof STRATEGIES[number]["id"];
 
 /** 持仓归属策略：空串 = 未归属（走全局止损/止盈口径），绝不猜归属。 */
@@ -126,7 +129,7 @@ export interface AnalysisRecord {
  *
  * 这两个字段是载荷的主体：单条实测 ~129KB，其中 `timeframes`（1m/5m/15m/30m/60m/120m）
  * 占 118KB，而列表只用到 `strategies`（一致度徽标）与各阶段状态。
- * 列表按 5 条翻页时若带上它们，每页要传 ~0.6–1.2MB，且每 10 分钟静默轮询都会重传一遍——
+ * 列表按 10 条翻页时若带上它们，每页要传 ~1.2–2.4MB，且每 10 分钟静默轮询都会重传一遍——
  * 这是"翻页点了像没反应"的主要来源（服务器带宽被占满时首字节要等整包传完）。
  *
  * 五页签正文只读 `strategies` / `technical` / `synthesis` 与标头字段，
@@ -136,6 +139,11 @@ export type AnalysisDocumentView = Omit<AnalysisDocument, "report" | "portfolio"
 
 export type AnalysisRecordSummary = Omit<AnalysisRecord, "document"> & {
   document: AnalysisDocumentView;
+  /**
+   * 分析时点该股票是否有持仓（记录内 `portfolio.holdings` 是否非空）。
+   * null = 记录没有持仓快照，无法判断；不能当成空仓。
+   */
+  held: boolean | null;
 };
 export interface AnalysisScope {
   holdings: boolean;

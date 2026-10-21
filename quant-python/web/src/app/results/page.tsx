@@ -704,101 +704,109 @@ export default function ResultsPage() {
         </CardContent>
       </Card>
 
-      <AnalysisRecords />
+      <Tabs defaultValue="records">
+        <TabsList variant="line">
+          <TabsTrigger value="records">个股分析记录</TabsTrigger>
+          <TabsTrigger value="tasks">最近任务</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>最近任务</CardTitle>
-              <CardDescription>
-                查看分析、扫描和监控任务的执行状态与数据源；具体个股结论见上方分析记录。
-              </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => void handleManualRefresh()}
-              disabled={refreshingJobs}
-            >
-              <RefreshCw className={cn("size-3.5", refreshingJobs && "animate-spin")} />
-              {refreshingJobs ? "刷新中..." : "手动刷新"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>股票名称</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>执行结果</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead className="w-44">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!jobsLoaded && (
-                <>
-                  {[1, 2, 3].map((i) => (
-                    <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-36 rounded-md" /></TableCell>
+        <TabsContent value="records" keepMounted>
+          <AnalysisRecords embedded />
+        </TabsContent>
+
+        <TabsContent value="tasks">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardDescription>
+                  查看分析、扫描和监控任务的执行状态与数据源；具体个股结论见「个股分析记录」。
+                </CardDescription>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => void handleManualRefresh()}
+                  disabled={refreshingJobs}
+                >
+                  <RefreshCw className={cn("size-3.5", refreshingJobs && "animate-spin")} />
+                  {refreshingJobs ? "刷新中..." : "手动刷新"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead>股票名称</TableHead>
+                    <TableHead>模型</TableHead>
+                    <TableHead>执行结果</TableHead>
+                    <TableHead>创建时间</TableHead>
+                    <TableHead className="w-44">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!jobsLoaded && (
+                    <>
+                      {[1, 2, 3].map((i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                          <TableCell><Skeleton className="h-8 w-36 rounded-md" /></TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+                  {jobs.slice(0, 50).map((job) => (
+                    <TableRow key={job.id} className="hover:bg-muted/40">
+                      <TableCell className="font-mono text-xs font-semibold">#{job.id}</TableCell>
+                      <TableCell>{KIND_LABEL[job.kind] ?? job.kind}</TableCell>
+                      <TableCell className="max-w-40 truncate text-xs text-muted-foreground">
+                        {job.symbol_names || "-"}
+                      </TableCell>
+                      <TableCell className="max-w-32 truncate text-xs text-muted-foreground">
+                        {job.note?.model ?? "-"}
+                      </TableCell>
+                      <TableCell>
+                        <JobStatusBadge status={job.status} />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!job.result_path}
+                            onClick={() => void openDataSource(job)}
+                          >
+                            <Database className="size-4" /> 数据源
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openAnalysis(job)}>
+                            <Eye className="size-4" /> 查看 AI 分析
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
-                </>
-              )}
-              {jobs.slice(0, 50).map((job) => (
-                <TableRow key={job.id} className="hover:bg-muted/40">
-                  <TableCell className="font-mono text-xs font-semibold">#{job.id}</TableCell>
-                  <TableCell>{KIND_LABEL[job.kind] ?? job.kind}</TableCell>
-                  <TableCell className="max-w-40 truncate text-xs text-muted-foreground">
-                    {job.symbol_names || "-"}
-                  </TableCell>
-                  <TableCell className="max-w-32 truncate text-xs text-muted-foreground">
-                    {job.note?.model ?? "-"}
-                  </TableCell>
-                  <TableCell>
-                    <JobStatusBadge status={job.status} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{job.created_at}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!job.result_path}
-                        onClick={() => void openDataSource(job)}
-                      >
-                        <Database className="size-4" /> 数据源
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => openAnalysis(job)}>
-                        <Eye className="size-4" /> 查看 AI 分析
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {jobsLoaded && jobs.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                    暂无执行任务，可通过上方控制台发起分析或监控
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  {jobsLoaded && jobs.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                        暂无执行任务，可通过上方控制台发起分析或监控
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={selectedJobView !== null} onOpenChange={(open) => !open && setSelectedJob(null)}>
         <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-[1600px] flex-col gap-0 overflow-hidden p-0">

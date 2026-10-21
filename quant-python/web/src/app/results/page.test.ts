@@ -76,6 +76,8 @@ async function renderWith(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
   await act(async () => root.render(createElement(ResultsPage)));
   await act(async () => {});
+  await act(async () => buttonIn(host, "最近任务").click());
+  await act(async () => {});
   expect(host.textContent).toContain("乙股票");
 }
 
@@ -109,6 +111,8 @@ describe("results page request isolation", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(createElement(ResultsPage)));
+    await act(async () => {});
+    await act(async () => buttonIn(host, "最近任务").click());
     await act(async () => {});
     await act(async () => buttonIn(rowFor(3, host), "查看 AI 分析").click());
     const dialog = host.querySelector<HTMLElement>("[data-dialog]");

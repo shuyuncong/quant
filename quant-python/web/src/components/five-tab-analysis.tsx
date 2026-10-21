@@ -137,9 +137,12 @@ function Conditions({
 
 export function FiveTabAnalysis({
   document,
+  held,
   onRetry,
 }: {
   document: AnalysisDocumentView;
+  /** true/false = 分析时点有/无持仓；null/undefined = 记录缺少持仓快照。 */
+  held?: boolean | null;
   onRetry?: () => void;
 }) {
   const failed =
@@ -153,7 +156,11 @@ export function FiveTabAnalysis({
   let consensusLabel = "观望 · 暂无共振信号";
   if (sellStrategies.length > 0) {
     consensusTone = "bear";
-    consensusLabel = `预警 · ${sellStrategies.length} 个策略触发退出条件`;
+    consensusLabel = held === true
+      ? `预警 · ${sellStrategies.length} 个策略触发退出条件`
+      : held === false
+      ? `风险提示 · ${sellStrategies.length} 个策略触发退出条件（未持仓，仅作建仓后参考）`
+      : `风险提示 · ${sellStrategies.length} 个策略触发退出条件（持仓未知）`;
   } else if (buyStrategies.length >= 2) {
     consensusTone = "bull";
     consensusLabel = `看多 · ${buyStrategies.length} 个策略共振触发买点`;

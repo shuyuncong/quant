@@ -7,33 +7,60 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FiveTabAnalysis } from "./five-tab-analysis";
-import type { AnalysisRecordSummary } from "@/lib/analysis-types";
+import { STRATEGIES, ANALYSIS_PAGE_SIZE, type AnalysisRecordSummary, type StrategyId } from "@/lib/analysis-types";
 
 function getConsensusBadge(record: AnalysisRecordSummary) {
   const strategies = record.document?.strategies;
   if (!Array.isArray(strategies) || strategies.length === 0) return null;
 
-  const buyCount = strategies.filter((s) => s.buy).length;
-  const sellCount = strategies.filter((s) => s.sell).length;
+  const buyStrategies = strategies.filter((s) => s.buy);
+  const buyCount = buyStrategies.length;
+  const buyNames = buyStrategies.map((s) => s.name || s.strategy_id).join("、");
+  const sellStrategies = strategies.filter((s) => s.sell);
+  const sellCount = sellStrategies.length;
+  const sellNames = sellStrategies.map((s) => s.name || s.strategy_id).join("、");
 
   if (sellCount > 0) {
+    if (record.held === true) {
+      return (
+        <span
+          className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+          title={`触发策略：${sellNames}`}
+        >
+          建议离场 · {sellNames}
+        </span>
+      );
+    }
     return (
-      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-        建议离场 ({sellCount}策略)
+      <span
+        className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+        title={
+          record.held === false
+            ? `分析时点未持有该股票；退出条件仅作为建仓后的规则参考。触发策略：${sellNames}`
+            : `记录缺少持仓快照，无法判断是否持仓。触发策略：${sellNames}`
+        }
+      >
+        {record.held === false ? "退出条件触发 · 未持仓" : "退出条件触发 · 持仓未知"} · {sellNames}
       </span>
     );
   }
   if (buyCount >= 2) {
     return (
-      <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-        买入共振 ({buyCount}策略)
+      <span
+        className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+        title={`触发策略：${buyNames}`}
+      >
+        买入共振 · {buyNames}
       </span>
     );
   }
   if (buyCount === 1) {
     return (
-      <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-        买点关注
+      <span
+        className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+        title={`触发策略：${buyNames}`}
+      >
+        买点 · {buyNames}
       </span>
     );
   }
@@ -44,12 +71,23 @@ function getConsensusBadge(record: AnalysisRecordSummary) {
   );
 }
 
-export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?: React.ReactNode }) {
+export function AnalysisRecords({
+  jobId,
+  fallback,
+  embedded = false,
+}: {
+  jobId?: number;
+  fallback?: React.ReactNode;
+  /** 嵌在页签里时由外层页签承担标题，避免重复一条「个股分析记录」。 */
+  embedded?: boolean;
+}) {
   const [records, setRecords] = useState<AnalysisRecordSummary[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [symbol, setSymbol] = useState("");
   const [query, setQuery] = useState("");
+  const [strategy, setStrategy] = useState<StrategyId | "">("");
+  const [signal, setSignal] = useState<"buy" | "sell" | "">("");
   const [open, setOpen] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -69,6 +107,8 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
     const version = ++requestVersion.current;
     const search = new URLSearchParams({ page: String(page), symbol: query });
     if (jobId) search.set("job_id", String(jobId));
+    if (strategy) search.set("strategy", strategy);
+    if (signal) search.set("signal", signal);
     requestInFlight.current = true;
     setFetching(true);
     try {
@@ -126,7 +166,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
       requestInFlight.current = false;
       if (version === requestVersion.current) setFetching(false);
     }
-  }, [page, jobId, query]);
+  }, [page, jobId, query, strategy, signal]);
 
   /**
    * 翻页：收起展开项、滚回列表顶部，并推进一页。
@@ -142,6 +182,18 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
     // jsdom 等无布局环境没有 scrollIntoView；浏览器里始终存在。
     listTop.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
   }, []);
+
+  const filterByStrategy = (value: StrategyId | "") => {
+    setStrategy(value);
+    setPage(1);
+    setOpen(null);
+  };
+
+  const filterBySignal = (value: "buy" | "sell" | "") => {
+    setSignal(value);
+    setPage(1);
+    setOpen(null);
+  };
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -238,6 +290,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
 
         <FiveTabAnalysis
           document={record.document}
+          held={record.held}
           onRetry={() => void retry(record.id)}
         />
       </section>
@@ -247,41 +300,116 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
   return (
     <section ref={listTop} className="space-y-3" aria-label="个股分析记录">
       {!jobId && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-semibold">个股分析记录</h2>
-            <p className="text-xs text-muted-foreground">按股票查看历次分析报告；一次任务可生成多条记录。</p>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {!embedded && (
+              <div>
+                <h2 className="text-base font-semibold">个股分析记录</h2>
+                <p className="text-xs text-muted-foreground">按股票查看历次分析报告；一次任务可生成多条记录。</p>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <form
+                className="flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setQuery(symbol.trim());
+                  setPage(1);
+                  setOpen(null);
+                }}
+              >
+                <Input
+                  aria-label="按股票代码查询报告"
+                  className="w-40"
+                  placeholder="股票代码"
+                  value={symbol}
+                  onChange={(event) => setSymbol(event.target.value)}
+                />
+                <Button type="submit" variant="outline">查询</Button>
+              </form>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => void handleManualRefresh()}
+                disabled={refreshing}
+              >
+                <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+                {refreshing ? "刷新中..." : "手动刷新"}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <form
-              className="flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setQuery(symbol.trim());
-                setPage(1);
-                setOpen(null);
-              }}
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="按买卖信号筛选"
             >
-              <Input
-                aria-label="按股票代码查询报告"
-                className="w-40"
-                placeholder="股票代码"
-                value={symbol}
-                onChange={(event) => setSymbol(event.target.value)}
-              />
-              <Button type="submit" variant="outline">查询</Button>
-            </form>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => void handleManualRefresh()}
-              disabled={refreshing}
+              <span className="mr-1 text-xs text-muted-foreground">信号</span>
+              <Button
+                type="button"
+                size="sm"
+                variant={signal === "" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                aria-pressed={signal === ""}
+                onClick={() => filterBySignal("")}
+              >
+                全部
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={signal === "buy" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                aria-pressed={signal === "buy"}
+                onClick={() => filterBySignal("buy")}
+              >
+                买点
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={signal === "sell" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                aria-pressed={signal === "sell"}
+                onClick={() => filterBySignal("sell")}
+              >
+                卖点
+              </Button>
+            </div>
+
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="按策略筛选"
             >
-              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
-              {refreshing ? "刷新中..." : "手动刷新"}
-            </Button>
+              <span className="mr-1 text-xs text-muted-foreground">策略</span>
+              <Button
+                type="button"
+                size="sm"
+                variant={strategy === "" ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                aria-pressed={strategy === ""}
+                onClick={() => filterByStrategy("")}
+              >
+                全部
+              </Button>
+              {STRATEGIES.map((item) => (
+                <Button
+                  key={item.id}
+                  type="button"
+                  size="sm"
+                  variant={strategy === item.id ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  aria-pressed={strategy === item.id}
+                  onClick={() => filterByStrategy(item.id)}
+                >
+                  {item.name}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -314,7 +442,9 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
         </div>
       ) : !records.length ? (
         <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-xs">
-          暂无个股报告。运行分析后，每只股票会生成一条包含五个页签的完整记录。
+          {signal || strategy
+            ? "当前筛选条件下没有记录。"
+            : "暂无个股报告。运行分析后，每只股票会生成一条包含五个页签的完整记录。"}
         </div>
       ) : null}
 
@@ -377,6 +507,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
                 <div className="border-t p-4 bg-background/50">
                   <FiveTabAnalysis
                     document={record.document}
+                    held={record.held}
                     onRetry={() => void retry(record.id)}
                   />
                 </div>
@@ -389,7 +520,7 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
       {(!jobId || total > 5) && (
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
           <span className="flex items-center gap-1.5">
-            共 {total} 条 · 每页 5 条
+            共 {total} 条 · 每页 {ANALYSIS_PAGE_SIZE} 条
             {fetching && (
               <span role="status" className="inline-flex items-center gap-1 text-primary">
                 <Loader2 className="size-3 animate-spin" />
@@ -408,12 +539,12 @@ export function AnalysisRecords({ jobId, fallback }: { jobId?: number; fallback?
               上一页
             </Button>
             <span className="px-1 font-mono">
-              {page} / {Math.max(1, Math.ceil(total / 5))}
+              {page} / {Math.max(1, Math.ceil(total / ANALYSIS_PAGE_SIZE))}
             </span>
             <Button
               size="sm"
               variant="outline"
-              disabled={page * 5 >= total || fetching}
+              disabled={page * ANALYSIS_PAGE_SIZE >= total || fetching}
               onClick={() => goToPage(1)}
               className="h-8 text-xs"
             >
