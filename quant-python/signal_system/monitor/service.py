@@ -582,6 +582,22 @@ class SignalMonitor:
                 enriched["opened_on"] = opened[0]
         return enriched
 
+    def _holding_for_symbol(self, symbol: str) -> dict | None:
+        """按规范化代码匹配持仓。
+
+        `analyze_symbols` 进来的是 6 位代码（`normalize_symbol` 会去掉 .SH/.SZ），
+        而 `portfolio_context.holdings` 来自 Web 快照，带交易所后缀。直接字符串
+        相等会让所有实盘持仓都匹配不到，成本条件随之变成"未知"。
+        """
+        target = normalize_symbol(symbol)
+        if not target:
+            return None
+        for row in (getattr(self, "portfolio_context", None) or {}).get("holdings", []):
+            raw = str(row.get("symbol") or "")
+            if raw and normalize_symbol(raw) == target:
+                return row
+        return None
+
     def _exit_notification_events(
         self,
         analysis: dict[str, Any],
@@ -596,11 +612,11 @@ class SignalMonitor:
         每个交易日提醒一次, 直到你卖出或清仓。
         """
         holdings = {
-            str(row.get("symbol")): row
+            normalize_symbol(str(row.get("symbol") or "")): row
             for row in (getattr(self, "portfolio_context", None) or {}).get("holdings", [])
-            if float(row.get("shares", 0) or 0) > 0
+            if str(row.get("symbol") or "") and float(row.get("shares", 0) or 0) > 0
         }
-        holding = holdings.get(symbol)
+        holding = holdings.get(normalize_symbol(symbol))
         if not holding:
             return []
         alerts = [
@@ -808,7 +824,7 @@ class SignalMonitor:
                 event_objects = analysis.pop("event_objects")
                 if getattr(self, "analysis_version", 1) == 2:
                     from strategy.registry import evaluate_strategies
-                    holding = next((row for row in getattr(self, "portfolio_context", {}).get("holdings", []) if row.get("symbol") == symbol), None)
+                    holding = self._holding_for_symbol(symbol)
                     # 持仓表没有档位字段，把成交记录一起交给规则层，
                     # 才能算出"已经减过几档、尾仓止损该不该上移"，而不是按 0 猜。
                     if holding is not None:

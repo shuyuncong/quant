@@ -70,7 +70,7 @@ class ExitNotificationTests(unittest.TestCase):
         self.monitor.analysis_version = 2
         self.monitor.analysis_cutoff = "2026-10-05T15:30:00"
         self.monitor.portfolio_context = {
-            "holdings": [{"symbol": "600519", "name": "贵州茅台", "shares": 100,
+            "holdings": [{"symbol": "600519.SH", "name": "贵州茅台", "shares": 100,
                           "cost_price": 12.0, "opened_on": "2026-08-19"}],
             "total_capital": 250000.0,
         }
@@ -86,6 +86,12 @@ class ExitNotificationTests(unittest.TestCase):
         analysis = {"strategies": [_strategy("macd_divergence", "零轴＋底背离",
                      [_condition("持仓成本止损", "成本价 × 0.9200", 8.0, True)])]}
         self.assertEqual(self._events(analysis), [])
+
+    def test_holding_lookup_matches_exchange_suffix(self):
+        """分析循环传 6 位代码，Web 快照带 .SH/.SZ；必须规范化后再匹配。"""
+        self.assertEqual(self.monitor._holding_for_symbol("600519")["cost_price"], 12.0)
+        self.assertEqual(self.monitor._holding_for_symbol("600519.SH")["cost_price"], 12.0)
+        self.assertIsNone(self.monitor._holding_for_symbol("000001"))
 
     def test_alert_requires_a_triggered_condition(self):
         """未触发的条件（met=False）和无法判断的条件（met=None）都不该提醒。"""
@@ -103,6 +109,7 @@ class ExitNotificationTests(unittest.TestCase):
         self.assertEqual(len(first), 1)
         self.assertEqual(second, [])
         self.assertEqual(first[0].side, "sell")
+        self.assertEqual(first[0].evidence["cost_price"], 12.0)
 
     def test_confirmed_at_uses_the_analysis_day_not_the_bar_timestamp(self):
         """K 线时间戳可能是节假日前最后一个交易日；用它会被时效检查当过期丢掉。"""
