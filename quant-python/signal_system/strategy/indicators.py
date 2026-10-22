@@ -9,7 +9,6 @@ import sys
 
 import numpy as np
 import pandas as pd
-import talib
 
 QUANT_ROOT = Path(__file__).resolve().parents[2]
 if str(QUANT_ROOT) not in sys.path:
@@ -38,8 +37,8 @@ class TechnicalIndicators:
         """
         if len(data) < period:
             return pd.Series([np.nan] * len(data), index=data.index)
-
-        return talib.SMA(data.values, timeperiod=period)
+        values = pd.to_numeric(data, errors="coerce").astype(float)
+        return values.rolling(period, min_periods=period).mean().to_numpy()
 
     @staticmethod
     def calculate_macd(data, fast=12, slow=26, signal=9):
@@ -58,14 +57,13 @@ class TechnicalIndicators:
         if len(data) < slow:
             return None, None, None
 
-        macd, signal_line, hist = talib.MACD(
-            data.values,
-            fastperiod=fast,
-            slowperiod=slow,
-            signalperiod=signal
-        )
-
-        return macd, signal_line, hist
+        values = pd.to_numeric(data, errors="coerce").astype(float)
+        ema_fast = values.ewm(span=fast, adjust=False, min_periods=fast).mean()
+        ema_slow = values.ewm(span=slow, adjust=False, min_periods=slow).mean()
+        macd = ema_fast - ema_slow
+        signal_line = macd.ewm(span=signal, adjust=False, min_periods=signal).mean()
+        hist = macd - signal_line
+        return macd.to_numpy(), signal_line.to_numpy(), hist.to_numpy()
 
     @staticmethod
     def calculate_rsi(data, period=14):
@@ -81,8 +79,17 @@ class TechnicalIndicators:
         """
         if len(data) < period:
             return pd.Series([np.nan] * len(data), index=data.index)
-
-        return talib.RSI(data.values, timeperiod=period)
+        values = pd.to_numeric(data, errors="coerce").astype(float)
+        delta = values.diff()
+        gain = delta.clip(lower=0.0)
+        loss = -delta.clip(upper=0.0)
+        avg_gain = gain.ewm(alpha=1.0 / period, adjust=False, min_periods=period).mean()
+        avg_loss = loss.ewm(alpha=1.0 / period, adjust=False, min_periods=period).mean()
+        relative_strength = avg_gain / avg_loss
+        rsi = 100.0 - (100.0 / (1.0 + relative_strength))
+        rsi = rsi.mask((avg_loss == 0) & (avg_gain > 0), 100.0)
+        rsi = rsi.mask((avg_loss == 0) & (avg_gain == 0), 0.0)
+        return rsi.to_numpy()
 
     @staticmethod
     def detect_divergence(price, indicator, lookback=60, min_distance=10):

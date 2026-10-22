@@ -35,7 +35,6 @@ from backtest_winrate import (  # noqa: E402
     run_portfolio,
     simulate_single_trade,
     simulate_signal_mode,
-    summarize_holding_periods,
 )
 
 

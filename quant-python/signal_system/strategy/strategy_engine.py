@@ -88,44 +88,6 @@ class StrategyEngine:
         logger.info("Prepared selection inputs: %s", len(selection_inputs))
         return selection_inputs
 
-        for _, stock in stock_list.iterrows():
-            ts_code = stock["ts_code"]
-
-            try:
-                financial = self.data_fetcher.get_financial_data(ts_code)
-                daily_basic = self.data_fetcher.get_daily_basic(ts_code)
-                df = self.data_fetcher.get_daily_data(ts_code, period=analysis_period)
-
-                # 数据不完整时直接跳过，避免后续 selector 和技术分析出现无意义噪声。
-                if financial is None or daily_basic is None or df is None or df.empty or len(df) < 20:
-                    continue
-
-                # 优先使用近 30 日平均换手率；拿不到时再退回单日换手率。
-                if "turnover_rate" in df.columns:
-                    avg_turnover = float(df["turnover_rate"].tail(30).mean())
-                else:
-                    avg_turnover = daily_basic.get("turnover_rate")
-
-                selection_inputs.append(
-                    {
-                        "ts_code": ts_code,
-                        "name": stock.get("name", ts_code),
-                        "roe": financial.get("roe"),
-                        "debt_ratio": financial.get("debt_to_assets"),
-                        "pe": daily_basic.get("pe"),
-                        "market_cap": (daily_basic.get("total_mv") or 0) / 10000,
-                        "turnover_rate": daily_basic.get("turnover_rate"),
-                        "avg_turnover": avg_turnover,
-                        "_daily_data": df,
-                    }
-                )
-
-            except Exception as e:
-                logger.warning("Failed to prepare selection input for %s: %s", ts_code, e)
-                continue
-
-        logger.info("Prepared selection inputs: %s", len(selection_inputs))
-        return selection_inputs
 
     def analyze_technical(self, stock_codes):
         """对预筛后的股票补齐 router 和 risk manager 需要的技术面字段。"""

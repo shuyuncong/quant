@@ -58,9 +58,9 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # 之后该文件新增 4 个 EXIT_REASON_SEMANTICS 映射
     # (weak_market_low_open / profit_lock / atr_trailing) 并补了行尾换行。
     "attribution_audit": "1eeff99e71409101f504ffdd3f16170adb6355dd6d4e12c1741b3b4f3ef0e50a",
-    # **永久失联**：旧值 eaada196… 与全部 14 个历史修订的 LF/CRLF 形态均不匹配。
-    # 本次按当前 HEAD 登记；无法追溯其原始锁定对象。
-    "backtest_winrate": "eeed9cda7af34981b1e7b344cfd5668acbf0ffc2e6305af1e9c27df63917b025",
+    # 2026-10-22: removed an unused prev_close local from backtest_winrate.py;
+    # re-registered the intentional source cleanup.
+    "backtest_winrate": "3ec71b4d3692108e8544e1a0b336e92002f009c2f6b7159ba63832ad2b566687",
     # 旧值 fb7e197a… == cc33f13(2026-09-02) 的 LF 形态。
     # 2026-10-17 本文件新增 source_text_sha256()（源码行尾归一哈希），故再次变动。
     # 注意：本文件参与自己的依赖契约（自指），任何改动都会改变此值。

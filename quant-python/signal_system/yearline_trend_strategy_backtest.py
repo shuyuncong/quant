@@ -218,7 +218,6 @@ def simulate_trade(
     stop = entry * (1 - _stop_pct(stop_mode, atr_pct))
 
     low_arr = df["low"].values
-    high_arr = df["high"].values
     open_arr = df["open"].values
     close_arr = df["close"].values
     ma_arr = df["ma250"].values
@@ -664,7 +663,6 @@ def main() -> None:
     global_calendar = list(pd.to_datetime(index_df["datetime"]))
 
     # 按股票池 load 一次, 对每个 (vol_mult,tol) 生成信号, 对每个止损模式模拟交易
-    results: dict[str, dict] = {}
     close_by_symbol: dict[str, dict] = {}
     stats_by_cell: dict = {}
 

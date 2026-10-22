@@ -154,6 +154,9 @@ docker cp quant-web:/app/signal_system/output ./output-backup
 cd quant/quant-python/signal_system
 python3 -m pip install -r requirements.txt
 
+# CLI 可独立运行（main.py 会自动把 quant-python 根目录加入模块搜索路径，无需设置 PYTHONPATH）：
+# python3 main.py monitor --once --no-notify
+
 # 2. Web 依赖与构建
 cd ../web
 npm ci

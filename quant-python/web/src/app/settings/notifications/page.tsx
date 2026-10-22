@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   BellRing,
-  CheckCircle2,
   Copy,
   Info,
   Mail,
@@ -86,42 +85,49 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/config/notification");
-      if (!response.ok) throw new Error("加载推送配置失败");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await response.json()) as { config: Record<string, any> };
-      const n = data.config.notification ?? {};
-      setForm({
-        wechat_enabled: Boolean(n.wechat?.enabled),
-        wechat_webhook_url: String(n.wechat?.webhook_url ?? ""),
-        webhook_enabled: Boolean(n.webhook?.enabled),
-        webhook_url: String(n.webhook?.url ?? ""),
-        webhook_auth: String(n.webhook?.headers?.Authorization ?? ""),
-        email_enabled: Boolean(n.email?.enabled),
-        smtp_server: String(n.email?.smtp_server ?? ""),
-        smtp_port: String(n.email?.smtp_port ?? "465"),
-        email_sender: String(n.email?.sender ?? ""),
-        email_password: String(n.email?.password ?? ""),
-        email_receiver: String(n.email?.receiver ?? ""),
-        timeout_seconds: String(n.timeout_seconds ?? "10"),
-        bark_enabled: Boolean(n.bark?.enabled),
-        bark_url: String(n.bark?.url ?? "https://api.day.app/push"),
-        bark_device_key: String(n.bark?.device_key ?? ""),
-        push_trade_signal: n.push_trade_signal !== false,
-        push_candidate_pool: n.push_candidate_pool !== false,
-        push_ai_analysis: n.push_ai_analysis !== false,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载推送配置失败");
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback(async (): Promise<NotificationForm> => {
+    const response = await fetch("/api/config/notification");
+    if (!response.ok) throw new Error("加载推送配置失败");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await response.json()) as { config: Record<string, any> };
+    const n = data.config.notification ?? {};
+    return {
+      wechat_enabled: Boolean(n.wechat?.enabled),
+      wechat_webhook_url: String(n.wechat?.webhook_url ?? ""),
+      webhook_enabled: Boolean(n.webhook?.enabled),
+      webhook_url: String(n.webhook?.url ?? ""),
+      webhook_auth: String(n.webhook?.headers?.Authorization ?? ""),
+      email_enabled: Boolean(n.email?.enabled),
+      smtp_server: String(n.email?.smtp_server ?? ""),
+      smtp_port: String(n.email?.smtp_port ?? "465"),
+      email_sender: String(n.email?.sender ?? ""),
+      email_password: String(n.email?.password ?? ""),
+      email_receiver: String(n.email?.receiver ?? ""),
+      timeout_seconds: String(n.timeout_seconds ?? "10"),
+      bark_enabled: Boolean(n.bark?.enabled),
+      bark_url: String(n.bark?.url ?? "https://api.day.app/push"),
+      bark_device_key: String(n.bark?.device_key ?? ""),
+      push_trade_signal: n.push_trade_signal !== false,
+      push_candidate_pool: n.push_candidate_pool !== false,
+      push_ai_analysis: n.push_ai_analysis !== false,
+    };
   }, []);
 
   useEffect(() => {
-    void load();
+    let active = true;
+    load()
+      .then((nextForm) => {
+        if (active) setForm(nextForm);
+      })
+      .catch((error) => {
+        if (active) toast.error(error instanceof Error ? error.message : "加载推送配置失败");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [load]);
 
   const set = (key: keyof NotificationForm, value: string | boolean) =>
@@ -162,7 +168,11 @@ export default function NotificationsPage() {
       if (!response.ok)
         throw new Error(data.error || (data.errors ?? []).join("；") || "保存失败");
       toast.success("推送配置已保存");
-      void load();
+      try {
+        setForm(await load());
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "加载推送配置失败");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {

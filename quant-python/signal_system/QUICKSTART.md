@@ -5,6 +5,7 @@ cd D:\development\github\quant\quant-python\signal_system
 python -m pip install -r requirements.txt
 python main.py analyze --symbols 000001.SZ --no-notify
 ```
+`main.py` 会自动加入 `quant-python` 根目录到模块搜索路径，从 `signal_system` 目录直接启动无需额外设置 `PYTHONPATH`。
 
 配置企业微信或通用 Webhook 后测试：
 

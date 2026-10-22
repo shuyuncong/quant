@@ -706,7 +706,6 @@ class CapacitySweepTests(unittest.TestCase):
     """
 
     def test_slot_ladder_increases_accepted_and_exposes_occupancy(self):
-        import backtest_macd_divergence as bmd
         import backtest_winrate as bt
 
         # 9 个信号全部落在同一天开仓、同一天平仓: 4 个仓位只能装 4 个,

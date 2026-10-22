@@ -2,9 +2,9 @@ import unittest
 from unittest.mock import patch
 import numpy as np
 import pandas as pd
-from strategy.registry import (BREAKEVEN_STOP_SOURCE, DEFAULT_STOP_LOSS_PCT, STRATEGIES, VERSION,
+from strategy.registry import (BREAKEVEN_STOP_SOURCE, DEFAULT_STOP_LOSS_PCT, STRATEGIES,
                                evaluate_strategies, evaluate_exits, exit_parameters,
-                               exit_plan_advice, plan_progress_from_trades, resolve_exit_plan,
+                               exit_plan_advice, plan_progress_from_trades,
                                resolve_stop_loss)
 from strategy.yearline import add_yearline_indicators, pullback_signal_at
 

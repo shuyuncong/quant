@@ -771,7 +771,6 @@ def find_signals(history: pd.DataFrame, config: dict[str, Any]) -> dict[str, lis
             ma250 = float(close_series.iloc[max(0, idx - 249): idx + 1].mean()) if idx >= 249 else float("nan")
             ma60_prev = float(close_series.iloc[max(0, idx - 60 - 4): idx - 4 + 1].mean()) if idx >= 64 else float("nan")
             ma250_prev = float(close_series.iloc[max(0, idx - 250 - 4): idx - 4 + 1].mean()) if idx >= 254 else float("nan")
-            prev_close = float(close_series.iloc[idx - 1]) if idx >= 1 else float("nan")
             prev_close_20 = float(close_series.iloc[max(0, idx - 20)]) if idx >= 20 else float("nan")
             tr_vals = []
             for k in range(max(1, idx - 13), idx + 1):

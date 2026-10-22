@@ -4,7 +4,7 @@ import tempfile
 import time
 import unittest
 from datetime import date, datetime
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -796,7 +796,7 @@ class TradeCalendarTodayTests(unittest.TestCase):
         # akshare 全表含未来交易日：不应被兜底改动
         with tempfile.TemporaryDirectory() as directory:
             client = self._client(directory)
-            today = self._set_today("2026-09-17")
+            self._set_today("2026-09-17")
             dates = {date(2026, 9, 16), date(2026, 9, 17), date(2026, 9, 18)}
             result = client._with_today_if_stale(dates)
             self.assertEqual(result, dates)

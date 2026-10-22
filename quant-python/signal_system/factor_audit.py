@@ -14,9 +14,8 @@
   - 覆盖率、分布、Rank IC、Q1-Q5、分组统计
   - 精确 vs 估算公告日分离
 """
-import argparse, json, hashlib, sys, os
+import argparse, json, hashlib, os
 from collections import defaultdict
-from pathlib import Path
 import pandas as pd
 
 AUDIT_VERSION = "1.0.0"
@@ -183,9 +182,6 @@ def audit(rows, field, period_normalize, label, data_hash, return_fields):
     factor_pairs = factor_available(rows, field)
     n_total = len(rows)
     n_avail = len(factor_pairs)
-    
-    # determine period labels for each row
-    period_labels = [period_bucket(r.get("period")) for r in rows] if period_normalize else None
     
     result = {
         "version": AUDIT_VERSION,

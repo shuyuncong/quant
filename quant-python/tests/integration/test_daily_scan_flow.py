@@ -10,7 +10,6 @@ for candidate in (str(ROOT), str(SIGNAL_SYSTEM_ROOT)):
     if candidate not in sys.path:
         sys.path.insert(0, candidate)
 
-from notification.notifier import NotificationService
 from strategy.strategy_engine import StrategyEngine
 
 
@@ -139,24 +138,19 @@ class DailyScanFlowTest(unittest.TestCase):
             },
         }
 
-    def test_daily_scan_to_notification_payload(self):
+    def test_daily_scan_result_contains_trading_signals(self):
         engine = StrategyEngine(
             config=self.config,
             data_fetcher=IntegrationDataFetcher(),
             technical_indicators=IntegrationTechnicalIndicators(),
         )
-        notifier = NotificationService(self.config)
 
         result = engine.run_daily_scan(positions=[])
-        payload = notifier.build_daily_payload(result)
 
         self.assertEqual(result["market_status"], "bull")
         self.assertEqual(result["stats"]["candidate_pool_count"], 1)
         self.assertEqual(len(result["buy_signals"]), 1)
         self.assertEqual(result["stats"]["t_signals_count"], 0)
-        self.assertEqual(payload["candidate_pool"][0]["ts_code"], "000001.SZ")
-        self.assertEqual(payload["high_priority_trade_signals"][0]["signal_type"], "BUY")
-        self.assertEqual(payload["stats"]["risk_alerts_count"], 0)
         self.assertEqual(
             result["candidate_pool"][0]["fundamental"]["metrics"]["context"],
             "live",

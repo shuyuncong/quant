@@ -5,7 +5,7 @@
   - 金融股票：单独一组（行业内分位）
   - 非金融股票：按申万一级行业内分位
 """
-import argparse, json, hashlib, os, sys
+import argparse, json, hashlib, os
 from collections import defaultdict
 import pandas as pd
 

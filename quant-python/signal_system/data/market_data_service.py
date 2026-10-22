@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import logging
 import os
 import pickle
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 

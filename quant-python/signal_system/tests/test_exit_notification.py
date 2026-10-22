@@ -7,12 +7,10 @@
 3. 同一交易日只提醒一次（重复跑分析不该重复轰炸）。
 """
 import copy
-import json
 import os
 import sys
 import tempfile
 import unittest
-from datetime import date
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
