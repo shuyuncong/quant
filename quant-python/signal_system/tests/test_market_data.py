@@ -714,6 +714,33 @@ class MarketDataTests(unittest.TestCase):
         # 里不会出现 ProxyHandler；只要没有它，环境变量代理就不会生效。
         self.assertEqual([], proxy_handlers)
 
+    def test_market_data_proxy_env_builds_proxy_opener(self):
+        """海外服务器可只给行情链路指定代理，不影响模型/Web 的全局代理。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {"MARKET_DATA_PROXY": "http://proxy.example:7890"},
+            ):
+                client = MarketDataClient(
+                    {
+                        "market_data": {"cache_dir": directory},
+                        "data": {"disable_system_proxy": True},
+                    }
+                )
+        proxy_handlers = [
+            handler
+            for handler in client._http_opener.handlers
+            if handler.__class__.__name__ == "ProxyHandler"
+        ]
+        self.assertEqual(1, len(proxy_handlers))
+        self.assertEqual(
+            {
+                "http": "http://proxy.example:7890",
+                "https": "http://proxy.example:7890",
+            },
+            proxy_handlers[0].proxies,
+        )
+
 
 class TradeCalendarTodayTests(unittest.TestCase):
     """get_trade_dates 的当日兜底：腾讯日 K 当日 bar 收盘前不存在，

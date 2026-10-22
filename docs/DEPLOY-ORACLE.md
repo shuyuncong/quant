@@ -751,5 +751,6 @@ crontab -e
 
 - **页面暂无登录密码**：公网使用前建议在 Nginx 加 Basic Auth（`sudo apt install -y apache2-utils && sudo htpasswd -c /etc/nginx/.htpasswd admin`，并在 server 块加 `auth_basic "Restricted";` 与 `auth_basic_user_file /etc/nginx/.htpasswd;`）或限制来源 IP。
 - **行情源**：默认 `provider: auto`（腾讯/新浪/东财），无需额外数据源；如需 akshare/tushare，见 [DEPLOY.md](DEPLOY.md)。
+- **海外服务器行情**：先在容器内用 `/opt/venv/bin/python` 或宿主 `curl` 测试腾讯 K 线是否直连可达；可达就保持 `disable_system_proxy: true`。不可达时在 `.env` 设置 `MARKET_DATA_PROXY`（Compose 已透传），只代理行情，不要复用全局 `HTTPS_PROXY`；容器里的 `127.0.0.1` 指向容器自身，代理地址要用可达的主机名/IP。
 - **端口**：容器内固定 3111；改端口需同步修改 Compose 的 `ports` 与 Nginx 的 `proxy_pass`。
 - **时区**：Compose 已设置 `TZ=Asia/Shanghai`，定时任务按北京时间执行。

@@ -241,15 +241,27 @@ class MarketDataClient:
         self.request_interval = float(data_config.get("request_interval_seconds", 0.35))
         # 行情端点在国内网络下走系统代理经常被代理层改写成 501/断连；
         # `data.disable_system_proxy` 已是统一配置项，旧 market_data 层也要遵守。
+        # 海外服务器若必须经代理访问腾讯/东财，用 MARKET_DATA_PROXY 显式指定，
+        # 不要依赖全局 HTTP(S)_PROXY，避免把模型/Web 流量一起绕进去。
         disable_proxy = data_config.get("disable_system_proxy")
         if disable_proxy is None:
             disable_proxy = config.get("data", {}).get("disable_system_proxy", False)
         self.disable_system_proxy = bool(disable_proxy)
-        self._http_opener = (
-            build_opener(ProxyHandler({}))
-            if self.disable_system_proxy
-            else build_opener()
+        self.market_proxy = (
+            os.getenv("MARKET_DATA_PROXY", "").strip()
+            or str(data_config.get("proxy") or "").strip()
+            or str(config.get("data", {}).get("proxy") or "").strip()
         )
+        if self.market_proxy:
+            self._http_opener = build_opener(
+                ProxyHandler(
+                    {"http": self.market_proxy, "https": self.market_proxy}
+                )
+            )
+        elif self.disable_system_proxy:
+            self._http_opener = build_opener(ProxyHandler({}))
+        else:
+            self._http_opener = build_opener()
         token = data_config.get("tushare_token") or os.getenv("TUSHARE_TOKEN", "")
         self.tushare_token = "" if "你的" in str(token) else str(token)
         self._last_request = 0.0

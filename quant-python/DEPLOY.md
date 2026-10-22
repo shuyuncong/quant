@@ -208,6 +208,7 @@ sudo systemctl status quant-web
 | `PG_OWNER_PASSWORD` / `PG_APP_PASSWORD` / `PG_BACKUP_PASSWORD` | 自建 `quant-db` 三角色密码（owner/应用/备份），切换时用（见 `docs/自建数据库切换方案.md`） |
 | `DATABASE_POOL_MAX` | PostgreSQL 连接池上限，默认 `5` |
 | `PYTHON_BIN` | Python 可执行文件（Linux 填 `python3`，Windows 可省略） |
+| `MARKET_DATA_PROXY` | 行情 K 线专用 HTTP 代理（如 `http://proxy:7890`）。不设时按 `data.disable_system_proxy` 直连或走系统代理；海外服务器建议只给行情设代理，不要复用全局 `HTTPS_PROXY`。 |
 | `WEB_DATA_DIR` | Web 运行时文件目录，默认 `web/data`；不再存放 Web 业务数据库 |
 | `TUSHARE_TOKEN` | Tushare Token |
 | `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook |
