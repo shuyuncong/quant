@@ -9,12 +9,12 @@ const mocks = vi.hoisted(() => ({
   addOperationLog: vi.fn(),
   buildOverrides: vi.fn(),
   freezeEngineConfig: vi.fn(),
-  portfolioSnapshot: vi.fn(),
+  createJob: vi.fn(),
 }));
 
 vi.mock("../bridge", () => ({ runBridge: mocks.runBridge }));
 vi.mock("../db", () => ({
-  createJob: vi.fn(),
+  createJob: mocks.createJob,
   getJob: mocks.getJob,
   getDb: mocks.getDb,
   updateJob: mocks.updateJob,
@@ -25,14 +25,13 @@ vi.mock("../config", () => ({
   buildOverrides: mocks.buildOverrides,
   freezeEngineConfig: mocks.freezeEngineConfig,
 }));
-vi.mock("../portfolio", () => ({ portfolioSnapshot: mocks.portfolioSnapshot }));
 vi.mock("../paths", () => ({ signalSystemDir: "/tmp/quant-scan-test" }));
 vi.mock("../time", () => ({ nowIso: () => "2026-10-22T00:00:00" }));
 vi.mock("node:fs/promises", () => ({
   default: { mkdir: vi.fn(), writeFile: vi.fn(), rename: vi.fn() },
 }));
 
-import { executeScanBatch } from "../scan-service";
+import { executeScanBatch, startScanBatch } from "../scan-service";
 
 function job(id: number, strategy: string, notify: boolean) {
   return {
@@ -64,7 +63,7 @@ describe("scan batch notifications", () => {
     mocks.addOperationLog.mockResolvedValue(undefined);
     mocks.buildOverrides.mockResolvedValue({});
     mocks.freezeEngineConfig.mockResolvedValue({});
-    mocks.portfolioSnapshot.mockResolvedValue({});
+    mocks.createJob.mockResolvedValue(7);
     mocks.runBridge.mockResolvedValue({
       ok: true,
       data: { report: { completed_round: true, coverage: 1, candidate_count: 1 } },
@@ -87,5 +86,15 @@ describe("scan batch notifications", () => {
 
     const scanCall = mocks.runBridge.mock.calls.find(([command]) => command === "scan");
     expect(scanCall?.[1]).toMatchObject({ scan_kind: "macd_zero_axis", notify: false });
+  });
+
+  it("keeps scheduled full-market scans rule-only", async () => {
+    await startScanBatch("daily-scan", { scan_kind: "all", notify: true });
+
+    const payload = mocks.createJob.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(payload.scan_version).toBe(2);
+    expect(payload.strategies).toHaveLength(3);
+    // 全市场扫描不生成 AI 解读，也就不需要账户快照。
+    expect(payload).not.toHaveProperty("portfolio_context");
   });
 });

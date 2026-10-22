@@ -32,16 +32,9 @@ export type JobKind =
   | "test-notify"
   | "dispatch-outbox";
 
-// 需要单独起一份 AI 解读的任务。
-//
-// 只列"自己不产出 AI 结论"的 kind：analyze / monitor-once / monitor-cycle 走五页签
-// 批次，会自己写出 technical + synthesis 并落一条 note，再无条件起子任务解读就是
-// 同一份内容读第二遍、再推一条一模一样的消息（实测每个 analyze 任务推两次）。
-// scan / daily-scan 的"汇总"是候选数统计而不是 AI 结论，所以仍然需要这一步。
-const AUTO_INTERPRET_KINDS: JobKind[] = [
-  "scan",
-  "daily-scan",
-];
+// 全市场扫描只落候选池和汇总通知，不调用 LLM；个股分析的 AI 结论由
+// analysis-service 自己生成。历史遗留的 interpret-report 子任务仍由
+// resumeInterpretationJobs 恢复执行，因此这里不能再创建新的自动解读。
 
 function resolveReportPath(resultPath: string): string {
   return path.isAbsolute(resultPath) ? resultPath : path.resolve(signalSystemDir, resultPath);
@@ -176,20 +169,6 @@ async function executeInterpretationJob(jobId: number, payload: InterpretationPa
   }
 }
 
-async function createInterpretationJob(parentJobId: number, resultPath: string, notify: boolean): Promise<{
-  jobId: number;
-  payload: InterpretationPayload;
-}> {
-  const payload: InterpretationPayload = {
-    parent_job_id: parentJobId,
-    result_path: resultPath,
-    notification_at: nowIso().replace(" ", "T"),
-    notify,
-  };
-  const jobId = await createJob("interpret-report", payload);
-  return { jobId, payload };
-}
-
 export async function resumeInterpretationJobs(): Promise<void> {
   for (const job of await listRecoverableJobs("interpret-report")) {
     try {
@@ -220,18 +199,6 @@ const KIND_TO_COMMAND: Record<JobKind, string> = {
   "test-notify": "test-notify",
   "dispatch-outbox": "dispatch-outbox",
 };
-
-export function shouldAutoInterpret(kind: JobKind, report: Record<string, unknown> | undefined): boolean {
-  if (!AUTO_INTERPRET_KINDS.includes(kind)) return false;
-  // 年线池是研究展示；底背离只发纸上跟踪提醒，也不做 AI 自动解读。
-  if (report?.pool_type === "yearline_pullback") return false;
-  if (report?.pool_type === "macd_divergence") return false;
-  if (["analyze", "scan", "monitor-once"].includes(kind)) return true;
-  if (kind === "daily-scan") {
-    return report?.completed_round === true && Number(report?.candidate_count ?? 0) > 0;
-  }
-  return Number(report?.new_events ?? 0) > 0;
-}
 
 /** 浅合并 override：extra 优先，顶层对象键递归一层合并（如 scan.universe_mode）。 */
 function mergeOverrides(
@@ -323,12 +290,6 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
       if (outcome.ok) {
         const report = (outcome.data as { report?: Record<string, unknown> } | undefined)?.report;
         const resultPath = typeof report?.output_file === "string" ? report.output_file : null;
-        // Persist the child before marking the parent successful.  A process
-        // exit between these writes can then be recovered by the scheduler.
-        const interpretation =
-          resultPath && shouldAutoInterpret(kind, report)
-            ? await createInterpretationJob(jobId, resultPath, payload.notify !== false)
-            : null;
         await updateJob(jobId, {
           status: "success",
           result_path: resultPath,
@@ -341,9 +302,6 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
           message: `任务完成（${kind}）`,
           detail: resultPath ?? undefined,
         });
-        if (interpretation) {
-          void executeInterpretationJob(interpretation.jobId, interpretation.payload);
-        }
       } else {
         await updateJob(jobId, { status: "failed", error: outcome.error || "执行失败", finished_at: nowIso() });
         await addOperationLog({

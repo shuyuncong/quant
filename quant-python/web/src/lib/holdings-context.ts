@@ -52,7 +52,7 @@ export function totalCapitalFromJobPayload(payloadJson: string | null | undefine
  * Parse holdings attached to a job payload.
  *
  * 两种键并存，因为是两条路径写进去的：
- * - `portfolio_context`：`analyze` / `scan` 批次（含成交记录与账户口径）；
+ * - `portfolio_context`：`analyze` 批次（历史 scan 任务也写过，含成交记录与账户口径）；
  * - `holdings`：其它报告任务由 `startJob` 直接附上（**每股最多取 50 笔成交**，
  *   而 `portfolio_context` 是快照，含全部持股）。
  *

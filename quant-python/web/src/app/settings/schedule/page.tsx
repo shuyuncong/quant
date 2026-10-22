@@ -42,8 +42,8 @@ const DEFINITIONS = [
   {
     kind: "daily_scan",
     title: "每日三策略筛选",
-    subtitle: "收盘全市场筛选与指标候选池更新",
-    description: "在指定时刻（推荐设在交易日收盘后 15:20）筛选全市场 A 股并更新日线金叉、底背离、年线指标候选池；同日内仅触发一次。",
+    subtitle: "收盘全市场规则筛选（不调用 AI）",
+    description: "在指定时刻（推荐设在交易日收盘后 15:20）筛选全市场 A 股并更新日线金叉、底背离、年线指标候选池；只按规则和行情数据筛选，不调用 AI 模型，同日内仅触发一次。",
     icon: CalendarClock,
   },
   {

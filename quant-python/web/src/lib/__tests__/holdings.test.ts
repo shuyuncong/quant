@@ -348,7 +348,7 @@ describe("holdings context: 成交记录", () => {
 describe("job payload 解析：两种键都要认", () => {
   const holding = { symbol: "600036.SH", shares: 1000 };
 
-  it("认 portfolio_context（analyze / scan 批次写的键）", () => {
+  it("认 portfolio_context（analyze 批次写的键）", () => {
     const payload = JSON.stringify({
       portfolio_context: {
         holdings: [holding],
