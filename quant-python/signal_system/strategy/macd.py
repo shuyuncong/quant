@@ -222,6 +222,7 @@ def analyze_macd(
     volume_period: int = 20,
     moderate_volume_min: float = 1.0,
     moderate_volume_max: float = 2.0,
+    volume_gate_enabled: bool = False,
     pullback_confirmation_bars: int = 5,
     long_ma_period: int | None = None,
     position_lookback: int = 20,
@@ -315,6 +316,7 @@ def analyze_macd(
 
     volume_ratio = 0.0 if pd.isna(current["volume_ratio"]) else float(current["volume_ratio"])
     moderate_volume = bool(moderate_volume_min <= volume_ratio <= moderate_volume_max)
+    volume_gate_met = bool(not volume_gate_enabled or moderate_volume)
     current_short_ma = max(float(current["ma5"]), float(current["ma10"]))
     previous_short_ma = max(float(previous["ma5"]), float(previous["ma10"]))
     price_breakout = bool(
@@ -442,6 +444,8 @@ def analyze_macd(
         ),
         "volume_ratio": volume_ratio,
         "moderate_volume": moderate_volume,
+        "volume_gate_enabled": bool(volume_gate_enabled),
+        "volume_gate_met": volume_gate_met,
         "price_breakout_ma5_ma10": price_breakout,
         "hist_expanding": hist_expanding,
         "confirmation_items": confirmations,

@@ -91,6 +91,7 @@ signal_strategy:
     zero_axis_tolerance: 0.005       # DIF/DEA 距0轴不超过收盘价的0.5%
     moderate_volume_min: 1.0         # 温和放量下限：当日量/20日均量
     moderate_volume_max: 2.0         # 温和放量上限，避免把异常巨量当作温和放量
+    volume_gate_enabled: true        # 零轴金叉确认必须同时满足温和放量；false 时仅展示
     pullback_confirmation_bars: 5    # 金叉后最多等待5根已收盘K线回落确认
     min_confirmations: 0             # 默认不设确认条件数门槛，保留为可调实验参数
     long_ma_period: 250              # 日线长期趋势/年线

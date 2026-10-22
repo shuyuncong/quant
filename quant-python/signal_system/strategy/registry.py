@@ -551,7 +551,7 @@ def evaluate_strategies(raw: pd.DataFrame, config: dict, holding: dict | None = 
                 item["warnings"].append(f"至少需要 {minimum} 根已收盘日线，目前 {len(frame)} 根")
             elif strategy_id == "macd_zero_axis":
                 settings = config.get("signal_strategy", {}).get("macd", {})
-                keys = ("fast", "slow", "signal", "zero_axis_tolerance", "moderate_volume_min", "moderate_volume_max", "pullback_confirmation_bars", "long_ma_period", "position_lookback", "max_long_ma_distance", "max_recent_return", "high_position_volume_ratio")
+                keys = ("fast", "slow", "signal", "zero_axis_tolerance", "moderate_volume_min", "moderate_volume_max", "volume_gate_enabled", "pullback_confirmation_bars", "long_ma_period", "position_lookback", "max_long_ma_distance", "max_recent_return", "high_position_volume_ratio")
                 _, indicators = analyze_macd(frame, **{key: settings[key] for key in keys if key in settings})
                 zone = indicators.get("golden_cross_entry_zone") or indicators.get("golden_cross_zone")
                 count = int(indicators.get("confirmation_count", len(indicators.get("confirmations", []))))
@@ -563,6 +563,15 @@ def evaluate_strategies(raw: pd.DataFrame, config: dict, holding: dict | None = 
                     condition("辅助确认数", count, f">= {resolve_min_confirmations(config)}", count >= resolve_min_confirmations(config)),
                     condition("策略执行状态", mode, "enabled", mode == "enabled"),
                 ]
+                if indicators.get("volume_gate_enabled"):
+                    item["buy_conditions"].append(
+                        condition(
+                            "成交量温和放大",
+                            indicators.get("volume_ratio"),
+                            f"{settings.get('moderate_volume_min', 1.0)} <= 量比 <= {settings.get('moderate_volume_max', 2.0)}",
+                            bool(indicators.get("moderate_volume", False)),
+                        )
+                    )
                 item["buy"] = all(row["met"] for row in item["buy_conditions"])
             elif strategy_id == "yearline_pullback":
                 enriched = add_yearline_indicators(frame)

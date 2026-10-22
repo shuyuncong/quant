@@ -67,6 +67,38 @@ class NotifierAndConfigTests(unittest.TestCase):
         self.assertIn("观察信号（等待回落确认）", markdown)
         self.assertIn("等待回落确认", markdown)
 
+    def test_strategy_entry_markdown_is_labeled_as_paper_tracking(self):
+        markdown = SignalNotifier._markdown(
+            {
+                "event_id": "divergence-1",
+                "side": "buy",
+                "symbol": "600036",
+                "name": "招商银行",
+                "timeframe": "1d",
+                "signal_type": "macd_divergence_bottom",
+                "price": 40.12,
+                "score": 100,
+                "confirmed_at": "2025-02-18",
+                "risk_notice": "test",
+                "evidence": {
+                    "notification_kind": "strategy_entry",
+                    "strategy_id": "macd_divergence",
+                    "strategy_name": "零轴＋底背离",
+                    "paper_trade": True,
+                    "conditions": ["0轴上方金叉", "底背离(面积比 0.80)", "放量 1.80x", "年线上方且年线上行"],
+                    "volume_ratio": 1.8,
+                    "volume_ratio_threshold": 1.5,
+                    "divergence_area_ratio": 0.8,
+                    "close_vs_ma_long_pct": 12.5,
+                    "entry_reference": "next_day_open",
+                },
+            }
+        )
+        self.assertIn("纸上买入提醒", markdown)
+        self.assertIn("零轴＋底背离", markdown)
+        self.assertIn("放量 1.80x", markdown)
+        self.assertIn("纸上跟踪，未自动下单", markdown)
+
     def test_confirmation_markdown_is_distinct_from_raw_cross_watch(self):
         markdown = SignalNotifier._markdown(
             {

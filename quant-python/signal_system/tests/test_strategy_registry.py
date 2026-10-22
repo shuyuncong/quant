@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from strategy.registry import (BREAKEVEN_STOP_SOURCE, DEFAULT_STOP_LOSS_PCT, STRATEGIES, VERSION,
@@ -56,6 +57,28 @@ class StrategyRegistryTests(unittest.TestCase):
         frame.loc[290:, "close"] = 1000
         self.assertEqual(expected, evaluate_strategies(frame, config, as_of=cutoff))
         self.assertTrue(all(row["status"] == "ok" for row in expected), expected)
+
+    def test_zero_axis_report_adds_volume_as_a_hard_gate(self):
+        frame = self.frame()
+        indicators = {
+            "status": "ok",
+            "golden_cross": True,
+            "golden_cross_entry_ready": True,
+            "golden_cross_entry_zone": "above",
+            "golden_cross_zone": "above",
+            "golden_cross_state": "confirmed_pullback",
+            "confirmation_count": 3,
+            "volume_ratio": 0.8,
+            "moderate_volume": False,
+            "volume_gate_enabled": True,
+            "volume_gate_met": False,
+        }
+        config = {"signal_strategy": {"macd": {"volume_gate_enabled": True}}}
+        with patch("strategy.registry.analyze_macd", return_value=(frame, indicators)):
+            report = evaluate_strategies(frame, config)[0]
+        volume = next(row for row in report["buy_conditions"] if row["name"] == "成交量温和放大")
+        self.assertFalse(volume["met"])
+        self.assertFalse(report["buy"])
 
     def test_yearline_is_same_rule_as_candidate_pool(self):
         frame = self.frame()

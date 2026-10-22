@@ -88,6 +88,40 @@ class SignalNotifier:
                 f"> {payload['risk_notice']}\n"
                 f"> event_id: `{payload['event_id']}`"
             )
+        if kind == "strategy_entry":
+            conditions = evidence.get("conditions") or evidence.get("score_reasons") or []
+            volume_ratio = evidence.get("volume_ratio")
+            threshold = evidence.get("volume_ratio_threshold")
+            divergence_ratio = evidence.get("divergence_area_ratio")
+            title = "🟢 纸上买入提醒" if evidence.get("paper_trade") else "🟢 策略买入提醒"
+            volume_line = f"- 量比：{float(volume_ratio):.2f}" if volume_ratio is not None else "- 量比：未知"
+            if threshold is not None:
+                volume_line += f"（阈值 {float(threshold):.2f}）"
+            lines = [
+                f"# {title}",
+                "",
+                f"> **{payload.get('name', '')} ({payload['symbol']})**",
+                "",
+                f"- 策略：{evidence.get('strategy_name') or evidence.get('strategy_id', '')}",
+                f"- 收盘价：{payload['price']:.3f}",
+                f"- 四条件：{'；'.join(str(item) for item in conditions) if conditions else '见结构化 evidence'}",
+                volume_line,
+            ]
+            if divergence_ratio is not None:
+                lines.append(f"- 底背离面积比：{float(divergence_ratio):.2f}")
+            if evidence.get("close_vs_ma_long_pct") is not None:
+                lines.append(f"- 年线距离：{float(evidence['close_vs_ma_long_pct']):+.2f}%")
+            lines.extend(
+                [
+                    f"- 入场参考：{evidence.get('entry_reference') or 'next_day_open'}",
+                    f"- 确认时间：{payload['confirmed_at']}",
+                    "- 模式：纸上跟踪，未自动下单",
+                    "",
+                    f"> {payload['risk_notice']}",
+                    f"> event_id: `{payload['event_id']}`",
+                ]
+            )
+            return "\n".join(lines)
         if kind == "strategy_exit":
             reasons = evidence.get("score_reasons", [])
             cost = evidence.get("cost_price")
@@ -228,6 +262,15 @@ class SignalNotifier:
                 f"确认: {('、'.join(confirmations) if confirmations else '暂无额外确认')}\n"
                 f"风险: {evidence.get('risk_text', '需结合趋势复核')}"
             )
+        elif kind == "strategy_entry":
+            title = f"🟢 纸上买入 {payload.get('name', '')} {payload['symbol']}".strip()
+            conditions = evidence.get("conditions") or evidence.get("score_reasons") or []
+            body = (
+                f"策略: {evidence.get('strategy_name') or evidence.get('strategy_id', '')}\n"
+                f"收盘: {payload['price']:.3f}\n"
+                f"四条件: {('、'.join(str(item) for item in conditions) if conditions else '见结构化 evidence')}\n"
+                f"模式: 纸上跟踪，未自动下单"
+            )
         elif kind == "strategy_exit":
             title = f"🔴 策略退出 {payload.get('name', '')} {payload['symbol']}".strip()
             reasons = evidence.get("score_reasons", [])
@@ -302,6 +345,8 @@ class SignalNotifier:
             subject_side = "AI自动解读"
         elif kind == "candidate":
             subject_side = "MACD金叉候选"
+        elif kind == "strategy_entry":
+            subject_side = "策略买入提醒（纸上跟踪）" if payload.get("evidence", {}).get("paper_trade") else "策略买入提醒"
         elif kind == "strategy_exit":
             subject_side = "策略退出提醒"
         elif payload.get("evidence", {}).get("signal_level") == "watch":

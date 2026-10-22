@@ -37,6 +37,7 @@ class MultiTimeframeAnalyzer:
         self.zero_axis_tolerance = float(macd.get("zero_axis_tolerance", 0.005))
         self.moderate_volume_min = float(macd.get("moderate_volume_min", 1.0))
         self.moderate_volume_max = float(macd.get("moderate_volume_max", 2.0))
+        self.volume_gate_enabled = bool(macd.get("volume_gate_enabled", False))
         self.pullback_confirmation_bars = int(macd.get("pullback_confirmation_bars", 5))
         self.long_ma_period = int(macd.get("long_ma_period", 250))
         self.position_lookback = int(macd.get("position_lookback", 20))
@@ -105,6 +106,7 @@ class MultiTimeframeAnalyzer:
             zero_axis_tolerance=self.zero_axis_tolerance,
             moderate_volume_min=self.moderate_volume_min,
             moderate_volume_max=self.moderate_volume_max,
+            volume_gate_enabled=self.volume_gate_enabled,
             pullback_confirmation_bars=self.pullback_confirmation_bars,
             long_ma_period=self.long_ma_period if timeframe == "1d" else None,
             position_lookback=self.position_lookback,
@@ -423,9 +425,10 @@ class MultiTimeframeAnalyzer:
                 side == "buy" and chan_signal is None and cross_component
             )
             confirmation_count = int(indicators.get("confirmation_count", 0) or 0)
+            volume_gate_met = bool(indicators.get("volume_gate_met", True))
             confirmation_threshold_met = (
                 not event_is_confirmation
-                or confirmation_count >= self.min_confirmations
+                or (confirmation_count >= self.min_confirmations and volume_gate_met)
             )
             if (
                 event_is_confirmation
@@ -458,6 +461,8 @@ class MultiTimeframeAnalyzer:
                 evidence["setup_id"] = setup_id
                 evidence["min_confirmations"] = self.min_confirmations
                 evidence["confirmation_threshold_met"] = confirmation_threshold_met
+                evidence["volume_gate_enabled"] = self.volume_gate_enabled
+                evidence["volume_gate_met"] = volume_gate_met
             events.append(
                 SignalEvent(
                     symbol=symbol,

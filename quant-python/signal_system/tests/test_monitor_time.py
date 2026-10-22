@@ -115,6 +115,44 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertFalse(report["completed_round"])
             self.assertNotEqual("true", monitor.store.get_state("daily_bootstrap_complete"))
 
+    def test_scan_zero_axis_blocks_confirmation_when_volume_gate_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.watchlist = ["000001"]
+            monitor.config["signal_strategy"] = {"macd": {"volume_gate_enabled": True}}
+            monitor.config["scan"] = {"universe_mode": "watchlist"}
+            monitor.market.latest_expected_trade_date = lambda: date(2025, 1, 2)
+            monitor.market.get_bars = lambda *args, **kwargs: pd.DataFrame(
+                {
+                    "datetime": pd.bdate_range(end="2025-01-02", periods=200),
+                    "is_closed": True,
+                }
+            )
+            monitor.analyzer.analyze = lambda *args, **kwargs: {
+                "event_objects": [],
+                "timeframes": {
+                    "1d": {
+                        "indicators": {
+                            "golden_cross": True,
+                            "golden_cross_entry_ready": True,
+                            "golden_cross_entry_zone": "above",
+                            "golden_cross_zone": "above",
+                            "golden_cross_state": "confirmed_pullback",
+                            "confirmation_count": 3,
+                            "volume_gate_enabled": True,
+                            "volume_gate_met": False,
+                            "dif": 1.2,
+                            "dea": 0.8,
+                        }
+                    }
+                },
+            }
+
+            report = monitor.scan_zero_axis(notify=False)
+
+            self.assertEqual(0, report["candidate_count"])
+            self.assertEqual(1, report["market_gate_signals"]["this_run"]["blocked_by_volume_gate"])
+
     def test_stale_signal_is_not_current(self):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)

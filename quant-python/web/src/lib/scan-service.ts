@@ -42,7 +42,10 @@ export async function executeScanBatch(id: number) {
       let previous = -1;
       for (let batch = 0; batch < 100; batch++) {
         const overrides = { ...await buildOverrides(), ...(payload.frozen_overrides as object ?? {}) };
-        const outcome = await runBridge("scan", { scan_kind: strategy, scan_run_id: String(id), notify: false,
+        // 底背离池的候选只在信号日出现一次；开启推送时逐批写入 outbox，
+        // event_id 以 signal_date 去重。其余策略仍只发最终汇总，避免批量噪音。
+        const notifyCandidates = payload.notify === true && strategy === "macd_divergence";
+        const outcome = await runBridge("scan", { scan_kind: strategy, scan_run_id: String(id), notify: notifyCandidates,
           overrides: { ...overrides, macd_divergence: { ...(overrides.macd_divergence as object ?? {}), universe_mode: "all_a" }, scan: { ...(overrides.scan as object ?? {}), universe_mode: "all_a" } } }, { timeoutMs: 3_600_000 });
         if (!outcome.ok) { errors.push(`${strategy}: ${outcome.error}`); break; }
         const report = (outcome.data as { report: Record<string, unknown> }).report;

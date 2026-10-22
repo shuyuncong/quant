@@ -6,6 +6,7 @@ import sys
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ from strategy.macd_divergence import (  # noqa: E402
     last_bar_divergence_candidate,
     resolve_divergence_config,
 )
+from monitor.service import SignalMonitor  # noqa: E402
 
 
 def _config(**overrides):
@@ -853,6 +855,90 @@ class RankingTests(unittest.TestCase):
                     "score_mode": "external_causal_score",
                 },
             )
+
+
+class DivergenceNotificationTests(unittest.TestCase):
+    class _Market:
+        def __init__(self, frame):
+            self.frame = frame
+            self.expected = date(2025, 2, 18)
+
+        def get_bars(self, symbol, timeframe="1d", limit=400):
+            return self.frame
+
+        def latest_expected_trade_date(self):
+            return self.expected
+
+    def _monitor(self, directory: Path, frame: pd.DataFrame):
+        config = {
+            "market_data": {"cache_dir": str(directory / "cache")},
+            "runtime": {
+                "database_path": str(directory / "signals.db"),
+                "output_dir": str(directory / "output"),
+            },
+            "monitor": {"watchlist": ["600036"], "max_scan_symbols_per_run": 10},
+            "scan": {"universe_mode": "watchlist"},
+            "macd_divergence": {"enabled": True},
+        }
+        monitor = SignalMonitor(config)
+        monitor._resolve_names = lambda symbols: {
+            str(symbol).split(".")[0]: "招商银行" for symbol in symbols
+        }
+        monitor._divergence_market = self._Market(frame)
+        monitor.notifier.active_channels = mock.MagicMock(return_value=["webhook"])
+        monitor.dispatch_outbox = mock.MagicMock(
+            return_value={"delivered": 1, "failed": 0}
+        )
+        return monitor
+
+    def test_notify_writes_one_paper_event_and_dedupes_same_signal_day(self):
+        import tempfile
+
+        frame = _bars_from_close(
+            _fixture_close(), volume_mult=2.0, bump_at=FIXTURE_BAR
+        ).iloc[: FIXTURE_BAR + 1].reset_index(drop=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = self._monitor(Path(tmp), frame)
+            quiet = monitor.scan_macd_divergence(notify=False)
+            self.assertEqual(quiet["new_events"], 0)
+            self.assertEqual(monitor.store.pending_deliveries(), [])
+
+            report = monitor.scan_macd_divergence(notify=True)
+            self.assertTrue(report["paper_trade"])
+            self.assertEqual(report["new_events"], 1)
+            self.assertEqual(report["delivery"], {"delivered": 1, "failed": 0})
+
+            pending = monitor.store.pending_deliveries(limit=10)
+            self.assertEqual(len(pending), 1)
+            payload = pending[0]["payload"]
+            self.assertEqual(payload["signal_type"], "macd_divergence_bottom")
+            self.assertEqual(payload["side"], "buy")
+            evidence = payload["evidence"]
+            self.assertEqual(evidence["notification_kind"], "strategy_entry")
+            self.assertEqual(evidence["strategy_id"], "macd_divergence")
+            self.assertTrue(evidence["paper_trade"])
+            self.assertEqual(evidence["entry_reference"], "next_day_open")
+            self.assertEqual(len(evidence["conditions"]), 4)
+
+            again = monitor.scan_macd_divergence(notify=True)
+            self.assertEqual(again["new_events"], 0)
+
+
+    def test_disabled_strategy_does_not_notify(self):
+        import tempfile
+
+        frame = _bars_from_close(
+            _fixture_close(), volume_mult=2.0, bump_at=FIXTURE_BAR
+        ).iloc[: FIXTURE_BAR + 1].reset_index(drop=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            monitor = self._monitor(Path(tmp), frame)
+            monitor.config["macd_divergence"]["enabled"] = False
+
+            report = monitor.scan_macd_divergence(notify=True)
+
+            self.assertEqual(report["new_events"], 0)
+            self.assertFalse(report["notify_enabled"])
+            self.assertEqual(monitor.store.pending_deliveries(), [])
 
 
 if __name__ == "__main__":

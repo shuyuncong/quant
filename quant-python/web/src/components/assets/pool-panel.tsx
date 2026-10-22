@@ -694,7 +694,7 @@ export function PoolPanel() {
               <CardTitle>指标股票池</CardTitle>
               <CardDescription>
                 扫描生成的候选股，两个池共用一张候选表、按 pool_type 独立保留 TTL 与容量；
-                年线池为研究展示，不进入监控与下单链路。
+                年线池为研究展示；零轴+底背离接入纸上跟踪提醒，均不自动下单。
               </CardDescription>
             </div>
             <TabsList>
@@ -769,7 +769,7 @@ export function PoolPanel() {
                   负柱区间价格创新低且面积收缩）、放量（当日量 ≥ 前 20 日均量 ×{" "}
                   {(poolData.macd_divergence?.config?.min_volume_ratio ?? 1.5).toString()}）、
                   收盘在年线上方且年线上行。信号收盘确认，入场参考次日开盘（仅记录）；
-                  独立研究池，不进入监控、投票与下单链路，也不推送通知。保留{" "}
+                  独立策略池，不进入监控、投票与券商下单链路；开启推送时按信号日发纸上跟踪提醒。保留{" "}
                   {poolData.macd_divergence?.ttl_business_days ?? 5} 个交易日，最多{" "}
                   {poolData.macd_divergence?.capacity ?? 100} 只。
                 </p>

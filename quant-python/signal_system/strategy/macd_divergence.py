@@ -1,11 +1,11 @@
-"""MACD 底背离 + 零轴金叉 + 放量 + 年线以上 —— 独立研究展示池。
+"""MACD 底背离 + 零轴金叉 + 放量 + 年线以上 —— 独立策略池。
 
 本模块与生产 MACD 池(macd_zero_axis)、年线池(yearline_pullback)完全解耦:
 
 - 独立 pool_type = "macd_divergence";
 - 独立筛选函数, 不调用 analyze_macd / find_golden_cross_entries, 也不进入
-  盘中监控、候选投票与下单链路;
-- 不推送通知, 只写候选表并可由页面展示。
+  候选投票与下单链路;
+- 扫描时 notify=True 会发纸上跟踪提醒, 但不会自动下单。
 
 四个条件全部只读信号日收盘及以前的数据, 无前视偏差:
 

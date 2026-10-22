@@ -65,7 +65,7 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # 2026-10-17 本文件新增 source_text_sha256()（源码行尾归一哈希），故再次变动。
     # 注意：本文件参与自己的依赖契约（自指），任何改动都会改变此值。
     "candidate_integrity": "5ae4af9615ef67a4d3f0943e3f8906d7d6b13f2b679970c5662da2454037f8dc",
-    "canonical_replay_semantics_audit": "05cbe4be3972cb0258b066b0468e30d9f1b73a50e7bafaf318e6d798d7bce244",
+    "canonical_replay_semantics_audit": "691535a8854ad1d3dcd61cd669823fac4131344d86b17db6fcb120c796aac0f3",
     "macd_divergence_audit": "ae17dd4906b52fc07058156ab229c3fe264dbde83183c482e5a6fb6ac919ca1e",
     "market_data": "530b37c9f2507b1d5358d54bf7c672173d8fd0c591969a82b96deb85cfe12bfb",
     # 旧值 af70eab3… == c02418a(2026-08-14) 的 **CRLF** 形态 → Windows 产物。
@@ -73,7 +73,8 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     "strategy_chan": "ed7de01a140809ce300092e44c3dbf9718c901913b91926bc787831105f60ca8",
     # 旧值 cb1e5ff3… == abff923(2026-08-26) 的 **CRLF** 形态 → Windows 产物。
     # 之后新增 _unique_confirmation_entries()（同一确认bar/zone去重）。
-    "strategy_macd": "3b8295261045aeef1050a89fc2762327ca51fa6acdb5a65fde4289cfad2d9afc",
+    # 2026-10-22: 新增 volume_gate_enabled 参数与 summary 字段（零轴金叉成交量硬门槛）。
+    "strategy_macd": "0180bb86c31fb494f8be81519e1921fcc32eccc1ba59bc01de74c743c40d1e20",
     # 旧值即当前值（原本就按 LF 登记）。
     "strategy_market_gate": "fa69dbee01817e44b7b4bc73c50c9a37fa5b4f8b4eb08460dc134979d6d7abe6",
     # 旧值即当前值（原本就按 LF 登记）。
@@ -81,7 +82,7 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # **永久失联**：旧值 3ec75b77… 与全部 18 个历史修订的 LF/CRLF 形态
     # 及另 5 种常见字节变换均不匹配。本次按当前 HEAD 登记。
     "utils_helpers": "4a224fad302a98f7fbbf69620969bbc168f259ecf47f92159e69bc22071feabc",
-    "volume_unit_continuity_audit": "c1cbc782b5d177abe5a9b489148ace03afb3d9d7f61c3607ac845bbea92169e0",
+    "volume_unit_continuity_audit": "bd8c49cdc0fb3cafa917c2eaf7980a7144f2159d426372441c1d92656341862a",
 }
 
 

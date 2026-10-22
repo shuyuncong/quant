@@ -75,7 +75,9 @@ MARKET_DATA_PATH = BASE_DIR / "data" / "market_data.py"
 EXPECTED_CONFIG_SHA256 = (
 # 2026-10-10 重新登记：config.yaml 新增 risk.exit_plan / risk.strategy_exit_plan
 # (分批止盈计划, 默认 null)；不动成交、因子、回测与既有策略口径，旧值 39771129…
-    "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
+# 2026-10-22 重新登记：config.yaml 新增 signal_strategy.macd.volume_gate_enabled
+# (零轴金叉成交量硬门槛)；不动成交量单位口径，旧值 d0be749e…
+    "7ada07da412e0325bef4d02ea021c6a0de4bf1ba251b2c932ebe55e79af7e3a5"
 )
 # 2026-10-17 重新登记（行尾归一后重登记，旧值 488f91c4…）：
 #   ① 改用 source_text_sha256（\r\n 归一为 \n），使哈希与检出平台无关。

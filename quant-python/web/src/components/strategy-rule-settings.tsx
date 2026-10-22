@@ -10,6 +10,8 @@ const STOP_PROFIT = "risk.stop_profit_pct";
 const fields = [
   [STOP_PROFIT, "固定止盈比例（%）", .30],
   ["backtest.chan_zero_axis.max_holding_bars", "最多持有日线数", 40],
+  ["signal_strategy.macd.moderate_volume_min", "零轴金叉放量下限（量比）", 1.0],
+  ["signal_strategy.macd.moderate_volume_max", "零轴金叉放量上限（量比）", 2.0],
   ["macd_divergence.min_volume_ratio", "底背离最低量比", 1.5],
   ["macd_divergence.volume_window", "底背离均量窗口", 20],
   ["macd_divergence.long_ma_slope_window", "底背离年线斜率窗口", 20],
@@ -42,6 +44,7 @@ interface RulesForm {
   stops: Record<string, string | null>;
   globalFromConfig: boolean;
   enabled: boolean;
+  volumeGate: boolean;
   mode: string;
   modeName: string;
   /** null = 固定止盈全清；否则为 resolve_exit_plan 的深层计划对象。 */
@@ -184,6 +187,7 @@ function formFromConfig(config: unknown): RulesForm {
     })),
     globalFromConfig: typeof global === "number",
     enabled: at(config, "macd_divergence.enabled") === true,
+    volumeGate: at(config, "signal_strategy.macd.volume_gate_enabled") === true,
     exitPlan: exitPlan.plan,
     advancedExitPlan: exitPlan.advanced,
     advancedExitPlanRaw: exitPlan.advanced ? exitPlan.raw : null,
@@ -215,6 +219,7 @@ function countChangedValues(baseline: RulesForm | null, current: RulesForm | nul
     if (differs) changed += 1;
   }
   if (baseline.enabled !== current.enabled) changed += 1;
+  if (baseline.volumeGate !== current.volumeGate) changed += 1;
   if (!plansEqual(baseline.exitPlan ?? {}, current.exitPlan ?? {})) changed += 1;
   for (const { id } of STRATEGIES) {
     if (strategyPlanSignature(baseline.strategyPlans[id]) !== strategyPlanSignature(current.strategyPlans[id])) changed += 1;
@@ -407,7 +412,10 @@ export function StrategyRuleSettings({ onDirtyChange }: { onDirtyChange?: (dirty
   async function save() {
     if (!form || saving) return;
     const nextErrors: Record<string, string> = {};
-    const payload: Record<string, number | boolean | null | Record<string, unknown>> = { "macd_divergence.enabled": form.enabled };
+    const payload: Record<string, number | boolean | null | Record<string, unknown>> = {
+      "macd_divergence.enabled": form.enabled,
+      "signal_strategy.macd.volume_gate_enabled": form.volumeGate,
+    };
     for (const [key, label] of [[GLOBAL_STOP, "全局默认止损"], ...fields] as const) {
       const raw = form.values[key];
       const value = Number(raw);
@@ -572,10 +580,16 @@ export function StrategyRuleSettings({ onDirtyChange }: { onDirtyChange?: (dirty
             {key === STOP_PROFIT ? <p id={`${fieldId(key)}-hint`} className="text-xs text-muted-foreground">按百分比填写：30 表示 30%（保存为 0.30）；允许 0.1～1000。</p> : null}
           </div>)}
         </div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={event => {
-          const enabled = event.target.checked;
-          setForm(current => current && { ...current, enabled });
-        }} />启用零轴＋底背离研究池</label>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" aria-label="零轴金叉要求温和放量" checked={form.volumeGate} onChange={event => {
+            const volumeGate = event.target.checked;
+            setForm(current => current && { ...current, volumeGate });
+          }} />零轴金叉要求温和放量（量比 {form.values["signal_strategy.macd.moderate_volume_min"]}–{form.values["signal_strategy.macd.moderate_volume_max"]}）</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={event => {
+            const enabled = event.target.checked;
+            setForm(current => current && { ...current, enabled });
+          }} />启用零轴＋底背离策略（纸上跟踪）</label>
+        </div>
         <details className="rounded-md border p-3 text-xs text-muted-foreground">
           <summary className="cursor-pointer font-medium text-foreground">退出作用范围（原始 exit_rules）</summary>
           <p className="mt-2">

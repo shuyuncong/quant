@@ -85,6 +85,34 @@ class MacdTests(unittest.TestCase):
         self.assertEqual(3, summary["confirmation_count"])
         self.assertEqual("strong", summary["golden_cross_quality"])
 
+    def test_volume_gate_can_be_required_at_summary_level(self):
+        macd = pd.DataFrame(
+            {
+                "dif": [0.2] * 48 + [0.10, 0.30],
+                "dea": [0.2] * 48 + [0.20, 0.25],
+                "hist": [0.05] * 47 + [0.10, 0.20, 0.30],
+            }
+        )
+        thick = self._frame([10.0] * 48 + [9.0, 11.0])
+        thick.loc[49, "volume"] = 1500.0
+        thin = self._frame([10.0] * 48 + [9.0, 11.0])
+        thin.loc[49, "volume"] = 500.0
+        with patch("strategy.macd.calculate_macd", return_value=macd):
+            _, thick_summary = analyze_macd(
+                thick, zero_axis_tolerance=0.005, volume_gate_enabled=True
+            )
+            _, thin_summary = analyze_macd(
+                thin, zero_axis_tolerance=0.005, volume_gate_enabled=True
+            )
+        self.assertTrue(thick_summary["volume_gate_met"])
+        self.assertFalse(thin_summary["volume_gate_met"])
+        # 关闭硬门槛时只保留展示，不影响旧行为。
+        with patch("strategy.macd.calculate_macd", return_value=macd):
+            _, disabled = analyze_macd(
+                thin, zero_axis_tolerance=0.005, volume_gate_enabled=False
+            )
+        self.assertTrue(disabled["volume_gate_met"])
+
     def _patched_macd(self, length=50, cross_index=48, zone="above"):
         if zone == "below":
             before_dif, before_dea = -0.30, -0.20

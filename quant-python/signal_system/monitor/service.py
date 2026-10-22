@@ -448,6 +448,7 @@ class SignalMonitor:
             "signals_screened",
             "blocked_by_market_gate",
             "blocked_by_position_gate",
+            "blocked_by_volume_gate",
             "policy_observe_only",
             "candidates_published",
             "batches",
@@ -510,6 +511,7 @@ class SignalMonitor:
         event_objects: list[SignalEvent],
         daily_report: dict[str, Any],
         min_confirmations: int = 0,
+        volume_gate_enabled: bool = False,
     ) -> list[SignalEvent]:
         """Keep raw-cross watches and actionable pullback confirmations.
 
@@ -534,7 +536,11 @@ class SignalMonitor:
         event_confirmation_count = int(
             indicators.get("confirmation_count", 0) or 0
         )
-        confirmation_met = event_confirmation_count >= min_confirmations
+        volume_gate_met = bool(indicators.get("volume_gate_met", True))
+        confirmation_met = (
+            event_confirmation_count >= min_confirmations
+            and (not volume_gate_enabled or volume_gate_met)
+        )
         filtered_events = []
         for event in event_objects:
             if event.timeframe != "1d":
@@ -869,6 +875,11 @@ class SignalMonitor:
                         event_objects,
                         daily_report,
                         resolve_min_confirmations(self.config),
+                        bool(
+                            self.config.get("signal_strategy", {})
+                            .get("macd", {})
+                            .get("volume_gate_enabled", False)
+                        ),
                     )
                 if notify and self.push_trade_signal:
                     if self.analysis_version == 2:
@@ -1147,6 +1158,7 @@ class SignalMonitor:
         signals_screened = 0
         signals_blocked_market_gate = 0
         signals_blocked_position_gate = 0
+        signals_blocked_volume_gate = 0
         signals_policy_observe_only = 0
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
@@ -1160,6 +1172,11 @@ class SignalMonitor:
         if market_regime not in {"bull", "range", "bear"}:
             market_regime = None
         position_gate_enabled = bool(entry_filters.get("position_gate_enabled", False))
+        volume_gate_enabled = bool(
+            self.config.get("signal_strategy", {})
+            .get("macd", {})
+            .get("volume_gate_enabled", False)
+        )
         stock_pool_settings = resolve_stock_pool_config(self.config)
         stock_pool_history_limit = max(
             300,
@@ -1198,7 +1215,11 @@ class SignalMonitor:
                 entry_ready = bool(indicators.get("golden_cross_entry_ready", False))
                 confirmation_count = int(indicators.get("confirmation_count", 0) or 0)
                 min_confirmations = resolve_min_confirmations(self.config)
-                confirmation_met = confirmation_count >= min_confirmations
+                volume_gate_met = bool(indicators.get("volume_gate_met", True))
+                confirmation_met = (
+                    confirmation_count >= min_confirmations
+                    and (not volume_gate_enabled or volume_gate_met)
+                )
                 position_ready = bool(
                     indicators.get("above_ma_long") and indicators.get("ma_long_up")
                 )
@@ -1218,6 +1239,13 @@ class SignalMonitor:
                     and current_zone in {"above", "near"}
                     and current_bullish
                 )
+                if (
+                    screen_ready
+                    and confirmation_count >= min_confirmations
+                    and volume_gate_enabled
+                    and not volume_gate_met
+                ):
+                    signals_blocked_volume_gate += 1
                 if screen_ready and confirmation_met:
                     signal_type = (
                         "macd_golden_cross_pullback_confirmed_"
@@ -1501,6 +1529,7 @@ class SignalMonitor:
             "signals_screened": signals_screened,
             "blocked_by_market_gate": signals_blocked_market_gate,
             "blocked_by_position_gate": signals_blocked_position_gate,
+            "blocked_by_volume_gate": signals_blocked_volume_gate,
             "policy_observe_only": signals_policy_observe_only,
             "candidates_published": len(candidates),
             "batches": 1,
@@ -1520,8 +1549,8 @@ class SignalMonitor:
             },
             "note": (
                 "signals_screened = 日线零轴信号成立且 policy 未禁用；"
-                "blocked_by_market_gate / blocked_by_position_gate 是两个独立闸门，"
-                "可同时命中；当日合计跨批次（完成轮后归零），本轮明细见 this_run。"
+                "blocked_by_market_gate / blocked_by_position_gate / blocked_by_volume_gate "
+                "是三个独立闸门，可同时命中；当日合计跨批次（完成轮后归零），本轮明细见 this_run。"
             ),
         }
         # 每日扫描入库后只推送一条汇总通知，不逐股推送；候选推送开关关闭时跳过汇总，仅投递队列已有事件
@@ -1823,14 +1852,76 @@ class SignalMonitor:
             self._divergence_market = MarketDataClient(client_config)
         return self._divergence_market
 
-    def scan_macd_divergence(self, notify: bool = True) -> dict[str, Any]:
-        """MACD 底背离 + 零轴金叉 + 放量 + 年线以上候选扫描 —— 独立研究展示池。
+    def _divergence_notification_event(
+        self, candidate: dict[str, Any], expected_iso: str
+    ) -> SignalEvent | None:
+        """把四条件候选转成一条纸上跟踪的买入提醒。
 
-        与生产 MACD 池/年线池完全隔离:
+        只通知信号日不早于本轮应有交易日的候选；候选本身已由扫描确认是
+        最后一根已收盘日线，因此不会把旧信号在当前日期重复推送。event_id
+        含 signal_date，同一根 K 线重复扫描只会入队一次。
+        """
+        signal_date = str(candidate.get("signal_date") or "")
+        if not signal_date or signal_date < expected_iso:
+            return None
+        try:
+            price = float(candidate.get("close") or 0)
+        except (TypeError, ValueError):
+            return None
+        if price <= 0:
+            return None
+        zone = str(candidate.get("zero_axis_zone") or "")
+        conditions = [str(item) for item in candidate.get("conditions") or []]
+        return SignalEvent(
+            symbol=str(candidate.get("symbol") or ""),
+            name=str(candidate.get("name") or ""),
+            timeframe="1d",
+            signal_type=str(candidate.get("signal_type") or "macd_divergence_bottom"),
+            side="buy",
+            price=price,
+            structure_time=signal_date,
+            confirmed_at=signal_date,
+            score=int(candidate.get("score", 100) or 0),
+            evidence={
+                "notification_kind": "strategy_entry",
+                "components": [
+                    "macd_divergence_bottom",
+                    f"zero_axis_{zone}" if zone else "zero_axis",
+                    "bottom_divergence",
+                    "volume_confirmed",
+                    "above_yearline",
+                ],
+                "score_reasons": conditions,
+                "conditions": conditions,
+                "signal_level": "strong",
+                "actionable": True,
+                "execution_mode": "enabled",
+                "paper_trade": True,
+                "research_only": True,
+                "strategy_id": "macd_divergence",
+                "strategy_name": "零轴＋底背离",
+                "entry_reference": candidate.get("entry_reference"),
+                "zero_axis_zone": zone,
+                "zero_axis_zone_label": candidate.get("zero_axis_zone_label"),
+                "volume_ratio": candidate.get("volume_ratio"),
+                "volume_ratio_threshold": candidate.get("volume_ratio_threshold"),
+                "divergence_area_ratio": candidate.get("divergence_area_ratio"),
+                "divergence_price_new_low_pct": candidate.get("divergence_price_new_low_pct"),
+                "close_vs_ma_long_pct": candidate.get("close_vs_ma_long_pct"),
+                "ma_long": candidate.get("ma_long"),
+                "ma_long_slope_pct": candidate.get("ma_long_slope_pct"),
+            },
+        )
+
+    def scan_macd_divergence(self, notify: bool = True) -> dict[str, Any]:
+        """MACD 底背离 + 零轴金叉 + 放量 + 年线以上候选扫描 —— 独立策略池。
+
+        与生产 MACD 池/年线池隔离:
         - 独立 pool_type='macd_divergence', 独立 TTL/容量, 互不截断;
         - 独立配置段 macd_divergence, 不读 entry_filters / signal_strategy.macd /
           backtest.chan_zero_axis, 也不受执行策略与市场闸门影响;
-        - 不推送通知, 不进入监控与下单链路;
+        - notify=True 时把信号日候选写成纸上跟踪提醒, 走通知 outbox;
+          不接券商下单, 也不进入候选投票;
         - all_a 模式与其它池一样分批轮询, 整轮完成后才 sync, 未完成只 upsert。
         """
         settings = resolve_divergence_config(self.config)
@@ -2027,8 +2118,19 @@ class SignalMonitor:
                 str(item.get("symbol", "")),
             ),
         )
-        # 研究池与生产通知 outbox 隔离。
+        # 纸上跟踪提醒与生产候选池共用 outbox；不经过交易闸门，避免实盘仓位限制
+        # 把研究信号静默过滤掉。event_id 以 signal_date 去重，重复扫描不会重复推送。
         delivery = {"delivered": 0, "failed": 0}
+        new_event_count = 0
+        if notify and settings["enabled"]:
+            channels = self.notifier.active_channels()
+            if channels:
+                if self.push_trade_signal:
+                    for candidate in sorted_candidates:
+                        event = self._divergence_notification_event(candidate, expected_iso)
+                        if event is not None and self.store.enqueue_event(event, channels):
+                            new_event_count += 1
+                delivery = self.dispatch_outbox()
         evaluated_count = int(funnel.get("evaluated", 0))
         volume_stats: dict[str, Any] = {"count": len(volume_ratios)}
         if volume_ratios:
@@ -2078,6 +2180,9 @@ class SignalMonitor:
             "config": settings,
             "candidate_count": len(candidates),
             "candidates": sorted_candidates,
+            "paper_trade": True,
+            "new_events": new_event_count,
+            "notify_enabled": bool(notify and self.push_trade_signal and settings["enabled"]),
             # 漏斗解释: 四个条件同时成立才入池, 命中率天然很低。
             "condition_funnel": {
                 "evaluated_symbols": evaluated_count,

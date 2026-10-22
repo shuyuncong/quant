@@ -35,7 +35,9 @@ CONFIG_REPOSITORY_PATH = "quant-python/signal_system/config/config.yaml"
 PRIMARY_CONFIG_SHA256 = "4e0084eb945aa2533dca25f9e0f68b4e27e9f2cbc52c11b7898c082d466000f1"
 # 2026-10-10 重新登记：config.yaml 新增 risk.exit_plan / risk.strategy_exit_plan
 # (分批止盈计划, 默认 null)；不动成交、因子、回测与既有策略口径，旧值 39771129…
-VERIFY_CONFIG_SHA256 = "d0be749e8cb7e2f622827e2a869f6b828a7f63e6ca2de42ddf5ef99688ec8524"
+# 2026-10-22 重新登记：config.yaml 新增 signal_strategy.macd.volume_gate_enabled
+# (零轴金叉成交量硬门槛)；不动 yearline_pullback 回测执行口径，旧值 d0be749e…
+VERIFY_CONFIG_SHA256 = "7ada07da412e0325bef4d02ea021c6a0de4bf1ba251b2c932ebe55e79af7e3a5"
 FROZEN_EXPERIMENT_SHA256 = "033818294f9504fba61c6223a671fa99224fa89827990b74d43c26d3f4375b67"
 FROZEN_BACKTEST_ENGINE_SHA256 = "562278a0a551e7ed3ef77cb21e49a6e85369cc9dd8df8843d83872d5c3969e2b"
 ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
@@ -57,6 +59,9 @@ ALLOWED_NON_EXECUTION_CONFIG_DIFFS = {
     # yearline_pullback 仍走 fixed 止盈 + 持仓超时，口径未变。
     "risk.exit_plan": ("<MISSING>", None),
     "risk.strategy_exit_plan": ("<MISSING>", {"macd_zero_axis": None, "yearline_pullback": None, "macd_divergence": None}),
+    # 2026-10-22: 新增零轴金叉成交量硬门槛。只影响 macd_zero_axis 入场确认，
+    # yearline_pullback 回测执行口径未变。
+    "signal_strategy.macd.volume_gate_enabled": ("<MISSING>", True),
 }
 ROUTE = "yearline_pullback"
 PROFILES = ("fixed_sl8", "dynamic_sl5_sl8")

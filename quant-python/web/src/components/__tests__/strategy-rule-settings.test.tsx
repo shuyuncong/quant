@@ -19,6 +19,7 @@ function effectiveConfig(overrides: Record<string, unknown> = {}) {
       ...(overrides.risk as object ?? {}),
     },
     macd_divergence: { enabled: true, min_volume_ratio: 1.5, volume_window: 20, long_ma_slope_window: 20, min_macd_segment_bars: 2 },
+    signal_strategy: { macd: { volume_gate_enabled: true, moderate_volume_min: 1, moderate_volume_max: 2 } },
     backtest: { exit_rules: { mode: "fixed" }, chan_zero_axis: { max_holding_bars: 40 } },
   };
 }
@@ -90,6 +91,22 @@ function savedPayload() {
   expect(call, "PUT payload").toBeDefined();
   return JSON.parse((call![1] as RequestInit).body as string) as Record<string, unknown>;
 }
+
+describe("zero-axis volume gate", () => {
+  it("saves the hard volume gate toggle", async () => {
+    await render();
+    const checkbox = host.querySelector<HTMLInputElement>('input[aria-label="零轴金叉要求温和放量"]');
+    expect(checkbox?.checked).toBe(true);
+
+    await act(async () => checkbox!.click());
+    await act(async () => saveButton().click());
+    await settle();
+
+    expect(savedPayload()["signal_strategy.macd.volume_gate_enabled"]).toBe(false);
+    expect(savedPayload()["signal_strategy.macd.moderate_volume_min"]).toBe(1);
+    expect(savedPayload()["signal_strategy.macd.moderate_volume_max"]).toBe(2);
+  });
+});
 
 describe("per-strategy scale-out plans", () => {
   it("keeps an explicit empty plan as 关闭 rather than collapsing it to 继承", async () => {
