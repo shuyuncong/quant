@@ -67,7 +67,8 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     "candidate_integrity": "5ae4af9615ef67a4d3f0943e3f8906d7d6b13f2b679970c5662da2454037f8dc",
     "canonical_replay_semantics_audit": "691535a8854ad1d3dcd61cd669823fac4131344d86b17db6fcb120c796aac0f3",
     "macd_divergence_audit": "ae17dd4906b52fc07058156ab229c3fe264dbde83183c482e5a6fb6ac919ca1e",
-    "market_data": "530b37c9f2507b1d5358d54bf7c672173d8fd0c591969a82b96deb85cfe12bfb",
+    # 2026-10-22: 行情层遵守 data.disable_system_proxy（系统代理导致 501/断连）。
+    "market_data": "a12f37ef583f5fe46fb994acdc4777d40641177ab1bf01bff696ecfbde52ce00",
     # 旧值 af70eab3… == c02418a(2026-08-14) 的 **CRLF** 形态 → Windows 产物。
     # 该文件此后未再改动，与 HEAD 的归一值仅差行尾。
     "strategy_chan": "ed7de01a140809ce300092e44c3dbf9718c901913b91926bc787831105f60ca8",
@@ -82,7 +83,7 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # **永久失联**：旧值 3ec75b77… 与全部 18 个历史修订的 LF/CRLF 形态
     # 及另 5 种常见字节变换均不匹配。本次按当前 HEAD 登记。
     "utils_helpers": "4a224fad302a98f7fbbf69620969bbc168f259ecf47f92159e69bc22071feabc",
-    "volume_unit_continuity_audit": "bd8c49cdc0fb3cafa917c2eaf7980a7144f2159d426372441c1d92656341862a",
+    "volume_unit_continuity_audit": "a5a9e6ab46a6ed10af647a35f6cc40025f60baf46982bf4fb8b0e6e7bd779314",
 }
 
 

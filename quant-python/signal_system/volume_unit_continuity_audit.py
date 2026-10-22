@@ -89,8 +89,10 @@ EXPECTED_CONFIG_SHA256 = (
 #      解析：全市场分页股票列表、ETF 列表、get_display_name_map）、
 #      ff3c24e（无该文件改动）。上述均**不涉及成交量/因子/回测口径**。
 #   成交量口径本身仍由 volume_unit_shares=100 与其它断言独立校验，未放宽。
+#   ③ 2026-10-22：行情层遵守 data.disable_system_proxy，避免系统代理把
+#      腾讯/东财 K 线请求改写成 501/断连；不涉及成交量或复权口径。
 EXPECTED_MARKET_DATA_SHA256 = (
-    "530b37c9f2507b1d5358d54bf7c672173d8fd0c591969a82b96deb85cfe12bfb"
+    "a12f37ef583f5fe46fb994acdc4777d40641177ab1bf01bff696ecfbde52ce00"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"

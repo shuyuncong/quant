@@ -659,9 +659,11 @@ class MarketDataTests(unittest.TestCase):
                 raise ConnectionError("Remote end closed connection without response")
             return payload
 
-        with patch.object(MarketDataClient, "_http_json_once", new=fake_once):
-            with patch("data.market_data.time.sleep"):
-                result = MarketDataClient._http_json(https_url, {})
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            with patch.object(client, "_http_json_once", new=fake_once):
+                with patch("data.market_data.time.sleep"):
+                    result = client._http_json(https_url, {})
 
         self.assertEqual(payload, result)
         # HTTPS 重试两次失败后降级 HTTP 并成功
@@ -675,13 +677,42 @@ class MarketDataTests(unittest.TestCase):
             calls.append(url)
             return payload
 
-        with patch.object(MarketDataClient, "_http_json_once", new=fake_once):
-            result = MarketDataClient._http_json(
-                "https://vip.stock.finance.sina.com.cn/api", {}
-            )
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            with patch.object(client, "_http_json_once", new=fake_once):
+                result = client._http_json(
+                    "https://vip.stock.finance.sina.com.cn/api", {}
+                )
 
         self.assertEqual(payload, result)
         self.assertEqual(1, len(calls))
+
+    def test_disable_system_proxy_builds_direct_opener(self):
+        """系统代理会把腾讯/东财行情改写成 501/断连；配置为 true 时必须直连。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://127.0.0.1:9",
+                    "HTTPS_PROXY": "http://127.0.0.1:9",
+                    "http_proxy": "http://127.0.0.1:9",
+                    "https_proxy": "http://127.0.0.1:9",
+                },
+            ):
+                client = MarketDataClient(
+                    {
+                        "market_data": {"cache_dir": directory},
+                        "data": {"disable_system_proxy": True},
+                    }
+                )
+        proxy_handlers = [
+            handler
+            for handler in client._http_opener.handlers
+            if handler.__class__.__name__ == "ProxyHandler"
+        ]
+        # ProxyHandler({}) 不注册任何 http_request 方法，因此直连 opener
+        # 里不会出现 ProxyHandler；只要没有它，环境变量代理就不会生效。
+        self.assertEqual([], proxy_handlers)
 
 
 class TradeCalendarTodayTests(unittest.TestCase):

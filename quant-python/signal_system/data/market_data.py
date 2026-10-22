@@ -12,7 +12,7 @@ import pickle
 import time
 from typing import Any
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 import pandas as pd
 
@@ -239,6 +239,17 @@ class MarketDataClient:
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.use_cache = bool(data_config.get("use_cache", True))
         self.request_interval = float(data_config.get("request_interval_seconds", 0.35))
+        # 行情端点在国内网络下走系统代理经常被代理层改写成 501/断连；
+        # `data.disable_system_proxy` 已是统一配置项，旧 market_data 层也要遵守。
+        disable_proxy = data_config.get("disable_system_proxy")
+        if disable_proxy is None:
+            disable_proxy = config.get("data", {}).get("disable_system_proxy", False)
+        self.disable_system_proxy = bool(disable_proxy)
+        self._http_opener = (
+            build_opener(ProxyHandler({}))
+            if self.disable_system_proxy
+            else build_opener()
+        )
         token = data_config.get("tushare_token") or os.getenv("TUSHARE_TOKEN", "")
         self.tushare_token = "" if "你的" in str(token) else str(token)
         self._last_request = 0.0
@@ -274,8 +285,7 @@ class MarketDataClient:
             return (primary,)
         return (primary, backup)
 
-    @staticmethod
-    def _http_json(url: str, params: dict[str, Any]) -> Any:
+    def _http_json(self, url: str, params: dict[str, Any]) -> Any:
         """Fetch JSON with a fallback for the intermittent Eastmoney kline API.
 
         东财 push2his 端点 2026-09 实测存在间歇性故障（502 / "Remote end
@@ -284,11 +294,10 @@ class MarketDataClient:
         端点抖动时仍可从数据源取到最新 bar。
         """
         if "push2his.eastmoney.com" in url:
-            return MarketDataClient._http_json_eastmoney(url, params)
-        return MarketDataClient._http_json_once(url, params)
+            return self._http_json_eastmoney(url, params)
+        return self._http_json_once(url, params)
 
-    @staticmethod
-    def _http_json_once(url: str, params: dict[str, Any]) -> Any:
+    def _http_json_once(self, url: str, params: dict[str, Any]) -> Any:
         request = Request(
             f"{url}?{urlencode(params)}",
             headers={
@@ -296,20 +305,19 @@ class MarketDataClient:
                 "Referer": "https://quote.eastmoney.com/",
             },
         )
-        with urlopen(request, timeout=15) as response:
+        with self._http_opener.open(request, timeout=15) as response:
             body = response.read(20 * 1024 * 1024 + 1)
         if len(body) > 20 * 1024 * 1024:
             raise RuntimeError("行情响应体超过20MB")
         return json.loads(body.decode("utf-8"))
 
-    @staticmethod
-    def _http_json_eastmoney(url: str, params: dict[str, Any]) -> Any:
+    def _http_json_eastmoney(self, url: str, params: dict[str, Any]) -> Any:
         candidates = [url, url.replace("https://", "http://", 1)]
         last_exc: Exception | None = None
         for candidate in candidates:
             for attempt in range(2):
                 try:
-                    return MarketDataClient._http_json_once(candidate, params)
+                    return self._http_json_once(candidate, params)
                 except Exception as exc:  # noqa: BLE001 - 网络抖动需兜底
                     last_exc = exc
                     logger.warning(
@@ -1069,17 +1077,10 @@ class MarketDataClient:
             return None
         try:
             self._throttle()
-            url = (
-                "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
-                f"param={code},day,,,{max(limit, 300)},qfq"
+            payload = self._http_json(
+                "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+                {"param": f"{code},day,,,{max(limit, 300)},qfq"},
             )
-            request = Request(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 quant-signal-monitor/1.0"},
-            )
-            with urlopen(request, timeout=15) as response:
-                body = response.read(20 * 1024 * 1024 + 1)
-            payload = json.loads(body.decode("utf-8"))
             data = payload.get("data", {})
             node = data.get(code) or {}
             klines = node.get("qfqday") or node.get("day") or []
