@@ -143,7 +143,9 @@ export async function executeAnalysisBatch(jobId: number) {
   let owner: PoolClient | undefined;
   try {
     owner = await (await getDb()).connect();
-    if (!(await owner.query("SELECT pg_try_advisory_lock(920001) AS acquired")).rows[0].acquired) return;
+    // 与全市场扫描分开加锁：日扫一轮可能持续数小时，手动个股分析不应排在它后面。
+    // 920002 只串行化分析批次本身（共享 Python 分析游标/报告写入）。
+    if (!(await owner.query("SELECT pg_try_advisory_lock(920002) AS acquired")).rows[0].acquired) return;
     const job = await getJob(jobId);
     if (!job || !["pending", "running"].includes(job.status)) return;
     const payload = JSON.parse(job.payload) as Record<string, unknown>;
@@ -192,7 +194,7 @@ export async function executeAnalysisBatch(jobId: number) {
     await addOperationLog({ job_id: jobId, level: partial ? "warning" : "info", module: "analysis", message: `${symbols.length} 只个股分析完成${partial ? "，部分阶段失败" : ""}` });
     if (payload.notify === true) await runBridge("notify-summary", { title: `个股分析 #${jobId}`, content: summary,
       report_path: output, confirmed_at: String(payload.analysis_cutoff).replace(" ", "T"), overrides: await buildOverrides() }, { timeoutMs: 120_000 });
-  } finally { if (owner) { await owner.query("SELECT pg_advisory_unlock(920001)").catch(() => undefined); owner.release(); } activeJobs.delete(jobId); }
+  } finally { if (owner) { await owner.query("SELECT pg_advisory_unlock(920002)").catch(() => undefined); owner.release(); } activeJobs.delete(jobId); }
 }
 
 export async function refreshAnalysisSummary(jobId: number) {

@@ -571,8 +571,9 @@ export default function ResultsPage() {
     }
   }, [selectedJobView]);
 
-  const running = jobs.some((job) => job.status === "running" || job.status === "pending");
-  const busy = running || startingKind !== null;
+  // 只在启动请求在途时禁用按钮。日扫/监控等后台任务可能运行数小时，
+  // 不能因为它们占着最近任务列表就让手动个股分析一直点不了。
+  const launching = startingKind !== null;
   const openAnalysis = (job: JobRow) => {
     setReportRetry(0);
     setSelectedJob(job);
@@ -650,7 +651,7 @@ export default function ResultsPage() {
                             : { scope }
                         )
                       }
-                      disabled={busy}
+                      disabled={launching}
                     >
                       {startingKind === "analyze" ? (
                         <Loader2 className="size-4 animate-spin" />
@@ -672,7 +673,7 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="secondary" onClick={() => runJob("monitor-once", { scope })} disabled={busy}>
+                    <Button variant="secondary" onClick={() => runJob("monitor-once", { scope })} disabled={launching}>
                       {startingKind === "monitor-once" ? "启动中..." : "监控一次"}
                     </Button>
                   }
@@ -687,7 +688,7 @@ export default function ResultsPage() {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <Button variant="outline" onClick={() => runJob("test-notify")} disabled={busy}>
+                    <Button variant="outline" onClick={() => runJob("test-notify")} disabled={launching}>
                       {startingKind === "test-notify" ? "启动中..." : "测试通知"}
                     </Button>
                   }

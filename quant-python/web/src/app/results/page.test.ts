@@ -215,8 +215,22 @@ describe("results page request isolation", () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/run")).toHaveLength(1);
 
     await act(async () => runRequest.resolve(response({ ok: true, jobId: 4 })));
-    // 新任务已经进入列表（running），禁用状态交回给任务状态，中间没有可点击空档
-    expect(buttonIn(host, "个股分析").disabled).toBe(true);
+    // 新任务已进入列表：启动请求结束，按钮恢复可用；后台任务运行不再是禁用理由
+    expect(buttonIn(host, "个股分析").disabled).toBe(false);
     expect(fetchMock.mock.calls.filter(([url]) => url === "/api/run")).toHaveLength(1);
+  });
+
+  it("keeps manual analysis available while a scheduled scan is running", async () => {
+    const runningScan = { ...scanJob, kind: "daily-scan", status: "running", finished_at: null };
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/jobs") return Promise.resolve(response({ jobs: [runningScan] }));
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(createElement(ResultsPage)));
+    await act(async () => {});
+
+    expect(buttonIn(host, "个股分析").disabled).toBe(false);
+    expect(buttonIn(host, "监控一次").disabled).toBe(false);
   });
 });
