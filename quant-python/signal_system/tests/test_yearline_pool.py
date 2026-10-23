@@ -332,6 +332,8 @@ class TestScanYearline:
         assert report["research_only"] is True
         assert report["completed_round"] is True
         assert report["candidate_count"] == 1
+        assert report["timings"]["total"] >= report["timings"]["symbol_loop"]
+        assert report["timings"]["symbol_loop"] >= report["timings"]["data_load"]
         candidate = report["candidates"][0]
         assert candidate["symbol"] == "600036"
         assert candidate["signal_type"] == "yearline_pullback"

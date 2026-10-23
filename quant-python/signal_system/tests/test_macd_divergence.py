@@ -900,6 +900,12 @@ class DivergenceNotificationTests(unittest.TestCase):
             monitor = self._monitor(Path(tmp), frame)
             quiet = monitor.scan_macd_divergence(notify=False)
             self.assertEqual(quiet["new_events"], 0)
+            self.assertGreaterEqual(
+                quiet["timings"]["total"], quiet["timings"]["symbol_loop"]
+            )
+            self.assertGreaterEqual(
+                quiet["timings"]["symbol_loop"], quiet["timings"]["data_load"]
+            )
             self.assertEqual(monitor.store.pending_deliveries(), [])
 
             report = monitor.scan_macd_divergence(notify=True)

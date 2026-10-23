@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, time as clock_time
 import copy
 import json
 import logging
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Iterator
 
 import pandas as pd
 
@@ -76,6 +77,16 @@ MARKET_GATE_SIGNAL_COUNTS_KEY = "market_gate_signal_counts"
 # 日报聚合窗口：一个自然年 ≈ 244 个交易日，足以回答"闸门是否过严"而不被
 # 更早的市场状态稀释；跨窗口对照仍在回测侧做（见 docs/2026-10-13-闸门跨窗口结论.md）。
 MARKET_GATE_REPORT_WINDOW_DAYS = 240
+
+
+@contextmanager
+def _timed_section(timings: dict[str, float], key: str) -> Iterator[None]:
+    """Accumulate wall-clock time for one scan stage, including exception paths."""
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[key] = timings.get(key, 0.0) + (time.perf_counter() - started)
 
 
 def _is_stale_data_error(message: str) -> bool:
@@ -1079,19 +1090,49 @@ class SignalMonitor:
         return {"enqueued": int(inserted), "delivery": delivery, "event_id": event.event_id}
 
     def scan_zero_axis(self, notify: bool = True) -> dict[str, Any]:
+        scan_started = time.perf_counter()
+        timings: dict[str, float] = {
+            "snapshot_refresh": 0.0,
+            "universe_prepare": 0.0,
+            "name_resolution": 0.0,
+            "market_context": 0.0,
+            "symbol_loop": 0.0,
+            "data_load": 0.0,
+            "technical_analysis": 0.0,
+            "stock_pool": 0.0,
+            "fundamental": 0.0,
+            "post_scan": 0.0,
+            "total": 0.0,
+        }
+        universe_started = time.perf_counter()
         scan_config = self.config.get("scan", {})
         universe_mode = str(scan_config.get("universe_mode", "watchlist"))
         snapshot_updates = 0
-        try:
-            snapshot_updates = self.market.refresh_daily_histories_from_snapshot()
-        except Exception as exc:
-            logger.warning("批量日线增量刷新失败，将按需逐股补拉: %s", exc)
+        expected_trade_date = self.market.latest_expected_trade_date()
+        # Full-market scans are driven as ~11 separate bridge calls.  The
+        # closing snapshot for one trade date is final, so refresh it once per
+        # date instead of reloading + rewriting all ~5000 histories in every
+        # batch.  The per-file equality check inside the refresh still protects
+        # against manual/partial caches.
+        refresh_key = (
+            f"daily_snapshot_refresh:{self.market.adjust}:"
+            f"{expected_trade_date.isoformat()}"
+        )
+        with _timed_section(timings, "snapshot_refresh"):
+            if (
+                now_shanghai().time() >= clock_time(15, 0)
+                and self.store.get_state(refresh_key, "false") != "true"
+            ):
+                try:
+                    snapshot_updates = self.market.refresh_daily_histories_from_snapshot()
+                    self.store.set_state(refresh_key, "true")
+                except Exception as exc:
+                    logger.warning("批量日线增量刷新失败，将按需逐股补拉: %s", exc)
         bootstrap_complete = False
         bootstrap_success: set[str] = set()
         bootstrap_deferred: dict[str, str] = {}
         deferred_today: set[str] = set()
         insufficient_symbols: set[str] = set()
-        expected_trade_date = self.market.latest_expected_trade_date()
         if universe_mode == "watchlist":
             rows = [{"code": item, "name": ""} for item in self.watchlist]
             cursor = 0
@@ -1146,6 +1187,7 @@ class SignalMonitor:
                 ]
                 cursor = len(bootstrap_success) + len(deferred_today)
                 batch = remaining[: self.max_scan_symbols]
+        timings["universe_prepare"] = round(time.perf_counter() - universe_started, 3)
         candidates: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
         stock_pool_rejections: Counter = Counter()
@@ -1162,7 +1204,8 @@ class SignalMonitor:
         signals_policy_observe_only = 0
         names: dict[str, str] = {}
         successful_symbols: set[str] = set()
-        market_context = self._market_entry_context()
+        with _timed_section(timings, "market_context"):
+            market_context = self._market_entry_context()
         entry_filters = self.config.get("entry_filters", {})
         signal_policy = resolve_signal_execution_policy(self.config)
         # 闸门可观测性：先落一条逐日观测（指数级，同日重跑覆盖）。
@@ -1184,30 +1227,36 @@ class SignalMonitor:
             stock_pool_settings["turnover_window"],
             stock_pool_settings["min_listing_trade_days"],
         )
-        batch_names = self._resolve_names([normalize_symbol(str(row["code"])) for row in batch])
+        with _timed_section(timings, "name_resolution"):
+            batch_names = self._resolve_names(
+                [normalize_symbol(str(row["code"])) for row in batch]
+            )
+        loop_started = time.perf_counter()
         for row in batch:
             symbol = normalize_symbol(row["code"])
             name = str(row.get("name", "")) or batch_names.get(symbol, "")
             names[symbol] = name
             try:
-                daily = self.market.get_bars(symbol, "1d", limit=300)
-                if daily.empty or "datetime" not in daily.columns:
-                    raise ValueError("日线为空")
-                latest_date = daily["datetime"].iloc[-1].date()
-                if latest_date < expected_trade_date:
-                    raise ValueError(
-                        f"日线已过期: latest={latest_date}, expected={expected_trade_date}"
-                    )
-                if len(daily) < self.min_daily_bars:
-                    if universe_mode != "watchlist":
-                        insufficient_symbols.add(symbol)
-                        continue
-                    raise ValueError(f"日线不足{self.min_daily_bars}个交易日")
-                successful_symbols.add(symbol)
-                analysis = self.analyzer.analyze(symbol, name, {"1d": daily})
-                analysis.pop("event_objects")
-                daily_report = analysis["timeframes"].get("1d", {})
-                indicators = daily_report.get("indicators", {})
+                with _timed_section(timings, "data_load"):
+                    daily = self.market.get_bars(symbol, "1d", limit=300)
+                    if daily.empty or "datetime" not in daily.columns:
+                        raise ValueError("日线为空")
+                    latest_date = daily["datetime"].iloc[-1].date()
+                    if latest_date < expected_trade_date:
+                        raise ValueError(
+                            f"日线已过期: latest={latest_date}, expected={expected_trade_date}"
+                        )
+                    if len(daily) < self.min_daily_bars:
+                        if universe_mode != "watchlist":
+                            insufficient_symbols.add(symbol)
+                            continue
+                        raise ValueError(f"日线不足{self.min_daily_bars}个交易日")
+                    successful_symbols.add(symbol)
+                with _timed_section(timings, "technical_analysis"):
+                    analysis = self.analyzer.analyze(symbol, name, {"1d": daily})
+                    analysis.pop("event_objects")
+                    daily_report = analysis["timeframes"].get("1d", {})
+                    indicators = daily_report.get("indicators", {})
                 zone = str(
                     indicators.get("golden_cross_entry_zone")
                     or indicators.get("golden_cross_zone", "near")
@@ -1304,6 +1353,7 @@ class SignalMonitor:
                     else:
                         observe_reason = ""
                         entry_gate_blocked = False
+                    stock_pool_started = time.perf_counter()
                     stock_pool_history = daily
                     stock_pool_fetch_error = ""
                     if stock_pool_settings["enabled"]:
@@ -1373,6 +1423,7 @@ class SignalMonitor:
                                     )
                         except Exception as exc:
                             logger.warning("股票池历史自愈失败 %s: %s", symbol, exc)
+                    timings["stock_pool"] += time.perf_counter() - stock_pool_started
                     if not stock_pool_evaluation["passed"]:
                         stock_pool_rejections.update(stock_pool_evaluation["reasons"])
                         stock_pool_rejection_details.append(
@@ -1385,10 +1436,12 @@ class SignalMonitor:
                             }
                         )
                         continue
+                    fundamental_started = time.perf_counter()
                     fundamental_evaluation = self._evaluate_live_fundamental(
                         symbol,
                         latest_date,
                     )
+                    timings["fundamental"] += time.perf_counter() - fundamental_started
                     if not fundamental_evaluation.passed:
                         fundamental_rejections.update(
                             fundamental_evaluation.reasons or ["fundamental_rejected"]
@@ -1459,6 +1512,8 @@ class SignalMonitor:
                 errors.append({"symbol": symbol, "error": str(exc)})
                 logger.warning("扫描 %s 失败: %s", symbol, exc)
 
+        timings["symbol_loop"] = round(time.perf_counter() - loop_started, 3)
+        post_started = time.perf_counter()
         stale_symbols = {
             item["symbol"] for item in errors if _is_stale_data_error(item["error"])
         }
@@ -1568,6 +1623,23 @@ class SignalMonitor:
                 )["delivery"]
             else:
                 delivery = self.dispatch_outbox()
+        timings["post_scan"] = round(time.perf_counter() - post_started, 3)
+        timings["total"] = round(time.perf_counter() - scan_started, 3)
+        timings = {key: round(value, 3) for key, value in timings.items()}
+        logger.info(
+            "日线扫描耗时: total=%ss snapshot=%ss universe=%ss market=%ss loop=%ss "
+            "data=%ss analysis=%ss stock_pool=%ss fundamental=%ss post=%ss",
+            timings["total"],
+            timings["snapshot_refresh"],
+            timings["universe_prepare"],
+            timings["market_context"],
+            timings["symbol_loop"],
+            timings["data_load"],
+            timings["technical_analysis"],
+            timings["stock_pool"],
+            timings["fundamental"],
+            timings["post_scan"],
+        )
         report = {
             "mode": "scan",
             "scanned_at": now_shanghai().isoformat(timespec="seconds"),
@@ -1604,6 +1676,7 @@ class SignalMonitor:
                 "details": fundamental_details,
             },
             "snapshot_histories_updated": snapshot_updates,
+            "timings": timings,
             "candidate_count": len(candidates),
             "candidates": sorted_candidates,
             "errors": errors,
@@ -1636,6 +1709,17 @@ class SignalMonitor:
         - 不推送任何通知(不进入生产信号/监控链路);
         - all_a 模式与 MACD 一样分批轮询, 完成后才 sync, 未完成只 upsert。
         """
+        scan_started = time.perf_counter()
+        timings: dict[str, float] = {
+            "universe_prepare": 0.0,
+            "name_resolution": 0.0,
+            "symbol_loop": 0.0,
+            "data_load": 0.0,
+            "candidate_logic": 0.0,
+            "post_scan": 0.0,
+            "total": 0.0,
+        }
+        universe_started = time.perf_counter()
         scan_config = self.config.get("scan", {})
         universe_mode = str(scan_config.get("universe_mode", "watchlist"))
         market = self._yearline_market_client()
@@ -1691,42 +1775,47 @@ class SignalMonitor:
             ]
             cursor = len(success_seed) + len(deferred_today)
             batch = remaining[: self.max_scan_symbols]
+        timings["universe_prepare"] = round(time.perf_counter() - universe_started, 3)
 
         candidates: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
         successful_symbols: set[str] = set()
         stale_symbols: set[str] = set()
         retryable_symbols: set[str] = set()
-        names = self._resolve_names(
-            [normalize_symbol(str(row["code"])) for row in batch]
-        )
+        with _timed_section(timings, "name_resolution"):
+            names = self._resolve_names(
+                [normalize_symbol(str(row["code"])) for row in batch]
+            )
+        loop_started = time.perf_counter()
         for row in batch:
             symbol = normalize_symbol(str(row["code"]))
             name = str(row.get("name") or "") or names.get(symbol, "")
             try:
-                raw_daily = market.get_bars(symbol, "1d", limit=300)
-                if raw_daily is None or raw_daily.empty:
-                    raise ValueError("yearline_daily_empty")
-                columns = {str(col) for col in raw_daily.columns}
-                if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(columns):
-                    raise ValueError(
-                        "yearline_daily_missing_columns:" + ",".join(sorted(
-                            {"datetime", "open", "high", "low", "close", "volume"} - columns
-                        ))
-                    )
-                daily = prepare_yearline_bars(raw_daily)
-                if daily.empty:
-                    raise ValueError("yearline_no_closed_daily_bars")
-                latest_date = pd.Timestamp(daily["datetime"].iloc[-1]).date()
-                if latest_date < pd.Timestamp(expected_trade_date).date():
-                    raise ValueError(
-                        "yearline_daily_stale:"
-                        f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
-                    )
-                candidate = last_bar_pullback_candidate(symbol, name, daily)
-                successful_symbols.add(symbol)
-                if candidate is not None:
-                    candidates.append(candidate)
+                with _timed_section(timings, "data_load"):
+                    raw_daily = market.get_bars(symbol, "1d", limit=300)
+                    if raw_daily is None or raw_daily.empty:
+                        raise ValueError("yearline_daily_empty")
+                    columns = {str(col) for col in raw_daily.columns}
+                    if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(columns):
+                        raise ValueError(
+                            "yearline_daily_missing_columns:" + ",".join(sorted(
+                                {"datetime", "open", "high", "low", "close", "volume"} - columns
+                            ))
+                        )
+                    daily = prepare_yearline_bars(raw_daily)
+                    if daily.empty:
+                        raise ValueError("yearline_no_closed_daily_bars")
+                    latest_date = pd.Timestamp(daily["datetime"].iloc[-1]).date()
+                    if latest_date < pd.Timestamp(expected_trade_date).date():
+                        raise ValueError(
+                            "yearline_daily_stale:"
+                            f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
+                        )
+                with _timed_section(timings, "candidate_logic"):
+                    candidate = last_bar_pullback_candidate(symbol, name, daily)
+                    successful_symbols.add(symbol)
+                    if candidate is not None:
+                        candidates.append(candidate)
             except Exception as exc:
                 message = str(exc)
                 if message.startswith("yearline_daily_stale:"):
@@ -1735,6 +1824,8 @@ class SignalMonitor:
                     retryable_symbols.add(symbol)
                 errors.append({"symbol": symbol, "name": name, "error": message[:300]})
 
+        timings["symbol_loop"] = round(time.perf_counter() - loop_started, 3)
+        post_started = time.perf_counter()
         if universe_mode == "watchlist":
             completed_round = len(successful_symbols) == total
             coverage = 1.0 if total == 0 else len(successful_symbols) / total
@@ -1801,6 +1892,18 @@ class SignalMonitor:
         )
         # Research scans are isolated from the production notification outbox.
         delivery = {"delivered": 0, "failed": 0}
+        timings["post_scan"] = round(time.perf_counter() - post_started, 3)
+        timings["total"] = round(time.perf_counter() - scan_started, 3)
+        timings = {key: round(value, 3) for key, value in timings.items()}
+        logger.info(
+            "年线扫描耗时: total=%ss universe=%ss loop=%ss data=%ss logic=%ss post=%ss",
+            timings["total"],
+            timings["universe_prepare"],
+            timings["symbol_loop"],
+            timings["data_load"],
+            timings["candidate_logic"],
+            timings["post_scan"],
+        )
         report = {
             "mode": "scan",
             "pool_type": POOL_TYPE_YEARLINE,
@@ -1819,6 +1922,7 @@ class SignalMonitor:
             "candidates": sorted_candidates,
             "errors": errors,
             "delivery": delivery,
+            "timings": timings,
         }
         report["output_file"] = str(self._save_report("scan_yearline", report))
         return report
@@ -1924,6 +2028,17 @@ class SignalMonitor:
           不接券商下单, 也不进入候选投票;
         - all_a 模式与其它池一样分批轮询, 整轮完成后才 sync, 未完成只 upsert。
         """
+        scan_started = time.perf_counter()
+        timings: dict[str, float] = {
+            "universe_prepare": 0.0,
+            "name_resolution": 0.0,
+            "symbol_loop": 0.0,
+            "data_load": 0.0,
+            "indicator_logic": 0.0,
+            "post_scan": 0.0,
+            "total": 0.0,
+        }
+        universe_started = time.perf_counter()
         settings = resolve_divergence_config(self.config)
         scan_config = self.config.get("scan", {})
         universe_mode = str(
@@ -1988,6 +2103,7 @@ class SignalMonitor:
             ]
             cursor = len(success_seed) + len(deferred_today)
             batch = remaining[: self.max_scan_symbols]
+        timings["universe_prepare"] = round(time.perf_counter() - universe_started, 3)
 
         candidates: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
@@ -1997,58 +2113,62 @@ class SignalMonitor:
         # 漏斗统计: 解释"为什么候选很少"。四条件是 AND, 缺一不可。
         funnel: Counter = Counter()
         volume_ratios: list[float] = []
-        names = self._resolve_names(
-            [normalize_symbol(str(row["code"])) for row in batch]
-        )
+        with _timed_section(timings, "name_resolution"):
+            names = self._resolve_names(
+                [normalize_symbol(str(row["code"])) for row in batch]
+            )
+        loop_started = time.perf_counter()
         for row in batch:
             symbol = normalize_symbol(str(row["code"]))
             name = str(row.get("name") or "") or names.get(symbol, "")
             try:
-                raw_daily = market.get_bars(symbol, "1d", limit=400)
-                if raw_daily is None or raw_daily.empty:
-                    raise ValueError("macd_divergence_daily_empty")
-                columns = {str(col) for col in raw_daily.columns}
-                if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(
-                    columns
-                ):
-                    raise ValueError(
-                        "macd_divergence_daily_missing_columns:"
-                        + ",".join(
-                            sorted(
-                                {"datetime", "open", "high", "low", "close", "volume"}
-                                - columns
+                with _timed_section(timings, "data_load"):
+                    raw_daily = market.get_bars(symbol, "1d", limit=400)
+                    if raw_daily is None or raw_daily.empty:
+                        raise ValueError("macd_divergence_daily_empty")
+                    columns = {str(col) for col in raw_daily.columns}
+                    if not {"datetime", "open", "high", "low", "close", "volume"}.issubset(
+                        columns
+                    ):
+                        raise ValueError(
+                            "macd_divergence_daily_missing_columns:"
+                            + ",".join(
+                                sorted(
+                                    {"datetime", "open", "high", "low", "close", "volume"}
+                                    - columns
+                                )
                             )
                         )
+                    latest_date = pd.Timestamp(raw_daily["datetime"].iloc[-1]).date()
+                    if latest_date < pd.Timestamp(expected_trade_date).date():
+                        raise ValueError(
+                            "macd_divergence_daily_stale:"
+                            f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
+                        )
+                with _timed_section(timings, "indicator_logic"):
+                    evaluated = add_divergence_indicators(raw_daily, settings)
+                    candidate = last_bar_divergence_candidate(
+                        symbol, name, raw_daily, settings, frame=evaluated
                     )
-                latest_date = pd.Timestamp(raw_daily["datetime"].iloc[-1]).date()
-                if latest_date < pd.Timestamp(expected_trade_date).date():
-                    raise ValueError(
-                        "macd_divergence_daily_stale:"
-                        f"latest={latest_date},expected={pd.Timestamp(expected_trade_date).date()}"
-                    )
-                evaluated = add_divergence_indicators(raw_daily, settings)
-                candidate = last_bar_divergence_candidate(
-                    symbol, name, raw_daily, settings, frame=evaluated
-                )
-                successful_symbols.add(symbol)
-                if len(evaluated) >= 1:
-                    gates = evaluate_conditions(evaluated, len(evaluated) - 1, settings)
-                    if gates["available"]:
-                        funnel["evaluated"] += 1
-                        if gates["volume_ratio"] is not None:
-                            volume_ratios.append(float(gates["volume_ratio"]))
-                        for key in (
-                            "golden_cross",
-                            "zero_axis_ok",
-                            "volume_ok",
-                            "above_yearline",
-                            "divergence_ok",
-                            "all",
-                        ):
-                            if gates[key]:
-                                funnel[key] += 1
-                if candidate is not None:
-                    candidates.append(candidate)
+                    successful_symbols.add(symbol)
+                    if len(evaluated) >= 1:
+                        gates = evaluate_conditions(evaluated, len(evaluated) - 1, settings)
+                        if gates["available"]:
+                            funnel["evaluated"] += 1
+                            if gates["volume_ratio"] is not None:
+                                volume_ratios.append(float(gates["volume_ratio"]))
+                            for key in (
+                                "golden_cross",
+                                "zero_axis_ok",
+                                "volume_ok",
+                                "above_yearline",
+                                "divergence_ok",
+                                "all",
+                            ):
+                                if gates[key]:
+                                    funnel[key] += 1
+                    if candidate is not None:
+                        candidates.append(candidate)
             except Exception as exc:
                 message = str(exc)
                 if message.startswith("macd_divergence_daily_stale:"):
@@ -2057,6 +2177,8 @@ class SignalMonitor:
                     retryable_symbols.add(symbol)
                 errors.append({"symbol": symbol, "name": name, "error": message[:300]})
 
+        timings["symbol_loop"] = round(time.perf_counter() - loop_started, 3)
+        post_started = time.perf_counter()
         if universe_mode == "watchlist":
             completed_round = len(successful_symbols) == total
             coverage = 1.0 if total == 0 else len(successful_symbols) / total
@@ -2163,6 +2285,18 @@ class SignalMonitor:
                 "all",
             )
         }
+        timings["post_scan"] = round(time.perf_counter() - post_started, 3)
+        timings["total"] = round(time.perf_counter() - scan_started, 3)
+        timings = {key: round(value, 3) for key, value in timings.items()}
+        logger.info(
+            "底背离扫描耗时: total=%ss universe=%ss loop=%ss data=%ss indicators=%ss post=%ss",
+            timings["total"],
+            timings["universe_prepare"],
+            timings["symbol_loop"],
+            timings["data_load"],
+            timings["indicator_logic"],
+            timings["post_scan"],
+        )
         report = {
             "mode": "scan",
             "pool_type": POOL_TYPE_DIVERGENCE,
@@ -2191,6 +2325,7 @@ class SignalMonitor:
             "volume_ratio_distribution": volume_stats,
             "errors": errors,
             "delivery": delivery,
+            "timings": timings,
         }
         report["output_file"] = str(self._save_report("scan_macd_divergence", report))
         return report

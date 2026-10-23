@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, date
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pandas as pd
 
@@ -114,6 +114,47 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertEqual(0.0, report["coverage"])
             self.assertFalse(report["completed_round"])
             self.assertNotEqual("true", monitor.store.get_state("daily_bootstrap_complete"))
+
+    def test_scan_zero_axis_refreshes_snapshot_once_per_trade_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.watchlist = ["000001"]
+            monitor.config["scan"] = {"universe_mode": "watchlist"}
+            monitor.market.latest_expected_trade_date = lambda: date(2025, 1, 2)
+            monitor.market.refresh_daily_histories_from_snapshot = MagicMock(return_value=1)
+            monitor.market.get_bars = lambda *args, **kwargs: pd.DataFrame(
+                {
+                    "datetime": pd.bdate_range(end="2025-01-02", periods=200),
+                    "is_closed": True,
+                }
+            )
+            monitor.analyzer.analyze = lambda *args, **kwargs: {
+                "event_objects": [],
+                "timeframes": {"1d": {"indicators": {}}},
+            }
+            with patch(
+                "monitor.service.now_shanghai",
+                return_value=datetime(2025, 1, 2, 15, 30),
+            ):
+                report = monitor.scan_zero_axis(notify=False)
+                monitor.scan_zero_axis(notify=False)
+            monitor.market.refresh_daily_histories_from_snapshot.assert_called_once()
+            timings = report["timings"]
+            for key in (
+                "snapshot_refresh",
+                "universe_prepare",
+                "market_context",
+                "symbol_loop",
+                "data_load",
+                "technical_analysis",
+                "stock_pool",
+                "fundamental",
+                "post_scan",
+                "total",
+            ):
+                self.assertIn(key, timings)
+            self.assertGreaterEqual(timings["total"], timings["symbol_loop"])
+            self.assertGreaterEqual(timings["symbol_loop"], timings["data_load"])
 
     def test_scan_zero_axis_blocks_confirmation_when_volume_gate_fails(self):
         with tempfile.TemporaryDirectory() as directory:
