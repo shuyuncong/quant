@@ -121,6 +121,13 @@ describe("results page request isolation", () => {
     expect(dialog!.textContent).toContain("该任务暂无 AI 解读");
     expect(dialog!.textContent).not.toContain("研究报告");
     expect(dialog!.querySelector(".stock-report-page")).toBeNull();
+    expect([...dialog!.querySelectorAll("[data-slot='tabs-trigger']")].map((tab) => tab.textContent)).toEqual([
+      "AI 解读",
+      "候选复核",
+    ]);
+    await act(async () => buttonIn(dialog!, "候选复核").click());
+    expect(dialog!.textContent).toContain("生成候选复核");
+    expect(dialog!.textContent).toContain("不改变策略信号");
   });
 
   it("refreshes an open analysis dialog when the task finishes", async () => {

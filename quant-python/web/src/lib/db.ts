@@ -580,7 +580,7 @@ export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobW
      LEFT JOIN LATERAL (
        SELECT id, content, model, created_at
        FROM quant.analysis_notes
-       WHERE job_id = j.id
+       WHERE job_id = j.id AND symbol <> '__candidate_review__'
        ORDER BY id DESC LIMIT 1
      ) n ON true
      WHERE j.kind NOT IN ('interpret-report', 'backtest')
@@ -600,6 +600,7 @@ export async function listJobsWithNote(limit = 100, db?: DbClient): Promise<JobW
             model: String(row.note_model ?? ""),
             result_path: null,
             created_at: String(row.note_created_at ?? ""),
+            kind: "interpret",
           },
   }));
 }
@@ -664,6 +665,9 @@ export async function jobsRunningSince(
 
 // ---------- analysis notes ----------
 
+/** 候选复核与常规 AI 解读共用 analysis_notes；用保留 symbol 区分，避免额外 DDL。 */
+export const CANDIDATE_REVIEW_SYMBOL = "__candidate_review__";
+
 function rowToNote(row: Record<string, unknown>): AnalysisNote {
   return {
     id: Number(row.id),
@@ -673,6 +677,10 @@ function rowToNote(row: Record<string, unknown>): AnalysisNote {
     model: String(row.model ?? ""),
     result_path: row.result_path == null ? null : String(row.result_path),
     created_at: String(row.created_at ?? ""),
+    kind:
+      String(row.symbol ?? "") === CANDIDATE_REVIEW_SYMBOL
+        ? "candidate_review"
+        : "interpret",
   };
 }
 
@@ -683,15 +691,25 @@ export async function addNote(
     content: string;
     model?: string;
     result_path?: string | null;
+    kind?: AnalysisNote["kind"];
   },
   db?: DbClient,
 ): Promise<number> {
   const client = await resolveDb(db);
+  const symbol =
+    input.kind === "candidate_review" ? CANDIDATE_REVIEW_SYMBOL : input.symbol ?? "";
   const result = await client.query<{ id: string | number }>(
     `INSERT INTO quant.analysis_notes
        (job_id, symbol, content, model, result_path, created_at)
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [input.job_id, input.symbol ?? "", input.content, input.model ?? "", input.result_path ?? null, nowIso()],
+    [
+      input.job_id,
+      symbol,
+      input.content,
+      input.model ?? "",
+      input.result_path ?? null,
+      nowIso(),
+    ],
   );
   return Number(result.rows[0].id);
 }
@@ -700,21 +718,30 @@ export async function findNoteByJobAndResult(
   jobId: number,
   resultPath: string,
   db?: DbClient,
+  kind: AnalysisNote["kind"] = "interpret",
 ): Promise<AnalysisNote | null> {
   const client = await resolveDb(db);
+  const operator = kind === "candidate_review" ? "=" : "<>";
   const result = await client.query(
     `SELECT * FROM quant.analysis_notes
-     WHERE job_id = $1 AND result_path = $2 ORDER BY id DESC LIMIT 1`,
-    [jobId, resultPath],
+     WHERE job_id = $1 AND result_path = $2 AND symbol ${operator} $3
+     ORDER BY id DESC LIMIT 1`,
+    [jobId, resultPath, CANDIDATE_REVIEW_SYMBOL],
   );
   return result.rows[0] ? rowToNote(result.rows[0]) : null;
 }
 
-export async function listNotesByJob(jobId: number, db?: DbClient): Promise<AnalysisNote[]> {
+export async function listNotesByJob(
+  jobId: number,
+  db?: DbClient,
+  kind: AnalysisNote["kind"] = "interpret",
+): Promise<AnalysisNote[]> {
   const client = await resolveDb(db);
+  const operator = kind === "candidate_review" ? "=" : "<>";
   const result = await client.query(
-    "SELECT * FROM quant.analysis_notes WHERE job_id = $1 ORDER BY id DESC",
-    [jobId],
+    `SELECT * FROM quant.analysis_notes
+     WHERE job_id = $1 AND symbol ${operator} $2 ORDER BY id DESC`,
+    [jobId, CANDIDATE_REVIEW_SYMBOL],
   );
   return result.rows.map(rowToNote);
 }

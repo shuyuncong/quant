@@ -66,6 +66,8 @@ export interface AnalysisNote {
   model: string;
   result_path: string | null;
   created_at: string;
+  /** interpret = 原有 AI 解读；candidate_review = 候选复核页签。 */
+  kind: "interpret" | "candidate_review";
 }
 
 export interface OperationLog {

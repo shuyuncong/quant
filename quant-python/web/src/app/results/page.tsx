@@ -60,6 +60,11 @@ interface NoteRow {
   created_at: string;
 }
 
+interface ReviewRow {
+  content: string;
+  model: string;
+}
+
 interface JobRow {
   id: number;
   kind: string;
@@ -381,6 +386,9 @@ export default function ResultsPage() {
   const [notify, setNotify] = useState(true);
   const [selectedJob, setSelectedJob] = useState<JobRow | null>(null);
   const [interpreting, setInterpreting] = useState(false);
+  const [reviews, setReviews] = useState<Record<number, ReviewRow>>({});
+  const [reviewErrors, setReviewErrors] = useState<Record<number, string>>({});
+  const [reviewingJob, setReviewingJob] = useState<number | null>(null);
   const [dataJob, setDataJob] = useState<JobRow | null>(null);
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
@@ -388,6 +396,7 @@ export default function ResultsPage() {
   const [reportRetry, setReportRetry] = useState(0);
   const [startingKind, setStartingKind] = useState<string | null>(null);
   const dataRequest = useRef(0);
+  const reviewLoads = useRef<Set<number>>(new Set());
   // 连点保护：从点击到新任务出现在最近任务列表之前，启动按钮保持禁用（只靠轮询状态会留出空档）。
   const startGuard = useRef(false);
   const pendingJobId = useRef<number | null>(null);
@@ -549,6 +558,8 @@ export default function ResultsPage() {
   const selectedJobView = selectedJob
     ? jobs.find((job) => job.id === selectedJob.id) ?? selectedJob
     : null;
+  const activeReview = selectedJobView ? reviews[selectedJobView.id] : undefined;
+  const activeReviewError = selectedJobView ? reviewErrors[selectedJobView.id] : "";
 
   const interpret = useCallback(async () => {
     if (!selectedJobView) return;
@@ -568,6 +579,66 @@ export default function ResultsPage() {
       toast.error(error instanceof Error ? error.message : "AI 解读失败");
     } finally {
       setInterpreting(false);
+    }
+  }, [selectedJobView]);
+
+  useEffect(() => {
+    const job = selectedJobView;
+    if (
+      !job ||
+      job.kind !== "scan" ||
+      job.status !== "success" ||
+      reviewLoads.current.has(job.id)
+    ) {
+      return;
+    }
+    reviewLoads.current.add(job.id);
+    let active = true;
+    fetch(`/api/jobs/${job.id}/review`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const note = (data as { note?: { content?: unknown; model?: unknown } } | null)?.note;
+        if (!active || !note) return;
+        setReviews((prev) => ({
+          ...prev,
+          [job.id]: {
+            content: typeof note.content === "string" ? note.content : "",
+            model: typeof note.model === "string" ? note.model : "",
+          },
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [selectedJobView]);
+
+  const reviewCandidates = useCallback(async () => {
+    if (!selectedJobView) return;
+    setReviewingJob(selectedJobView.id);
+    setReviewErrors((prev) => {
+      const next = { ...prev };
+      delete next[selectedJobView.id];
+      return next;
+    });
+    try {
+      const data = await postJson(`/api/jobs/${selectedJobView.id}/review`, {});
+      const content = typeof data.content === "string" ? data.content : "";
+      if (!content) throw new Error("候选复核返回为空");
+      setReviews((prev) => ({
+        ...prev,
+        [selectedJobView.id]: {
+          content,
+          model: typeof data.model === "string" ? data.model : "",
+        },
+      }));
+      toast.success("候选复核已生成");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "候选复核失败";
+      setReviewErrors((prev) => ({ ...prev, [selectedJobView.id]: message }));
+      toast.error(message);
+    } finally {
+      setReviewingJob((prev) => (prev === selectedJobView.id ? null : prev));
     }
   }, [selectedJobView]);
 
@@ -828,6 +899,7 @@ export default function ResultsPage() {
           >
             <TabsList variant="line" className="w-full shrink-0 justify-start rounded-none border-b px-6">
               <TabsTrigger value="ai" className="flex-none px-3">AI 解读</TabsTrigger>
+              {selectedJobView?.kind === "scan" && <TabsTrigger value="review" className="flex-none px-3">候选复核</TabsTrigger>}
               {selectedJobView?.kind === "analyze" && <TabsTrigger value="report" className="flex-none px-3">研究报告</TabsTrigger>}
             </TabsList>
             {selectedJobView?.kind === "analyze" && (
@@ -874,6 +946,59 @@ export default function ResultsPage() {
                 </div>
               )}
             </TabsContent>
+            {selectedJobView?.kind === "scan" && (
+              <TabsContent value="review" className="min-h-0 flex-1 overflow-y-auto p-6">
+                <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
+                  仅复核候选可信度、风险与数据缺口，不改变策略信号、仓位或交易指令。
+                </div>
+                {selectedJobView.status === "running" || selectedJobView.status === "pending" ? (
+                  <p className="text-sm text-muted-foreground">任务正在运行，完成后可生成候选复核。</p>
+                ) : selectedJobView.status === "failed" ? (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                    {selectedJobView.error || "任务失败，无法复核"}
+                  </div>
+                ) : activeReview ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span>模型：{activeReview.model || "—"}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void reviewCandidates()}
+                        disabled={reviewingJob === selectedJobView.id}
+                      >
+                        <RefreshCw className="mr-1 size-3" />
+                        {reviewingJob === selectedJobView.id ? "生成中..." : "重新生成"}
+                      </Button>
+                    </div>
+                    {activeReviewError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {activeReviewError}
+                      </p>
+                    )}
+                    <MarkdownContent content={activeReview.content} />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-start gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      生成“结论 / 风险 / 数据缺口 / 复核清单”四段式复核，不影响现有 AI 解读和策略信号。
+                    </p>
+                    <Button
+                      onClick={() => void reviewCandidates()}
+                      disabled={reviewingJob === selectedJobView.id}
+                    >
+                      <Sparkles className="size-4" />
+                      {reviewingJob === selectedJobView.id ? "生成中..." : "生成候选复核"}
+                    </Button>
+                    {activeReviewError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {activeReviewError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+            )}
           </Tabs>}
         </DialogContent>
       </Dialog>
