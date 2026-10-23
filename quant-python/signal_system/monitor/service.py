@@ -1154,15 +1154,41 @@ class SignalMonitor:
                     bootstrap_success = set()
                 universe_symbols = {normalize_symbol(row["code"]) for row in rows}
                 bootstrap_success.intersection_update(universe_symbols)
-                bootstrap_success = {
-                    symbol
-                    for symbol in bootstrap_success
+                # Validate each previously successful symbol once per trade
+                # date.  Re-checking the whole success set at the start of every
+                # 500-symbol batch made universe preparation O(n²) and cost
+                # ~4.5 minutes over an 11-batch full-market scan.
+                validated_day = self.store.get_state(
+                    "daily_bootstrap_validated_day", ""
+                )
+                validated_raw = (
+                    self.store.get_state("daily_bootstrap_validated", "[]") or "[]"
+                )
+                try:
+                    validated = set(json.loads(validated_raw))
+                except json.JSONDecodeError:
+                    validated = set()
+                if validated_day != expected_trade_date.isoformat():
+                    validated = set()
+                validated.intersection_update(universe_symbols)
+                for symbol in bootstrap_success - validated:
                     if self.market.daily_history_is_usable(
                         symbol,
                         expected_trade_date,
                         min_bars=self.min_daily_bars,
-                    )
-                }
+                    ):
+                        validated.add(symbol)
+                    else:
+                        bootstrap_success.discard(symbol)
+                validated.intersection_update(bootstrap_success)
+                self.store.set_state(
+                    "daily_bootstrap_validated_day",
+                    expected_trade_date.isoformat(),
+                )
+                self.store.set_state(
+                    "daily_bootstrap_validated",
+                    json.dumps(sorted(validated), ensure_ascii=False),
+                )
                 saved_deferred = self.store.get_state("daily_bootstrap_deferred", "{}") or "{}"
                 try:
                     loaded_deferred = json.loads(saved_deferred)

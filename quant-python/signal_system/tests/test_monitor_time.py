@@ -251,6 +251,41 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertEqual(0.0, report["coverage"])
             self.assertFalse(report["completed_round"])
 
+    def test_bootstrap_validation_is_cached_per_trade_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = self._monitor(directory)
+            monitor.config["scan"] = {"universe_mode": "all_a"}
+            monitor.max_scan_symbols = 1
+            monitor.market.refresh_daily_histories_from_snapshot = lambda: 0
+            monitor.market.get_stock_list = lambda: pd.DataFrame(
+                [
+                    {"code": "000001", "name": "A"},
+                    {"code": "000002", "name": "B"},
+                    {"code": "000003", "name": "C"},
+                ]
+            )
+            monitor.market.latest_expected_trade_date = lambda: date(2025, 1, 2)
+            validation = MagicMock(return_value=True)
+            monitor.market.daily_history_is_usable = validation
+            monitor.market.get_bars = lambda *args, **kwargs: pd.DataFrame(
+                {
+                    "datetime": pd.bdate_range(end="2025-01-02", periods=200),
+                    "is_closed": True,
+                }
+            )
+            monitor._resolve_names = lambda symbols: {}
+            monitor.analyzer.analyze = lambda *args, **kwargs: {
+                "event_objects": [],
+                "timeframes": {"1d": {"indicators": {}}},
+            }
+
+            for _ in range(3):
+                monitor.scan_zero_axis(notify=False)
+
+            # Batch 1 validates nothing; batch 2 validates 000001 once; batch 3
+            # validates only 000002.  Re-validating 000001 every batch would be 3.
+            self.assertEqual(2, validation.call_count)
+
     def test_recent_listing_is_excluded_from_bootstrap_denominator(self):
         with tempfile.TemporaryDirectory() as directory:
             monitor = self._monitor(directory)
