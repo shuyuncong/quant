@@ -560,6 +560,8 @@ export default function ResultsPage() {
     : null;
   const activeReview = selectedJobView ? reviews[selectedJobView.id] : undefined;
   const activeReviewError = selectedJobView ? reviewErrors[selectedJobView.id] : "";
+  const isScanJob =
+    selectedJobView?.kind === "scan" || selectedJobView?.kind === "daily-scan";
 
   const interpret = useCallback(async () => {
     if (!selectedJobView) return;
@@ -899,7 +901,7 @@ export default function ResultsPage() {
           >
             <TabsList variant="line" className="w-full shrink-0 justify-start rounded-none border-b px-6">
               <TabsTrigger value="ai" className="flex-none px-3">AI 解读</TabsTrigger>
-              {selectedJobView?.kind === "scan" && <TabsTrigger value="review" className="flex-none px-3">候选复核</TabsTrigger>}
+              {isScanJob && <TabsTrigger value="review" className="flex-none px-3">候选复核</TabsTrigger>}
               {selectedJobView?.kind === "analyze" && <TabsTrigger value="report" className="flex-none px-3">研究报告</TabsTrigger>}
             </TabsList>
             {selectedJobView?.kind === "analyze" && (
@@ -946,7 +948,7 @@ export default function ResultsPage() {
                 </div>
               )}
             </TabsContent>
-            {selectedJobView?.kind === "scan" && (
+            {isScanJob && selectedJobView && (
               <TabsContent value="review" className="min-h-0 flex-1 overflow-y-auto p-6">
                 <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
                   仅复核候选可信度、风险与数据缺口，不改变策略信号、仓位或交易指令。

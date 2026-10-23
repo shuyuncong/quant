@@ -11,6 +11,7 @@ import {
 } from "@/lib/holdings-context";
 
 const REVIEW_KIND = "candidate_review";
+const SCAN_KINDS: Record<string, true> = { scan: true, "daily-scan": true };
 
 async function existingReview(jobId: number) {
   const notes = await listNotesByJob(jobId, undefined, REVIEW_KIND);
@@ -33,7 +34,7 @@ export async function GET(
   const jobId = Number(id);
   const job = await getJob(jobId);
   if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
-  if (job.kind !== "scan") {
+  if (!SCAN_KINDS[job.kind]) {
     return NextResponse.json({ error: "候选复核仅支持日线扫描任务" }, { status: 422 });
   }
   const note = await existingReview(jobId);
@@ -62,7 +63,7 @@ export async function POST(
   try {
     const job = await getJob(jobId);
     if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
-    if (job.kind !== "scan") {
+    if (!SCAN_KINDS[job.kind]) {
       return NextResponse.json({ error: "候选复核仅支持日线扫描任务" }, { status: 422 });
     }
     if (job.status !== "success" || !job.result_path) {

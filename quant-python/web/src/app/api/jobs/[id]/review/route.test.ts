@@ -101,6 +101,15 @@ describe("candidate review route", () => {
     );
   });
 
+  it("accepts scheduled daily-scan jobs", async () => {
+    mocks.getJob.mockResolvedValue({ ...scanJob, kind: "daily-scan" });
+    const response = await POST(new Request("http://localhost/api/jobs/3/review", { method: "POST" }), params());
+    expect(response.status).toBe(200);
+    expect(mocks.addNote).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "candidate_review" })
+    );
+  });
+
   it("rejects non-scan jobs", async () => {
     mocks.getJob.mockResolvedValue({ ...scanJob, kind: "analyze" });
     const response = await POST(new Request("http://localhost/api/jobs/3/review", { method: "POST" }), params());
