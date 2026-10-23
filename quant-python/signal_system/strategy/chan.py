@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Iterable
 
+import numpy as np
 import pandas as pd
 
 
@@ -89,26 +90,43 @@ def _trend(previous: MergedBar, current_high: float, current_low: float, fallbac
 
 
 def merge_inclusions(frame: pd.DataFrame) -> list[MergedBar]:
-    """Merge inclusive candles using the last explicit non-inclusive direction."""
+    """Merge inclusive candles using the last explicit non-inclusive direction.
+
+    Column arrays are read once instead of going through ``iterrows``/``Series``
+    per bar; the merge is a pure per-row loop, so this only removes pandas
+    indexing overhead and keeps every comparison and float conversion identical.
+    """
     if frame.empty:
         return []
 
+    source = frame.reset_index(drop=True)
+    columns = set(source.columns)
+    timestamps = source["datetime"].to_numpy()
+    opens = source["open"].to_numpy()
+    highs = source["high"].to_numpy()
+    lows = source["low"].to_numpy()
+    closes = source["close"].to_numpy()
+    volumes = source["volume"].to_numpy() if "volume" in columns else None
+    amounts = source["amount"].to_numpy() if "amount" in columns else None
+
     bars: list[MergedBar] = []
     direction = "up"
-    for source_index, (_, row) in enumerate(frame.reset_index(drop=True).iterrows()):
-        high = float(row["high"])
-        low = float(row["low"])
-        amount = float(row.get("amount", 0.0) or 0.0)
+    for source_index in range(len(source)):
+        high = float(highs[source_index])
+        low = float(lows[source_index])
+        amount = float(amounts[source_index] or 0.0) if amounts is not None else 0.0
         current = MergedBar(
             index=len(bars),
             source_start=source_index,
             source_end=source_index,
-            time=_time_text(row["datetime"]),
-            open=float(row["open"]),
+            time=_time_text(timestamps[source_index]),
+            open=float(opens[source_index]),
             high=high,
             low=low,
-            close=float(row["close"]),
-            volume=float(row.get("volume", 0.0) or 0.0),
+            close=float(closes[source_index]),
+            volume=(
+                float(volumes[source_index] or 0.0) if volumes is not None else 0.0
+            ),
             amount=amount,
         )
         if not bars:
@@ -238,16 +256,30 @@ def calculate_stroke_macd_area(strokes: list[Stroke], frame: pd.DataFrame) -> No
         return
     times = pd.to_datetime(frame["datetime"])
     hist = pd.to_numeric(frame["hist"], errors="coerce").fillna(0.0)
+    time_values = times.to_numpy()
+    hist_values = hist.to_numpy()
+    # The frame is sorted by datetime in every production path, so each
+    # stroke's [start, end] slice is two binary searches instead of a full
+    # boolean mask.  Keep the mask path for unsorted inputs so semantics do
+    # not depend on the caller.
+    ordered = len(time_values) < 2 or bool(
+        np.all(time_values[:-1] <= time_values[1:])
+    )
     for stroke in strokes:
         start = pd.Timestamp(stroke.start_time)
         end = pd.Timestamp(stroke.end_time)
-        mask = (times >= start) & (times <= end)
-        values = hist[mask]
+        if ordered:
+            left = int(np.searchsorted(time_values, np.datetime64(start), side="left"))
+            right = int(np.searchsorted(time_values, np.datetime64(end), side="right"))
+            values = hist_values[left:right]
+        else:
+            mask = (times >= start) & (times <= end)
+            values = hist_values[mask.to_numpy()]
         if stroke.direction == "up":
             values = values[values > 0]
         else:
             values = values[values < 0]
-        stroke.macd_area = float(values.abs().sum())
+        stroke.macd_area = float(np.abs(values).sum())
 
 
 def lock_confirmed_strokes(strokes: list[Stroke]) -> list[Stroke]:

@@ -91,8 +91,10 @@ EXPECTED_CONFIG_SHA256 = (
 #   成交量口径本身仍由 volume_unit_shares=100 与其它断言独立校验，未放宽。
 #   ③ 2026-10-22：行情层遵守 data.disable_system_proxy，并支持 MARKET_DATA_PROXY
 #      显式代理；避免系统代理把腾讯/东财 K 线请求改写成 501/断连。不涉及成交量口径。
+# 2026-10-23 重新登记：收盘快照刷新幂等化（同一交易日重复调用不再重写
+# 未变化的 pkl）。不涉及成交量单位、复权或因子口径，旧值 9a5db2e6…
 EXPECTED_MARKET_DATA_SHA256 = (
-    "9a5db2e671b765383935e98a47bdb1105d7afebe6e1dd293541d378ea8a5f739"
+    "5660d97781febf934255fdaab0032ac1ba98422ca5f269b0bf68c581f2764724"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"

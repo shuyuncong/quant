@@ -337,6 +337,64 @@ class MarketDataTests(unittest.TestCase):
             saved = client.load_daily_history("000001")
             self.assertEqual([date(2025, 1, 1)], pd.to_datetime(saved["datetime"]).dt.date.tolist())
 
+    def test_snapshot_refresh_skips_already_written_daily_bar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            history = pd.DataFrame(
+                [
+                    {
+                        "datetime": pd.Timestamp("2025-01-01"),
+                        "open": 10.0,
+                        "high": 10.5,
+                        "low": 9.8,
+                        "close": 10.2,
+                        "volume": 100.0,
+                        "amount": 1000.0,
+                        "is_closed": True,
+                    }
+                ]
+            )
+            client.save_daily_history("000001", history)
+            client._throttle = lambda: None
+            client._latest_expected_trade_date = lambda: date(2025, 1, 2)
+            snapshot = {
+                "data": {
+                    "diff": [
+                        {
+                            "f12": "000001",
+                            "f14": "A",
+                            "f17": 10.1,
+                            "f15": 10.6,
+                            "f16": 9.9,
+                            "f2": 10.3,
+                            "f5": 120.0,
+                            "f6": 1200.0,
+                        }
+                    ]
+                }
+            }
+            client._http_json = MagicMock(return_value=snapshot)
+            with patch(
+                "data.market_data.now_shanghai",
+                return_value=datetime(2025, 1, 2, 15, 30),
+            ):
+                self.assertEqual(1, client.refresh_daily_histories_from_snapshot())
+                path = client._daily_history_path("000001")
+                first_bytes = path.read_bytes()
+                # Same snapshot on the next batch: no rewrite at all.
+                self.assertEqual(0, client.refresh_daily_histories_from_snapshot())
+                self.assertEqual(first_bytes, path.read_bytes())
+
+                # A corrected snapshot still wins; the skip is equality-based.
+                snapshot["data"]["diff"][0]["f2"] = 10.4
+                self.assertEqual(1, client.refresh_daily_histories_from_snapshot())
+            saved = client.load_daily_history("000001")
+            self.assertEqual(
+                [date(2025, 1, 1), date(2025, 1, 2)],
+                pd.to_datetime(saved["datetime"]).dt.date.tolist(),
+            )
+            self.assertEqual(10.4, float(saved.iloc[-1]["close"]))
+
     def test_tushare_accepts_explicit_none_adjustment(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient(

@@ -9,7 +9,12 @@ import pandas as pd
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
-from strategy.macd import analyze_macd, calculate_macd, find_golden_cross_entries
+from strategy.macd import (
+    _golden_cross_indices,
+    analyze_macd,
+    calculate_macd,
+    find_golden_cross_entries,
+)
 
 
 class MacdTests(unittest.TestCase):
@@ -43,6 +48,11 @@ class MacdTests(unittest.TestCase):
         _, summary = analyze_macd(frame, zero_axis_tolerance=1.0)
         self.assertTrue(summary["golden_cross"])
         self.assertTrue(summary["zero_axis_golden_cross"])
+
+    def test_golden_cross_indices_ignore_nan_warmup_and_non_crosses(self):
+        dif = pd.Series([float("nan"), float("nan"), -1.0, 0.0, 1.0, 0.5, 2.0, 1.0])
+        dea = pd.Series([float("nan"), float("nan"), 0.0, 0.0, 0.0, 1.0, 1.0, 1.5])
+        self.assertEqual([4, 6], _golden_cross_indices(dif, dea))
 
     def test_zero_axis_tolerance_filters_far_cross(self):
         values = [100 - index for index in range(60)] + [40 + index * 3 for index in range(60)]

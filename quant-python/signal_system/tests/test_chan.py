@@ -13,6 +13,7 @@ from strategy.chan import (
     Fractal,
     Stroke,
     build_strokes,
+    calculate_stroke_macd_area,
     detect_chan_signals,
     find_fractals,
     lock_confirmed_strokes,
@@ -68,6 +69,48 @@ class ChanTests(unittest.TestCase):
         fractals = find_fractals(merged)
         self.assertEqual("top", fractals[0].kind)
         self.assertEqual(12, fractals[0].price)
+
+    def test_merge_inclusions_without_optional_volume_columns(self):
+        frame = pd.DataFrame(
+            [
+                ["2025-01-01", 9, 10, 8, 9],
+                ["2025-01-02", 10, 12, 9, 11],
+                ["2025-01-03", 9, 11, 7, 8],
+            ],
+            columns=["datetime", "open", "high", "low", "close"],
+        )
+        merged = merge_inclusions(frame)
+        self.assertEqual(3, len(merged))
+        self.assertEqual([0.0, 0.0, 0.0], [bar.volume for bar in merged])
+        self.assertEqual([0.0, 0.0, 0.0], [bar.amount for bar in merged])
+        self.assertEqual("2025-01-03T00:00:00", merged[-1].time)
+
+    def test_stroke_macd_area_matches_for_sorted_and_unsorted_frames(self):
+        frame = pd.DataFrame(
+            {
+                "datetime": pd.date_range("2025-01-01", periods=5, freq="D"),
+                "hist": [1.0, -2.0, 3.0, -4.0, 5.0],
+            }
+        )
+        up = Stroke(
+            index=0,
+            start_index=1,
+            end_index=4,
+            direction="up",
+            start_price=10,
+            end_price=12,
+            high=12,
+            low=10,
+            start_time="2025-01-02T00:00:00",
+            end_time="2025-01-05T00:00:00",
+            confirmed_at="2025-01-05T00:00:00",
+        )
+        calculate_stroke_macd_area([up], frame)
+        self.assertEqual(8.0, up.macd_area)
+
+        up.macd_area = 0.0
+        calculate_stroke_macd_area([up], frame.sample(frac=1, random_state=7))
+        self.assertEqual(8.0, up.macd_area)
 
     def test_first_and_second_buy(self):
         strokes = [

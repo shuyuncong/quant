@@ -68,14 +68,18 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     "canonical_replay_semantics_audit": "691535a8854ad1d3dcd61cd669823fac4131344d86b17db6fcb120c796aac0f3",
     "macd_divergence_audit": "ae17dd4906b52fc07058156ab229c3fe264dbde83183c482e5a6fb6ac919ca1e",
     # 2026-10-22: 行情层遵守 data.disable_system_proxy（系统代理导致 501/断连）。
-    "market_data": "9a5db2e671b765383935e98a47bdb1105d7afebe6e1dd293541d378ea8a5f739",
+    # 2026-10-23: 收盘快照刷新幂等化（同一交易日重复调用不再重写未变化的
+    # pkl）；行情字段、复权口径与策略读取路径未变。
+    "market_data": "5660d97781febf934255fdaab0032ac1ba98422ca5f269b0bf68c581f2764724",
     # 旧值 af70eab3… == c02418a(2026-08-14) 的 **CRLF** 形态 → Windows 产物。
-    # 该文件此后未再改动，与 HEAD 的归一值仅差行尾。
-    "strategy_chan": "ed7de01a140809ce300092e44c3dbf9718c901913b91926bc787831105f60ca8",
+    # 2026-10-23: 包含关系合并与笔 MACD 面积改为数组/二分切片，输出经
+    # 300 只真实样本逐字段比对完全一致；策略判定逻辑未变。
+    "strategy_chan": "c4d8e6b64d38ffae3141aaf8b5433af8082abaa4b14f8bc7aea28b37f5d3d266",
     # 旧值 cb1e5ff3… == abff923(2026-08-26) 的 **CRLF** 形态 → Windows 产物。
     # 之后新增 _unique_confirmation_entries()（同一确认bar/zone去重）。
     # 2026-10-22: 新增 volume_gate_enabled 参数与 summary 字段（零轴金叉成交量硬门槛）。
-    "strategy_macd": "0180bb86c31fb494f8be81519e1921fcc32eccc1ba59bc01de74c743c40d1e20",
+    # 2026-10-23: 金叉索引扫描向量化，输出索引经 500 只真实样本逐项比对一致。
+    "strategy_macd": "49b532841c08d4c0443345dcbd11f6f1849aae1423df72f4be05b075aaba2016",
     # 旧值即当前值（原本就按 LF 登记）。
     "strategy_market_gate": "fa69dbee01817e44b7b4bc73c50c9a37fa5b4f8b4eb08460dc134979d6d7abe6",
     # 旧值即当前值（原本就按 LF 登记）。
@@ -83,7 +87,9 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # **永久失联**：旧值 3ec75b77… 与全部 18 个历史修订的 LF/CRLF 形态
     # 及另 5 种常见字节变换均不匹配。本次按当前 HEAD 登记。
     "utils_helpers": "4a224fad302a98f7fbbf69620969bbc168f259ecf47f92159e69bc22071feabc",
-    "volume_unit_continuity_audit": "17a8577ba0a8e02fa418bed660a953ddd86bc464b351ad45aca024cbe99dd2e5",
+    # 2026-10-23: 仅重新登记 market_data 快照哈希（幂等刷新优化），
+    # 本审计的成交量口径断言未变。
+    "volume_unit_continuity_audit": "d28a5574d2c391abd93e041b4be6c10699c1b6fef311858e94d8a45f98628bcb",
 }
 
 

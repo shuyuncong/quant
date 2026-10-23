@@ -38,19 +38,28 @@ def calculate_macd(
 
 
 def _golden_cross_indices(dif: pd.Series, dea: pd.Series) -> list[int]:
-    """Return confirmed golden-cross bar indexes without look-ahead."""
-    previous_dif = dif.shift(1)
-    previous_dea = dea.shift(1)
-    return [
-        index
-        for index in range(1, len(dif))
-        if pd.notna(dif.iloc[index])
-        and pd.notna(dea.iloc[index])
-        and pd.notna(previous_dif.iloc[index])
-        and pd.notna(previous_dea.iloc[index])
-        and dif.iloc[index] > dea.iloc[index]
-        and previous_dif.iloc[index] <= previous_dea.iloc[index]
-    ]
+    """Return confirmed golden-cross bar indexes without look-ahead.
+
+    Vectorized over the same pairwise comparisons as the previous element-wise
+    loop.  The scan runs this helper twice per symbol, so the iloc loop was a
+    measurable share of the full-market wall clock.
+    """
+    dif_values = dif.to_numpy(dtype=float, na_value=np.nan)
+    dea_values = dea.to_numpy(dtype=float, na_value=np.nan)
+    if len(dif_values) < 2:
+        return []
+    previous_dif = dif_values[:-1]
+    previous_dea = dea_values[:-1]
+    with np.errstate(invalid="ignore"):
+        mask = (
+            ~np.isnan(dif_values[1:])
+            & ~np.isnan(dea_values[1:])
+            & ~np.isnan(previous_dif)
+            & ~np.isnan(previous_dea)
+            & (dif_values[1:] > dea_values[1:])
+            & (previous_dif <= previous_dea)
+        )
+    return (np.flatnonzero(mask) + 1).tolist()
 
 
 def _pullback_confirmation(

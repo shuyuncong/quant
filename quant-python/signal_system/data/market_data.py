@@ -571,6 +571,62 @@ class MarketDataClient:
             logger.warning("读取 %s 日线历史失败: %s", symbol, exc)
             return pd.DataFrame(columns=STANDARD_COLUMNS)
 
+    def _history_has_snapshot_bar(
+        self,
+        history: pd.DataFrame,
+        trade_date: pd.Timestamp,
+        open_price: float,
+        high_price: float,
+        low_price: float,
+        close_price: float,
+        volume: float,
+        amount: float,
+        snapshot_source: str,
+    ) -> bool:
+        """True when appending the snapshot row would leave the frame unchanged.
+
+        The caller skips its concat/dedup/sort/write path only for frames that
+        are already ordered, unique and already end with the exact same row.
+        Anything unusual falls back to the original rewrite.
+        """
+        if history.empty:
+            return False
+        attrs = history.attrs
+        if (
+            attrs.get("source") != snapshot_source
+            or attrs.get("timeframe") != "1d"
+            or attrs.get("adjust") != self.adjust
+            or attrs.get("timezone") != "Asia/Shanghai"
+            or attrs.get("timestamp_semantics") != "end"
+        ):
+            return False
+        try:
+            timestamps = pd.to_datetime(history["datetime"], errors="coerce")
+            if (
+                timestamps.isna().any()
+                or not timestamps.is_monotonic_increasing
+                or not timestamps.is_unique
+            ):
+                return False
+            last_bar = history.iloc[-1]
+            if pd.Timestamp(last_bar["datetime"]).date() != trade_date.date():
+                return False
+            if "is_closed" in last_bar.index and not bool(last_bar["is_closed"]):
+                return False
+            return all(
+                float(last_bar[column]) == expected
+                for column, expected in (
+                    ("open", open_price),
+                    ("high", high_price),
+                    ("low", low_price),
+                    ("close", close_price),
+                    ("volume", volume),
+                    ("amount", amount),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            return False
+
     def daily_history_is_usable(
         self,
         symbol: str,
@@ -731,6 +787,26 @@ class MarketDataClient:
             if numeric.iloc[4:].notna().any() and (numeric.iloc[4:].dropna() < 0).any():
                 continue
             history = self.load_daily_history(symbol)
+            volume = 0.0 if pd.isna(numeric.iloc[4]) else float(numeric.iloc[4])
+            amount = 0.0 if pd.isna(numeric.iloc[5]) else float(numeric.iloc[5])
+            # The snapshot refresh runs once per scan batch (11 batches for the
+            # full A-share universe), and every batch used to load, concat and
+            # pickle all ~5000 histories even when today's bar was already
+            # written by the previous batch.  Skipping the rewrite when the
+            # stored last bar is byte-for-byte the same row keeps the data
+            # identical while removing the repeated file I/O.
+            if not history.empty and self._history_has_snapshot_bar(
+                history,
+                trade_date,
+                open_price,
+                high_price,
+                low_price,
+                close_price,
+                volume,
+                amount,
+                snapshot_source,
+            ):
+                continue
             latest = pd.DataFrame(
                 [
                     {
@@ -739,8 +815,8 @@ class MarketDataClient:
                         "high": high_price,
                         "low": low_price,
                         "close": close_price,
-                        "volume": 0.0 if pd.isna(numeric.iloc[4]) else float(numeric.iloc[4]),
-                        "amount": 0.0 if pd.isna(numeric.iloc[5]) else float(numeric.iloc[5]),
+                        "volume": volume,
+                        "amount": amount,
                         "is_closed": True,
                     }
                 ]
