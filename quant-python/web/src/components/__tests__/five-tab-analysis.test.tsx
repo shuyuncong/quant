@@ -51,4 +51,17 @@ describe("五页签退出提示", () => {
   it("有持仓时才使用预警口径", () => {
     expect(render(true)).toContain("预警");
   });
+
+  it("阶段为 null 时降级为等待生成而不是崩溃", () => {
+    const broken = {
+      ...document(false),
+      technical: null,
+      synthesis: null,
+    } as unknown as AnalysisDocumentView;
+    const html = renderToStaticMarkup(
+      createElement(FiveTabAnalysis, { document: broken })
+    );
+    expect(html).toContain("等待生成");
+    expect(html).toContain("分析结果生成后将在此处实时展示");
+  });
 });

@@ -145,11 +145,21 @@ export function FiveTabAnalysis({
   held?: boolean | null;
   onRetry?: () => void;
 }) {
-  const failed =
-    document.technical.status === "failed" || document.synthesis.status === "failed";
+  // 旧记录或中断的生成流程可能把阶段写成 null；列表接口按原样返回，
+  // 组件不能假设 analysis-service 新建时一定有这两个对象。
+  const technical: AnalysisStage = document.technical ?? {
+    status: "pending",
+    content: "",
+  };
+  const synthesis: AnalysisStage = document.synthesis ?? {
+    status: "pending",
+    content: "",
+  };
+  const strategies = document.strategies ?? [];
+  const failed = technical.status === "failed" || synthesis.status === "failed";
 
-  const buyStrategies = document.strategies.filter((s) => s.buy);
-  const sellStrategies = document.strategies.filter((s) => s.sell);
+  const buyStrategies = strategies.filter((s) => s.buy);
+  const sellStrategies = strategies.filter((s) => s.sell);
 
   // 综合判定共识态度
   let consensusTone: "bull" | "bear" | "neutral" = "neutral";
@@ -213,7 +223,7 @@ export function FiveTabAnalysis({
 
       {/* 多策略共识状态微型看板 */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {document.strategies.map((strategy) => {
+        {strategies.map((strategy) => {
           const isOk = strategy.status === "ok";
           return (
             <div
@@ -262,15 +272,15 @@ export function FiveTabAnalysis({
         </div>
 
         <TabsContent value="synthesis" className="space-y-4 pt-2">
-          <Stage value={document.synthesis} />
+          <Stage value={synthesis} />
         </TabsContent>
 
         <TabsContent value="technical" className="space-y-4 pt-2">
-          <Stage value={document.technical} />
+          <Stage value={technical} />
         </TabsContent>
 
         {STRATEGIES.map((strategy) => {
-          const result = document.strategies.find((row) => row.strategy_id === strategy.id);
+          const result = strategies.find((row) => row.strategy_id === strategy.id);
           return (
             <TabsContent key={strategy.id} value={strategy.id} className="space-y-4 pt-2">
               {!result ? (
