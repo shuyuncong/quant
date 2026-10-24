@@ -63,6 +63,7 @@ interface NoteRow {
 interface ReviewRow {
   content: string;
   model: string;
+  created_at: string;
 }
 
 interface JobRow {
@@ -588,7 +589,7 @@ export default function ResultsPage() {
     const job = selectedJobView;
     if (
       !job ||
-      job.kind !== "scan" ||
+      (job.kind !== "scan" && job.kind !== "daily-scan") ||
       job.status !== "success" ||
       reviewLoads.current.has(job.id)
     ) {
@@ -599,13 +600,18 @@ export default function ResultsPage() {
     fetch(`/api/jobs/${job.id}/review`)
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => {
-        const note = (data as { note?: { content?: unknown; model?: unknown } } | null)?.note;
+        const note = (
+          data as {
+            note?: { content?: unknown; model?: unknown; created_at?: unknown };
+          } | null
+        )?.note;
         if (!active || !note) return;
         setReviews((prev) => ({
           ...prev,
           [job.id]: {
             content: typeof note.content === "string" ? note.content : "",
             model: typeof note.model === "string" ? note.model : "",
+            created_at: typeof note.created_at === "string" ? note.created_at : "",
           },
         }));
       })
@@ -615,7 +621,7 @@ export default function ResultsPage() {
     };
   }, [selectedJobView]);
 
-  const reviewCandidates = useCallback(async () => {
+  const reviewCandidates = useCallback(async (regenerate = false) => {
     if (!selectedJobView) return;
     setReviewingJob(selectedJobView.id);
     setReviewErrors((prev) => {
@@ -624,7 +630,7 @@ export default function ResultsPage() {
       return next;
     });
     try {
-      const data = await postJson(`/api/jobs/${selectedJobView.id}/review`, {});
+      const data = await postJson(`/api/jobs/${selectedJobView.id}/review`, { regenerate });
       const content = typeof data.content === "string" ? data.content : "";
       if (!content) throw new Error("候选复核返回为空");
       setReviews((prev) => ({
@@ -632,9 +638,10 @@ export default function ResultsPage() {
         [selectedJobView.id]: {
           content,
           model: typeof data.model === "string" ? data.model : "",
+          created_at: typeof data.created_at === "string" ? data.created_at : "",
         },
       }));
-      toast.success("候选复核已生成");
+      toast.success(regenerate ? "候选复核已重新生成" : "候选复核已生成");
     } catch (error) {
       const message = error instanceof Error ? error.message : "候选复核失败";
       setReviewErrors((prev) => ({ ...prev, [selectedJobView.id]: message }));
@@ -962,11 +969,16 @@ export default function ResultsPage() {
                 ) : activeReview ? (
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span>模型：{activeReview.model || "—"}</span>
+                      <span>
+                        模型：{activeReview.model || "—"}
+                        {activeReview.created_at
+                          ? ` · 生成于 ${new Date(activeReview.created_at).toLocaleString()}`
+                          : ""}
+                      </span>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => void reviewCandidates()}
+                        onClick={() => void reviewCandidates(true)}
                         disabled={reviewingJob === selectedJobView.id}
                       >
                         <RefreshCw className="mr-1 size-3" />

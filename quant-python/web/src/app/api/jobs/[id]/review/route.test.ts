@@ -101,6 +101,40 @@ describe("candidate review route", () => {
     );
   });
 
+  it("returns the persisted review instead of calling the model again", async () => {
+    mocks.listNotesByJob.mockResolvedValue([
+      { id: 7, content: "## 结论\n已有", model: "stub", created_at: "2026-10-23" },
+    ]);
+    const response = await POST(new Request("http://localhost/api/jobs/3/review", { method: "POST" }), params());
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      note_id: 7,
+      content: "## 结论\n已有",
+      created_at: "2026-10-23",
+    });
+    expect(mocks.reviewCandidatesWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("regenerates when explicitly requested", async () => {
+    mocks.listNotesByJob.mockResolvedValue([
+      { id: 7, content: "## 结论\n已有", model: "stub", created_at: "2026-10-23" },
+    ]);
+    const response = await POST(
+      new Request("http://localhost/api/jobs/3/review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ regenerate: true }),
+      }),
+      params()
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.reviewCandidatesWithFallback).toHaveBeenCalled();
+    expect(mocks.addNote).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "candidate_review" })
+    );
+  });
+
   it("accepts scheduled daily-scan jobs", async () => {
     mocks.getJob.mockResolvedValue({ ...scanJob, kind: "daily-scan" });
     const response = await POST(new Request("http://localhost/api/jobs/3/review", { method: "POST" }), params());

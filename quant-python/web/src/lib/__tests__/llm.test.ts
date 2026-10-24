@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInterpretationContext, readStreamContent, resolveProxy, INTERPRET_SYSTEM_PROMPT, extractStandpoints } from "../llm";
+import { buildCandidateReviewContext, buildInterpretationContext, readStreamContent, resolveProxy, INTERPRET_SYSTEM_PROMPT, extractStandpoints } from "../llm";
 
 function bars(prefix: string, count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -130,6 +130,57 @@ describe("buildInterpretationContext", () => {
     const advice = parsed.results[0].strategies[0].exit_plan_advice;
     expect(advice.next.trigger_price).toBe(11.5);
     expect(advice.next.quantity).toBe(500);
+  });
+});
+
+describe("buildCandidateReviewContext", () => {
+  it("keeps gates, pool, candidate counts and data freshness", () => {
+    const report = {
+      mode: "scan",
+      scanned_at: "2026-10-24T18:04:31+08:00",
+      universe_mode: "all_a",
+      universe_size: 5027,
+      coverage: 1,
+      completed_round: true,
+      candidate_count: 1,
+      observed_count: 0,
+      market_gate: { today: { allows_entries: false, blocked_by: ["ma10_latch_bear"] } },
+      market_gate_signals: { this_run: { signals_screened: 1, blocked_by_market_gate: 1 } },
+      stock_pool: { config: { min_market_cap: 50 }, rejection_details: [], data_errors: [] },
+      fundamental: { enabled: false, details: [] },
+      stale_symbol_count: 2,
+      expected_trade_date: "2026-10-23",
+      errors: [],
+      candidates: [
+        {
+          symbol: "002100",
+          name: "天康生物",
+          execution_mode: "observe_only",
+          entry_gate_blocked: true,
+          observe_reason: "market_gate_closed",
+          stock_pool_warnings: [],
+          fundamental_warnings: [],
+        },
+      ],
+      observed_candidates: [],
+    };
+    const parsed = JSON.parse(
+      buildCandidateReviewContext(JSON.stringify(report), 20_000)
+    ) as Record<string, unknown>;
+    expect(parsed.coverage).toBe(1);
+    expect(parsed.market_gate).toEqual(report.market_gate);
+    expect(parsed.market_gate_signals).toEqual(report.market_gate_signals);
+    expect(parsed.stock_pool).toMatchObject(report.stock_pool);
+    expect(parsed.candidate_summary).toMatchObject({
+      count: 1,
+      observe_only_count: 1,
+      entry_gate_blocked_count: 1,
+      symbols: ["002100"],
+    });
+    expect(parsed.data_freshness).toMatchObject({
+      stale_symbol_count: 2,
+      expected_trade_date: "2026-10-23",
+    });
   });
 });
 

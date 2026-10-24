@@ -335,6 +335,221 @@ export function buildInterpretationContext(reportText: string, maxChars = 60_000
   return JSON.stringify(compactReport(report, 0, 30));
 }
 
+const CANDIDATE_REVIEW_REPORT_KEYS = [
+  "mode",
+  "pool_type",
+  "scanned_at",
+  "universe_mode",
+  "universe_size",
+  "batch_start",
+  "batch_size",
+  "coverage",
+  "completed_round",
+  "ineligible_symbols",
+  "eligible_symbol_count",
+  "deferred_symbol_count",
+  "insufficient_symbol_count",
+  "stale_symbol_count",
+  "expected_trade_date",
+  "retryable_error_count",
+  "snapshot_histories_updated",
+  "market_context",
+  "market_gate",
+  "market_gate_signals",
+  "signal_execution_policy",
+  "candidate_count",
+  "observed_count",
+  "condition_funnel",
+  "volume_ratio_distribution",
+  "timings",
+  "delivery",
+  "research_only",
+  "entry_reference",
+  "config",
+  "paper_trade",
+  "notify_enabled",
+  "new_events",
+] as const;
+
+function pickReviewFields(report: JsonObject): JsonObject {
+  const picked: JsonObject = {};
+  for (const key of CANDIDATE_REVIEW_REPORT_KEYS) {
+    if (key in report) picked[key] = report[key];
+  }
+  return picked;
+}
+
+function boardOf(value: unknown): string {
+  const symbol = String(value ?? "");
+  if (symbol.startsWith("68")) return "科创板";
+  if (symbol.startsWith("60")) return "沪市主板";
+  if (symbol.startsWith("30")) return "创业板";
+  if (symbol.startsWith("00")) return "深市主板";
+  if (/^[48]/.test(symbol)) return "北交所";
+  return "未知";
+}
+
+function reviewCandidate(value: unknown): JsonObject {
+  const candidate = { ...asObject(value) };
+  // 顶层 market_context 已保留，逐候选重复一份只会挤掉复核需要的明细。
+  delete candidate.market_context;
+  if (Array.isArray(candidate.chan_signals)) {
+    candidate.chan_signals = candidate.chan_signals.slice(0, 5);
+  }
+  return candidate;
+}
+
+function summarizeCandidates(values: unknown[], symbolLimit = 200): JsonObject {
+  const rows = values.map(asObject);
+  const modes: Record<string, number> = {};
+  const boards: Record<string, number> = {};
+  const symbols: unknown[] = [];
+  const confirmedDates = new Set<string>();
+  let entryGateBlocked = 0;
+  let observeOnly = 0;
+  let executable = 0;
+  let withStockPoolWarnings = 0;
+  let withFundamentalWarnings = 0;
+  for (const row of rows) {
+    const mode = typeof row.execution_mode === "string" ? row.execution_mode : "";
+    if (mode) modes[mode] = (modes[mode] ?? 0) + 1;
+    if (mode === "observe_only") observeOnly += 1;
+    if (mode === "enabled" && row.entry_gate_blocked !== true) executable += 1;
+    if (row.entry_gate_blocked === true) entryGateBlocked += 1;
+    const board = boardOf(row.symbol);
+    boards[board] = (boards[board] ?? 0) + 1;
+    if (symbols.length < symbolLimit && row.symbol) symbols.push(row.symbol);
+    if (Array.isArray(row.stock_pool_warnings) && row.stock_pool_warnings.length > 0) {
+      withStockPoolWarnings += 1;
+    }
+    if (Array.isArray(row.fundamental_warnings) && row.fundamental_warnings.length > 0) {
+      withFundamentalWarnings += 1;
+    }
+    const date = row.confirmed_at ?? row.signal_date;
+    if (typeof date === "string" && date) confirmedDates.add(date.slice(0, 10));
+  }
+  const hasExecutionMode = rows.some((row) => typeof row.execution_mode === "string");
+  return {
+    count: rows.length,
+    executable_count: hasExecutionMode ? executable : null,
+    observe_only_count: hasExecutionMode ? observeOnly : null,
+    entry_gate_blocked_count: entryGateBlocked,
+    execution_mode_counts: Object.keys(modes).length > 0 ? modes : null,
+    board_counts: boards,
+    symbols,
+    symbols_truncated: rows.length > symbols.length,
+    confirmed_dates: [...confirmedDates].sort(),
+    candidates_with_stock_pool_warnings: withStockPoolWarnings,
+    candidates_with_fundamental_warnings: withFundamentalWarnings,
+  };
+}
+
+function reviewDataFreshness(
+  report: JsonObject,
+  candidates: JsonObject[],
+  observed: JsonObject[]
+): JsonObject {
+  const marketContext = asObject(report.market_context);
+  const missing = [
+    "stale_symbol_count",
+    "expected_trade_date",
+    "market_gate",
+    "market_gate_signals",
+    "stock_pool",
+    "fundamental",
+    "condition_funnel",
+  ].filter((key) => report[key] === null || report[key] === undefined);
+  const dataDates = new Set<string>();
+  for (const row of [...candidates, ...observed]) {
+    for (const value of [
+      row.confirmed_at,
+      row.signal_date,
+      asObject(row.stock_pool_metrics).as_of,
+    ]) {
+      if (typeof value === "string" && value) dataDates.add(value.slice(0, 10));
+    }
+  }
+  return {
+    scanned_at: report.scanned_at,
+    scanned_at_timezone: "Asia/Shanghai",
+    expected_trade_date: report.expected_trade_date ?? null,
+    market_index_last_day: marketContext.index_last_day ?? null,
+    candidate_data_dates: [...dataDates].sort(),
+    stale_symbol_count: report.stale_symbol_count ?? null,
+    insufficient_symbol_count: report.insufficient_symbol_count ?? null,
+    deferred_symbol_count: report.deferred_symbol_count ?? null,
+    eligible_symbol_count: report.eligible_symbol_count ?? null,
+    error_count: Array.isArray(report.errors) ? report.errors.length : null,
+    missing_fields: missing,
+  };
+}
+
+function buildCandidateReviewView(report: JsonObject, candidateLimit: number): JsonObject {
+  const candidates = Array.isArray(report.candidates) ? report.candidates : [];
+  const observed = Array.isArray(report.observed_candidates) ? report.observed_candidates : [];
+  const selected = candidates.slice(0, candidateLimit).map(reviewCandidate);
+  const selectedObserved = observed.slice(0, candidateLimit).map(reviewCandidate);
+  const errors = Array.isArray(report.errors) ? report.errors : [];
+  const stockPool = asObject(report.stock_pool);
+  const stockPoolDetails = Array.isArray(stockPool.rejection_details)
+    ? stockPool.rejection_details
+    : [];
+  const stockPoolErrors = Array.isArray(stockPool.data_errors) ? stockPool.data_errors : [];
+  const fundamental = asObject(report.fundamental);
+  const fundamentalDetails = Array.isArray(fundamental.details) ? fundamental.details : [];
+  return {
+    ...pickReviewFields(report),
+    candidate_count: report.candidate_count ?? candidates.length,
+    candidates_total: candidates.length,
+    candidates_truncated: candidates.length > selected.length,
+    observed_count: report.observed_count ?? observed.length,
+    observed_total: observed.length,
+    observed_candidates_truncated: observed.length > selectedObserved.length,
+    candidates: selected,
+    observed_candidates: selectedObserved,
+    candidate_summary: summarizeCandidates(candidates),
+    observed_summary: summarizeCandidates(observed),
+    data_freshness: reviewDataFreshness(report, candidates.map(asObject), observed.map(asObject)),
+    stock_pool: {
+      ...stockPool,
+      rejection_details: stockPoolDetails.slice(0, 100),
+      rejection_details_truncated: stockPoolDetails.length > 100,
+      data_errors: stockPoolErrors.slice(0, 50),
+      data_errors_truncated: stockPoolErrors.length > 50,
+    },
+    fundamental: {
+      ...fundamental,
+      details: fundamentalDetails.slice(0, 100),
+      details_truncated: fundamentalDetails.length > 100,
+    },
+    errors: errors.slice(0, 100),
+    errors_truncated: errors.length > 100,
+  };
+}
+
+/**
+ * 候选复核上下文：与 AI 解读不同，复核必须拿到闸门、股票池、候选分类和
+ * 数据时效等完整字段；通用压缩会把这些“非行情”字段全部丢掉。
+ */
+export function buildCandidateReviewContext(reportText: string, maxChars = 60_000): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(reportText);
+  } catch {
+    return reportText.length <= maxChars ? reportText : reportText.slice(0, maxChars);
+  }
+  const report = asObject(parsed);
+  for (const limit of [200, 100, 50, 20, 0]) {
+    const text = JSON.stringify(buildCandidateReviewView(report, limit), null, 2);
+    if (text.length <= maxChars) return text;
+  }
+  const fallback = buildCandidateReviewView(report, 0);
+  delete fallback.candidates;
+  delete fallback.observed_candidates;
+  const text = JSON.stringify(fallback, null, 2);
+  return text.length <= maxChars ? text : text.slice(0, maxChars);
+}
+
 /** 候选复核页签的系统提示词：只做结论/风险/数据缺口/复核清单，不给交易指令。 */
 export const CANDIDATE_REVIEW_SYSTEM_PROMPT =
   "你是 A 股量化候选池的复核助手。你的任务不是推荐买卖，而是检查扫描结果是否可信、有哪些风险和数据缺口，并给出人工复核清单。\n\n" +
@@ -347,7 +562,10 @@ export const CANDIDATE_REVIEW_SYSTEM_PROMPT =
   "- 复核清单：5-10 条可执行检查项，用 Markdown checklist（- [ ]），每条包含具体股票代码、字段、日期或检查方法。\n" +
   "- 不输出买入/卖出/加仓/减仓/仓位比例等交易指令；不预测涨跌；不改变任何信号。\n" +
   "- 如果报告显示扫描尚未完成（completed_round=false），把“等待扫描完成”列为复核清单第一条。\n" +
-  "- 引用数字时保留报告原值，不要四舍五入到失真。";
+  "- 引用数字时保留报告原值，不要四舍五入到失真。\n" +
+  "- 优先引用服务端已算好的 candidate_summary / observed_summary / data_freshness；其中的 executable_count、observe_only_count、entry_gate_blocked_count、board_counts、symbols 都是确定性结果，不要重新猜测。\n" +
+  "- 市场闸门、仓位闸门、量能必须从 market_gate、market_gate_signals、signal_execution_policy、stock_pool、fundamental 中找依据；不要因为没看到某个词就写“未提供”。\n" +
+  "- 只有 data_freshness.missing_fields 列出的字段才能写“报告未提供”；errors=[] 不等于 stale_symbol_count=0。";
 
 /** AI 解读的系统提示词：必须结合【我的持仓】给出明确操作主张。 */
 export const INTERPRET_SYSTEM_PROMPT =
@@ -438,7 +656,7 @@ function buildCandidateReviewMessages(
 ): ChatMessage[] {
   const supplemental = supplementalContext?.trim() ?? "";
   const reportBudget = Math.max(1_000, 60_000 - supplemental.length - 256);
-  const compacted = buildInterpretationContext(reportText, reportBudget);
+  const compacted = buildCandidateReviewContext(reportText, reportBudget);
   const context = supplemental
     ? `${compacted}\n\n补充上下文：\n${supplemental}`
     : compacted;

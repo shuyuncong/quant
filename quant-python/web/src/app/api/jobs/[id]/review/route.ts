@@ -52,7 +52,7 @@ export async function GET(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -61,6 +61,8 @@ export async function POST(
   }
   const jobId = Number(id);
   try {
+    const body = (await request.json().catch(() => ({}))) as { regenerate?: unknown };
+    const regenerate = body.regenerate === true;
     const job = await getJob(jobId);
     if (!job) return NextResponse.json({ error: "任务不存在" }, { status: 404 });
     if (!SCAN_KINDS[job.kind]) {
@@ -78,12 +80,13 @@ export async function POST(
     }
 
     const existing = await existingReview(jobId);
-    if (existing) {
+    if (existing && !regenerate) {
       return NextResponse.json({
         ok: true,
         note_id: existing.id,
         content: existing.content,
         model: existing.model,
+        created_at: existing.created_at,
       });
     }
 
@@ -130,6 +133,7 @@ export async function POST(
       note_id: noteId,
       content: content.content,
       model: content.model.name,
+      created_at: new Date().toISOString(),
     });
   } catch (error) {
     return NextResponse.json(

@@ -1676,6 +1676,12 @@ class SignalMonitor:
             "coverage": coverage,
             "completed_round": completed_round,
             "ineligible_symbols": len(deferred_today | insufficient_symbols | stale_symbols),
+            "eligible_symbol_count": total
+            - len(deferred_today | insufficient_symbols | stale_symbols),
+            "deferred_symbol_count": len(deferred_today),
+            "insufficient_symbol_count": len(insufficient_symbols),
+            "stale_symbol_count": len(stale_symbols),
+            "expected_trade_date": expected_trade_date.isoformat(),
             "market_context": market_context,
             "market_gate": market_gate_summary,
             "market_gate_signals": market_gate_signals,

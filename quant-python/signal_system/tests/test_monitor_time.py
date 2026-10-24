@@ -316,6 +316,11 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertEqual(1.0, report["coverage"])
             self.assertTrue(report["completed_round"])
             self.assertEqual(1, report["ineligible_symbols"])
+            self.assertEqual(1, report["insufficient_symbol_count"])
+            self.assertEqual(0, report["stale_symbol_count"])
+            self.assertEqual(0, report["deferred_symbol_count"])
+            self.assertEqual(1, report["eligible_symbol_count"])
+            self.assertEqual("2025-01-02", report["expected_trade_date"])
 
     def test_bootstrap_completes_when_remaining_errors_are_stale_data(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -336,6 +341,10 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertTrue(report["completed_round"])
             self.assertEqual(1.0, report["coverage"])
             self.assertEqual(2, report["ineligible_symbols"])
+            self.assertEqual(2, report["stale_symbol_count"])
+            self.assertEqual(0, report["insufficient_symbol_count"])
+            self.assertEqual(0, report["eligible_symbol_count"])
+            self.assertEqual("2025-01-02", report["expected_trade_date"])
             self.assertEqual("true", monitor.store.get_state("daily_bootstrap_complete"))
             deferred = json.loads(monitor.store.get_state("daily_bootstrap_deferred"))
             self.assertEqual({"000001": "2025-01-02", "000002": "2025-01-02"}, deferred)
@@ -370,6 +379,9 @@ class MonitorTimeTests(unittest.TestCase):
             self.assertEqual(1.0, report["coverage"])
             self.assertTrue(report["completed_round"])
             self.assertEqual(1, report["ineligible_symbols"])
+            self.assertEqual(1, report["stale_symbol_count"])
+            self.assertEqual(0, report["insufficient_symbol_count"])
+            self.assertEqual(1, report["eligible_symbol_count"])
 
     def test_daily_scan_retries_transient_errors_after_bootstrap(self):
         with tempfile.TemporaryDirectory() as directory:
