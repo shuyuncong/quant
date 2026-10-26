@@ -40,7 +40,7 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from research_backtest import replay  # noqa: E402
+from research_backtest import _snapshot_config, replay, write_json  # noqa: E402
 from strategy.registry import STRATEGIES, VERSION  # noqa: E402
 
 # 归档目录 (2026-10-07 三策略止损敏感性回测)：提供 30 组基线指标做 parity 核对。
@@ -126,9 +126,13 @@ def _out_of_sample_job(symbol: str) -> tuple[str, str]:
     if (inputs_dir / f"{symbol}.pkl").exists() and (out_dir / f"{symbol}.signals.json").exists():
         return symbol, "cached"
     frame = pd.read_pickle(_WORKER["cache_dir"] / f"{symbol}_qfq.pkl")
+    if frame.attrs.get("adjust") != "qfq" or frame.attrs.get("timeframe") != "1d":
+        return symbol, "缓存不是带口径元数据的前复权日线"
     if "is_closed" in frame:
         frame = frame[frame["is_closed"].astype(bool)]
-    frame = frame.reset_index(drop=True)
+    # Never generate candidates beyond the requested research window, including
+    # a sealed future holdout that may happen to be present in the source cache.
+    frame = frame[pd.to_datetime(frame["datetime"]) <= end].reset_index(drop=True)
     dates = pd.to_datetime(frame["datetime"]).dt.strftime("%Y-%m-%d")
     if int((dates < start).sum()) < MIN_WARMUP_BARS:
         return symbol, "首个交易日前不足 270 根已收盘日线"
@@ -151,17 +155,28 @@ def _out_of_sample_job(symbol: str) -> tuple[str, str]:
     return symbol, ""
 
 
-def build_cache_sample(config: dict, start: str, end: str, workers: int, out_dir: Path) -> dict:
+def build_cache_sample(config: dict, start: str, end: str, workers: int, out_dir: Path, *,
+                       cache_dir: Path | None = None) -> dict:
     """构建区间样本包：本地前复权缓存 -> 与冻结样本相同的预热/剔除规则 -> 三策略信号。
 
     输出目录与归档冻结包同构 (`inputs/<symbol>.pkl` + `<symbol>.signals.json` +
     `prepared_metadata.json`)，因此可以用 `--period archive --source <out_dir>` 复用，
     也可以中途中断后重跑 (已写入的股票直接跳过)。
     """
-    cache_dir = BASE_DIR / "cache" / "daily_history"
+    cache_dir = (cache_dir or BASE_DIR / "cache" / "daily_history").resolve()
     symbols = sorted(path.name[: -len("_qfq.pkl")] for path in cache_dir.glob("*_qfq.pkl"))
+    if not symbols:
+        raise ValueError(f"没有本地前复权历史：{cache_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
-    initializer = (_init_sample_worker, (json.dumps(config, ensure_ascii=False), start, end, str(out_dir)))
+    snapshot = _snapshot_config(config)
+    spec = {"cache_dir": str(cache_dir), "start": start, "end": end,
+            "config_snapshot": snapshot, "strategy_version": VERSION}
+    spec_path = out_dir / "sample_spec.json"
+    if spec_path.exists() and json.loads(spec_path.read_text(encoding="utf-8")) != spec:
+        raise ValueError("样本的数据目录、窗口或配置已变化；请使用新 --out-dir，不覆盖已冻结输入")
+    write_json(spec_path, spec)
+    initializer = (_init_sample_worker, (json.dumps(snapshot, ensure_ascii=False), start, end,
+                                        str(out_dir), str(cache_dir)))
     with Pool(processes=max(1, workers), initializer=initializer[0], initargs=initializer[1]) as pool:
         outcomes = pool.map(_out_of_sample_job, symbols)
     excluded = [{"symbol": symbol, "reason": reason} for symbol, reason in outcomes if reason not in ("", "cached")]
@@ -173,15 +188,16 @@ def build_cache_sample(config: dict, start: str, end: str, workers: int, out_dir
     metadata = {"start": start, "end": end, "calendar": sorted(calendar), "universe": {
         "total": len(symbols), "included": included, "excluded": len(excluded),
         "cached": sum(1 for _, reason in outcomes if reason == "cached")},
-        "exclusions": excluded, "source": "cache/daily_history (前复权, 抓取时点)", "version": VERSION}
-    (out_dir / "prepared_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=1), encoding="utf-8")
+        "exclusions": excluded, "source": str(cache_dir), "version": VERSION,
+        "cache_dir": str(cache_dir), "config_snapshot": snapshot}
+    write_json(out_dir / "prepared_metadata.json", metadata)
     return {"out_dir": out_dir, "metadata": metadata, "excluded": excluded}
 
 
-def _init_sample_worker(config_json: str, start: str, end: str, out_dir: str) -> None:
-    """Sample-building pool needs the config, window and output dir in every spawned child."""
+def _init_sample_worker(config_json: str, start: str, end: str, out_dir: str, cache_dir: str) -> None:
+    """Sample-building pool needs the explicit source directory in each child."""
     _WORKER.update(config_snapshot=json.loads(config_json), period=(start, end), out_dir=Path(out_dir),
-                   cache_dir=BASE_DIR / "cache" / "daily_history")
+                   cache_dir=Path(cache_dir))
 
 
 def _scenario_job(job: tuple[str, str, float | None]) -> dict:

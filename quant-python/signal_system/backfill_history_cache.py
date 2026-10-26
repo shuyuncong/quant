@@ -1,73 +1,76 @@
-"""把 2018-2022 日线回填进 cache/daily_history/<symbol>_qfq.pkl（供熊市抽样回测使用）。
+"""Prepare historical daily bars without changing production strategy settings.
 
-为什么需要这个脚本：三策略回测的样本构建器（scale_out_take_profit_study._out_of_sample_job）
-只读本地缓存 cache/daily_history/*_qfq.pkl，不联网；而该缓存起点中位 2023-05-18，
-0 只覆盖 2018/2022。现成的 load_backtest_history 也帮不上忙 —— 它是**向前**抓
-（取最近 N 根）并覆盖式写盘，无法向 2018 年回填。
-
-本脚本：
-1. 读现有 <symbol>_qfq.pkl（可能不存在），
-2. 用 AkshareDailyProvider.get_daily_data(start_date, end_date) 抓 2018-01-01 ~ 2023-05-19
-   （终点定为 2023-05-19 而非 2022-12-31：缓存原有起点中位 2023-05-18，
-   只补到 2022-12-31 会留下 2023-01~2023-05 的约 139 天空洞），
-   该接口 adjust 固定 qfq，与缓存口径一致，
-3. 归一化成项目的 STANDARD_COLUMNS（datetime/open/high/low/close/volume/amount/is_closed），
-4. **合并**（按 datetime 去重、排序）后写回，绝不丢掉已有的 2023+ 数据。
-
-可中断续跑：已在 progress 文件里记为完成的标的会跳过。
+BaoStock uses an independent, single-source research cache: do not stitch its
+share-volume/QFQ series onto legacy caches with unknown units or adjustment dates.
+The original AkShare backfill remains available for existing research workflows.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
 from pathlib import Path
 
-BASE = Path(os.path.abspath(__file__)).parent
+import numpy as np
+import pandas as pd
+
+BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent))
 
-import pandas as pd  # noqa: E402
-
-from data.providers.akshare_provider import AkshareDailyProvider  # noqa: E402
-from utils.helpers import load_config  # noqa: E402
+from data.providers.akshare_provider import AkshareDailyProvider
+from data.providers.baostock_provider import BaostockDailyProvider
+from data.symbols import normalize_ts_code
+from utils.helpers import load_config
 
 BACKFILL_START = "2018-01-01"
-# 终止日必须覆盖到既有缓存起点之前，否则会留下空洞：
-# 原缓存起点中位 2023-05-18，若只回填到 2022-12-31，则 2023-01 ~ 2023-05 整段缺失，
-# 而预热（270 根）与信号计算会跨过这个断裂 → 结果不可信。故统一回填到 2023-05-19。
 BACKFILL_END = "2023-05-19"
 CACHE_DIR = BASE / "cache" / "daily_history"
-# 进度文件**按回填区间命名**：换区间（例如从 2018 再前推到 2016）时必须另起一个，
-# 否则上一轮记下的 done 会把标的全部跳过，表现为"跑了但什么都没做"。
-_PROGRESS_TEMPLATE = "_backfill_{start}_{end}_progress.json"
+BAR_COLUMNS = ("datetime", "open", "high", "low", "close", "volume", "amount", "is_closed")
+# A successful query with zero bars is a determinate result (e.g. listing after the
+# requested range); only transport failures are retried on the next run.
+DONE_PREFIXES = frozenset({"added", "refreshed", "already", "no_data"})
 
 
-def progress_path(start: str, end: str) -> Path:
-    return CACHE_DIR / _PROGRESS_TEMPLATE.format(start=start.replace("-", ""), end=end.replace("-", ""))
+def marks_done(result: str) -> bool:
+    return result.split(":", 1)[0] in DONE_PREFIXES
 
 
-# 默认区间（与既有调用/文档一致）；实际运行时以命令行覆盖后的区间为准。
-PROGRESS = progress_path(BACKFILL_START, BACKFILL_END)
+def progress_path(start: str, end: str, provider: str = "akshare", *,
+                  cache_dir: Path = CACHE_DIR, overwrite_amount: bool = False) -> Path:
+    operation = "liquidity" if overwrite_amount else "history"
+    return cache_dir / (
+        f"_backfill_{provider}_{start.replace('-', '')}_{end.replace('-', '')}_{operation}_progress.json"
+    )
 
 
 def to_standard(frame: pd.DataFrame) -> pd.DataFrame:
-    """把 provider 输出归一化成缓存使用的 8 列标准结构。"""
+    """Retain historical turnover rates instead of deriving them from volume."""
     if frame is None or frame.empty:
-        return pd.DataFrame()
-    out = pd.DataFrame({
-        "datetime": pd.to_datetime(frame["datetime"]),
-        "open": pd.to_numeric(frame["open"], errors="coerce"),
-        "high": pd.to_numeric(frame["high"], errors="coerce"),
-        "low": pd.to_numeric(frame["low"], errors="coerce"),
-        "close": pd.to_numeric(frame["close"], errors="coerce"),
-        "volume": pd.to_numeric(frame["volume"], errors="coerce"),
-        "amount": pd.to_numeric(frame.get("amount"), errors="coerce") if "amount" in frame else 0.0,
-        # 缓存里的历史行全部标记为已收盘；回填的都是历史数据，恒为 True。
-        "is_closed": True,
-    })
+        return pd.DataFrame(columns=BAR_COLUMNS)
+    out = frame.loc[:, ["datetime", "open", "high", "low", "close", "volume"]].copy()
+    out["datetime"] = pd.to_datetime(out["datetime"])
+    for column in ("open", "high", "low", "close", "volume"):
+        out[column] = pd.to_numeric(out[column], errors="coerce")
+    out["amount"] = pd.to_numeric(frame["amount"], errors="coerce") if "amount" in frame else 0.0
+    out["is_closed"] = frame["is_closed"].astype(bool) if "is_closed" in frame else True
+    if "turnover_rate" in frame:
+        out["turnover_rate"] = pd.to_numeric(frame["turnover_rate"], errors="coerce")
+    out = out.loc[out["is_closed"]].sort_values("datetime").reset_index(drop=True)
+    if out.empty:
+        return out
+    prices = out[["open", "high", "low", "close"]].to_numpy(dtype=float)
+    volumes = out["volume"].to_numpy(dtype=float)
+    if (out["datetime"].isna().any() or out["datetime"].duplicated().any()
+            or not np.isfinite(prices).all() or (prices <= 0).any()
+            or not np.isfinite(volumes).all() or (volumes < 0).any()
+            or (out["high"] < out[["open", "close", "low"]].max(axis=1)).any()
+            or (out["low"] > out[["open", "close", "high"]].min(axis=1)).any()):
+        raise ValueError("历史行情包含非法日期、重复日期、价格或成交量")
+    out.attrs = dict(frame.attrs)
     return out
 
 
@@ -78,127 +81,220 @@ def load_progress(path: Path) -> set[str]:
 
 
 def save_progress(path: Path, done: set[str]) -> None:
-    path.write_text(json.dumps({"done": sorted(done)}, ensure_ascii=False), encoding="utf-8")
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps({"done": sorted(done)}, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
 
 
-def backfill_one(provider: AkshareDailyProvider, symbol: str, path: Path, start: str, end: str) -> str:
-    """返回结果码：added / no_data / already / error。区间由调用方给出。"""
-    existing = pd.DataFrame()
-    if path.exists():
-        try:
-            existing = pd.read_pickle(path)
-            existing = existing.drop(columns=[c for c in ("trade_date", "vol") if c in existing.columns])
-        except Exception as error:  # noqa: BLE001 - 单只损坏不应中断整轮
-            return f"error: 读取现有缓存失败 {type(error).__name__}"
+def read_symbol_list(path: Path) -> list[str]:
+    """Read newline/comma separated codes; ``#`` starts a comment line."""
+    tokens: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0]
+        tokens.extend(token for token in line.replace(",", " ").split() if token)
+    return tokens
 
-    dates = pd.to_datetime(existing["datetime"]) if not existing.empty and "datetime" in existing else pd.Series(dtype="datetime64[ns]")
-    if not dates.empty:
-        # "已完成"的判据是**起点足够早且中段无空洞**，不是"存在旧数据"：
-        # 只回填到 2022 就跳过的写法会漏掉 2023-01 ~ 2023-05 的断裂。
-        early = int((dates < start).sum())
-        has_gap = ((dates.sort_values().diff().dt.days > 30).sum() > 0)
-        if early > 200 and not has_gap:
-            return "already"
 
-    ts_code = symbol + (".SH" if symbol.startswith("6") else ".SZ" if symbol.startswith(("0", "3")) else ".BJ")
-    fetched = provider.get_daily_data(ts_code, start_date=start.replace("-", ""), end_date=end.replace("-", ""))
+def overlap_drift(existing: pd.DataFrame, new_rows: pd.DataFrame) -> tuple[int, float]:
+    """Maximum relative OHLC difference; a median can hide a bad splice boundary."""
+    if existing.empty or new_rows.empty:
+        return 0, 0.0
+    columns = ["datetime", "open", "high", "low", "close"]
+    overlap = existing[columns].merge(new_rows[columns], on="datetime", suffixes=("_old", "_new"))
+    if overlap.empty:
+        return 0, 0.0
+    old = overlap[[f"{c}_old" for c in columns[1:]]].to_numpy(dtype=float)
+    new = overlap[[f"{c}_new" for c in columns[1:]]].to_numpy(dtype=float)
+    if not np.isfinite(old).all() or not np.isfinite(new).all() or (old <= 0).any():
+        raise ValueError("重叠区间存在非法 OHLC")
+    return len(overlap), float(np.max(np.abs(new / old - 1)))
+
+
+def backfill_one(provider: AkshareDailyProvider | BaostockDailyProvider, symbol: str,
+                 path: Path, start: str, end: str, *, max_overlap_drift: float = 0.005,
+                 overwrite_amount: bool = False) -> str:
+    existing = to_standard(pd.read_pickle(path)) if path.exists() else pd.DataFrame()
+    source = provider.name
+    if source == "baostock" and not existing.empty and (
+        existing.attrs.get("source") != "baostock"
+        or existing.attrs.get("volume_unit") != "shares"
+        or existing.attrs.get("adjust") != "qfq"
+    ):
+        raise ValueError("BaoStock 必须使用独立研究缓存；请指定新的 --cache-dir，不能拼接不同来源/单位的历史")
+
+    # Only a completed query can establish coverage; long suspensions and IPOs
+    # must not be mistaken for missing data based on calendar-day gap heuristics.
+    attrs = existing.attrs
+    if (not existing.empty and attrs.get("backfill_provider") == source
+            and attrs.get("requested_start", "9999") <= start
+            and attrs.get("requested_end", "") >= end
+            and (not overwrite_amount or attrs.get("liquidity_enriched") is True)):
+        return "already"
+
+    fetch_start, fetch_end = start, end
+    if source == "baostock" and not existing.empty:
+        # Re-fetch the entire union using one adjustment snapshot. Keeping old
+        # rows after a dividend would create an artificial jump at the splice.
+        fetch_start = min(start, existing["datetime"].min().strftime("%Y-%m-%d"))
+        fetch_end = max(end, existing["datetime"].max().strftime("%Y-%m-%d"))
+    ts_code = normalize_ts_code(symbol)
+    fetched = provider.get_daily_data(ts_code, start_date=fetch_start.replace("-", ""),
+                                      end_date=fetch_end.replace("-", ""))
     new_rows = to_standard(fetched)
     if new_rows.empty:
         return "no_data"
+    if (new_rows["datetime"].min() < pd.Timestamp(fetch_start)
+            or new_rows["datetime"].max() > pd.Timestamp(fetch_end)):
+        raise ValueError("数据源返回了请求区间以外的日线")
 
-    combined = pd.concat([existing, new_rows], ignore_index=True) if not existing.empty else new_rows
-    # keep="first"：重叠日期一律保留**既有缓存值**，只用新数据补齐缺失的更早日期。
-    # 与 backfill_index_history.py 保持同一语义 —— 前推历史没有理由重写既有行。
-    # （本脚本因只抓 --start~--end 这段、与既有缓存重叠极小，实测 0 漂移；
-    #  但语义应当一致，否则一旦改动抓取区间就会静默改写历史。）
-    combined = combined.drop_duplicates("datetime", keep="first").sort_values("datetime").reset_index(drop=True)
-    # pd.concat / reset_index 会丢掉 DataFrame.attrs，而下游审计（atr_volatility_audit、
-    # canonical_replay_semantics_audit 等）用 frame.attrs["adjust"] == "qfq" 判定口径。
-    # 必须显式还原，否则整批缓存会被判为"非 qfq"而拒绝。
-    combined.attrs = dict(existing.attrs) if existing.attrs else {}
-    combined.attrs.setdefault("source", "tencent")
-    combined.attrs["timeframe"] = "1d"
-    combined.attrs["adjust"] = "qfq"
-    combined.attrs.setdefault("timezone", "Asia/Shanghai")
-    combined.attrs.setdefault("timestamp_semantics", "end")
-    combined.to_pickle(path)
-    return f"added:{len(new_rows)}"
+    if source == "baostock":
+        combined = new_rows
+        if not existing.empty:
+            missing = existing["datetime"].isin(new_rows["datetime"])
+            if not missing.all():
+                raise ValueError("完整重抓缺失既有交易日，拒绝替换；检查数据源覆盖")
+    else:
+        overlap_days, drift = overlap_drift(existing, new_rows)
+        if overlap_days and drift > max_overlap_drift:
+            raise ValueError(f"复权口径漂移：{overlap_days} 个重叠日，最大相对 OHLC 差异 {drift:.4%}")
+        combined = pd.concat([existing, new_rows], ignore_index=True)
+        combined = combined.drop_duplicates("datetime", keep="first").set_index("datetime")
+        incoming = new_rows.set_index("datetime")
+        if overwrite_amount:
+            amount = pd.to_numeric(combined["amount"], errors="coerce")
+            replacement = incoming["amount"].reindex(combined.index)
+            fill = (amount.isna() | amount.eq(0)) & replacement.gt(0)
+            combined.loc[fill, "amount"] = replacement.loc[fill]
+        if "turnover_rate" in incoming:
+            if "turnover_rate" not in combined:
+                combined["turnover_rate"] = np.nan
+            replacement = incoming["turnover_rate"].reindex(combined.index)
+            fill = combined["turnover_rate"].isna() & replacement.gt(0)
+            combined.loc[fill, "turnover_rate"] = replacement.loc[fill]
+        combined = combined.reset_index().sort_values("datetime").reset_index(drop=True)
+        combined.attrs = dict(existing.attrs or new_rows.attrs)
+        combined.attrs.setdefault("source", source)
+
+    combined.attrs.update(
+        backfill_provider=source, requested_start=fetch_start, requested_end=fetch_end,
+        liquidity_enriched=overwrite_amount, timeframe="1d", adjust="qfq",
+        timezone="Asia/Shanghai", timestamp_semantics="end",
+    )
+    if source == "baostock":
+        combined.attrs.update(source="baostock", volume_unit="shares")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    try:
+        combined.to_pickle(temporary)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    added = len(combined) - len(existing)
+    return f"added:{added}" if added > 0 else "refreshed"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=f"回填日线进 cache/daily_history（默认 {BACKFILL_START} ~ {BACKFILL_END}）")
-    parser.add_argument("--limit", type=int, default=0, help="只处理前 N 只（0=全部），用于冒烟")
-    parser.add_argument("--symbols", nargs="*", default=None, help="指定标的（不带后缀）")
-    parser.add_argument("--interval", type=float, default=None, help="请求间隔秒，默认取 config")
-    parser.add_argument("--start", default=BACKFILL_START, help=f"回填起点（默认 {BACKFILL_START}）")
-    parser.add_argument("--end", default=BACKFILL_END, help=f"回填终点（默认 {BACKFILL_END}）")
-    parser.add_argument("--max-cache-start-year", type=int, default=None,
-                        help="只处理缓存起点年份 <= 该值的标的。前推历史时用它把范围限定在"
-                             "本来就有早期数据的标的，避免对 5000 只全量重抓（全量约 6 小时）")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="准备历史日线；BaoStock 使用独立研究目录，不改生产配置")
+    parser.add_argument("--provider", default="akshare", choices=("akshare", "baostock"))
+    parser.add_argument("--start", default=BACKFILL_START)
+    parser.add_argument("--end", default=BACKFILL_END)
+    parser.add_argument("--symbols", nargs="+", help="指定股票代码；不指定则读 universe-dir 中的 qfq 文件名")
+    parser.add_argument("--symbols-file", type=Path,
+                        help="从文本文件读取代码（换行/逗号分隔，# 注释）；顺序即处理顺序，用于分层交错的全量任务")
+    parser.add_argument("--cache-dir", type=Path, default=CACHE_DIR, help="输出缓存目录")
+    parser.add_argument("--universe-dir", type=Path, default=CACHE_DIR, help="仅用于读取股票代码，不修改其文件")
+    parser.add_argument("--limit", type=int, default=0, help="0=全部；正数限制本轮股票数")
+    parser.add_argument("--interval", type=float, default=None)
+    parser.add_argument("--max-cache-start-year", type=int, default=None)
+    parser.add_argument("--max-overlap-drift", type=float, default=0.005,
+                        help="AkShare 拼接时允许的最大相对 OHLC 差异，0.005=0.5%%")
+    parser.add_argument("--overwrite-amount", action="store_true",
+                        help="补齐重叠旧行的缺失成交额；始终保留数据源提供的历史换手率")
     args = parser.parse_args()
-    start, end = args.start, args.end
-
+    try:
+        start = pd.Timestamp(args.start).strftime("%Y-%m-%d")
+        end = pd.Timestamp(args.end).strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        parser.error("--start/--end 必须是有效日期")
+    if start > end:
+        parser.error("--start 不能晚于 --end")
+    if args.limit < 0 or not math.isfinite(args.max_overlap_drift) or args.max_overlap_drift < 0:
+        parser.error("--limit 与 --max-overlap-drift 必须是非负有限数")
     config = load_config(BASE / "config/config.yaml")
     interval = args.interval if args.interval is not None else float(
         config.get("market_data", {}).get("request_interval_seconds", 0.35)
     )
-    provider = AkshareDailyProvider(config=config)
-    provider._get_akshare()      # 预热，排除首次 import 开销
-
-    if args.symbols:
-        symbols = list(args.symbols)
-    else:
-        symbols = sorted(p.name[: -len("_qfq.pkl")] for p in CACHE_DIR.glob("*_qfq.pkl"))
+    if not math.isfinite(interval) or interval < 0:
+        parser.error("--interval 必须是非负有限数")
+    cache_dir = args.cache_dir.expanduser().resolve()
+    universe_dir = args.universe_dir.expanduser().resolve()
+    if args.provider == "baostock" and cache_dir == CACHE_DIR.resolve():
+        parser.error("BaoStock 请指定独立的 --cache-dir（例如 cache/baostock_2016_2024）")
+    raw_symbols = list(args.symbols or [])
+    if args.symbols_file is not None:
+        if not args.symbols_file.is_file():
+            parser.error(f"--symbols-file 不存在: {args.symbols_file}")
+        raw_symbols = read_symbol_list(args.symbols_file) + raw_symbols
+    if not raw_symbols:
+        raw_symbols = sorted(p.name[:-8] for p in universe_dir.glob("*_qfq.pkl"))
+    codes = [normalize_ts_code(s) for s in raw_symbols]
+    if any(len(s.split(".")[0]) != 6 or not s.split(".")[0].isdigit() for s in codes):
+        parser.error("股票代码必须包含 6 位数字")
+    unsupported = sorted({s for s in codes if s.endswith(".BJ")}) if args.provider == "baostock" else []
+    symbols = list(dict.fromkeys(s.split(".")[0] for s in codes if s not in unsupported))
     if args.max_cache_start_year is not None:
-        kept: list[str] = []
+        kept = []
         for symbol in symbols:
-            path = CACHE_DIR / f"{symbol}_qfq.pkl"
-            try:
+            path = universe_dir / f"{symbol}_qfq.pkl"
+            if path.exists():
                 frame = pd.read_pickle(path)
-                dates = pd.to_datetime(frame["datetime"], errors="coerce").dropna()
-            except Exception:  # noqa: BLE001 - 读不了就跳过
-                continue
-            if len(dates) and dates.min().year <= args.max_cache_start_year:
-                kept.append(symbol)
-        print(f"按缓存起点年份 <= {args.max_cache_start_year} 过滤：{len(kept)} / {len(symbols)}", flush=True)
+                if pd.to_datetime(frame["datetime"]).min().year <= args.max_cache_start_year:
+                    kept.append(symbol)
         symbols = kept
-
     if args.limit:
-        symbols = symbols[: args.limit]
-
-    progress = progress_path(start, end)
+        symbols = symbols[:args.limit]
+    if not symbols:
+        parser.error("没有可处理股票；检查 --symbols/--universe-dir")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    progress = progress_path(start, end, args.provider, cache_dir=cache_dir,
+                             overwrite_amount=args.overwrite_amount)
     done = load_progress(progress)
-    todo = [s for s in symbols if s not in done]
-    print(f"区间 {start} ~ {end}")
-    print(f"进度文件 {progress.name}（已完成 {len(done)}）")
-    print(f"待处理 {len(todo)} / {len(symbols)}，间隔 {interval}s", flush=True)
-
-    counts: dict[str, int] = {}
-    started = time.time()
-    for index, symbol in enumerate(todo, start=1):
-        path = CACHE_DIR / f"{symbol}_qfq.pkl"
-        try:
-            result = backfill_one(provider, symbol, path, start, end)
-        except Exception as error:  # noqa: BLE001 - 单只失败继续
-            result = f"error: {type(error).__name__}: {error}"
-        key = result.split(":")[0]
-        counts[key] = counts.get(key, 0) + 1
-        if key in ("added", "no_data", "already"):
-            done.add(symbol)
-        if index % 25 == 0 or index == len(todo):
-            elapsed = time.time() - started
-            rate = elapsed / index
-            remaining = rate * (len(todo) - index)
-            print(f"  {index}/{len(todo)}  {counts}  用时 {elapsed/60:.1f}m  预计剩余 {remaining/60:.1f}m",
-                  flush=True)
+    pending = [s for s in symbols if s not in done]
+    provider = BaostockDailyProvider(config=config) if args.provider == "baostock" else AkshareDailyProvider(config=config)
+    print(f"来源 {args.provider} | 区间 {start} ~ {end} | 缓存 {cache_dir}", flush=True)
+    print(f"本轮 {len(symbols)} 只，续跑跳过 {len(symbols)-len(pending)}，不支持 {len(unsupported)} 只", flush=True)
+    results: dict[str, str] = {}
+    began = time.monotonic()
+    try:
+        for index, symbol in enumerate(pending, start=1):
+            try:
+                result = backfill_one(provider, symbol, cache_dir / f"{symbol}_qfq.pkl", start, end,
+                                      max_overlap_drift=args.max_overlap_drift,
+                                      overwrite_amount=args.overwrite_amount)
+            except (OSError, EOFError, RuntimeError, ValueError, KeyError, TypeError, ImportError) as error:
+                result = f"error:{type(error).__name__}: {error}"
+            results[symbol] = result
+            if marks_done(result):
+                done.add(symbol)
             save_progress(progress, done)
-        time.sleep(interval)
-
-    save_progress(progress, done)
-    print(f"\n完成：{counts}")
-    print(f"总用时 {(time.time() - started)/60:.1f} 分钟")
+            print(f"{index}/{len(pending)} {symbol} {result}", flush=True)
+            if index < len(pending):
+                time.sleep(interval)
+    finally:
+        if isinstance(provider, BaostockDailyProvider):
+            provider.close()
+        save_progress(progress, done)
+    summary = {
+        "provider": args.provider, "start": start, "end": end, "cache_dir": str(cache_dir),
+        "requested": len(symbols), "completed": sum(s in done for s in symbols),
+        "unsupported": unsupported, "results": results, "elapsed_seconds": round(time.monotonic()-began, 2),
+    }
+    report = progress.with_name(progress.stem.removesuffix("_progress") + "_report.json")
+    report.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({key: value for key, value in summary.items() if key != "results"}, ensure_ascii=False), flush=True)
+    print(f"报告 {report}", flush=True)
+    return 0 if summary["completed"] == len(symbols) else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

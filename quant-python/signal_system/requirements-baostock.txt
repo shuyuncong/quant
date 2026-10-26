@@ -1,0 +1,6 @@
+# 可选 SDK：仅 data/providers/baostock_provider.py 的历史日线研究回填懒导入使用，
+# 不进入生产行情链（生产链路缺省不依赖它）。
+# 0.9.4 的 ResultData.next() 分页语义（>每页条数视为整段返回、翻页失败不写 error_code）
+# 是本 adapter 分页完整性校验的前提，故下限锁到该版本。
+-r requirements.txt
+baostock>=0.9.4
