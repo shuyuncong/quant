@@ -62,7 +62,20 @@ export async function getAnalysis(id: number): Promise<AnalysisRecord | null> {
   return result.rows[0] ? { ...result.rows[0], id: Number(result.rows[0].id), job_id: Number(result.rows[0].job_id) } : null;
 }
 
-export async function runAnalysisStages(id: number): Promise<void> {
+export interface AnalysisStageOptions {
+  /**
+   * 同一分析批次复用的超时模型集合。
+   *
+   * `executeAnalysisBatch` 按任务创建一个 Set 并传给每只股票的两个阶段：
+   * 首个模型超时后，后续股票/阶段直接跳过它，不再重复等待 180s。
+   * 单条记录重试不传时，runAnalysisStages 会自建一个 Set，至少保证
+   * 技术分析超时后综合结论不再撞同一个模型。
+   */
+  timedOutModelIds?: Set<number>;
+}
+
+export async function runAnalysisStages(id: number, options: AnalysisStageOptions = {}): Promise<void> {
+  const timedOutModelIds = options.timedOutModelIds ?? new Set<number>();
   const client = await (await getDb()).connect();
   const lock = 920_000_000 + id;
   try {
@@ -100,7 +113,7 @@ export async function runAnalysisStages(id: number): Promise<void> {
         const output = await chatWithFallback([
           { role: "system", content: stage === "technical" ? TECHNICAL_PROMPT : SYNTHESIS_PROMPT },
           { role: "user", content: JSON.stringify(data) },
-        ], { timeoutMs: 180_000, stream: true, purpose: stage });
+        ], { timeoutMs: 180_000, stream: true, purpose: stage, timedOutModelIds });
         document[stage] = { ...document[stage], status: "success", content: output.content,
           model: output.model.name, elapsed_ms: Date.now() - started, completed_at: nowIso() };
       } catch (error) {
@@ -158,6 +171,9 @@ export async function executeAnalysisBatch(jobId: number) {
     const overrides = { ...fresh, ...frozen, notification: fresh.notification, market_data: fresh.market_data,
       data_source: fresh.data_source };
     const results: Record<string, unknown>[] = [];
+    // 批次级熔断：gpt 超时一次后，本任务剩余股票的所有阶段都不再尝试它。
+    // 不共享这个 Set 的话，4 只股票 × 2 个阶段会重复支付 8 次 180s。
+    const timedOutModelIds = new Set<number>();
     for (const symbol of symbols) {
       let existing = (await (await getDb()).query("SELECT id,document FROM quant.stock_analyses WHERE job_id=$1 AND symbol=$2", [jobId, symbol])).rows[0];
       if (!existing) {
@@ -175,7 +191,7 @@ export async function executeAnalysisBatch(jobId: number) {
           [jobId, symbol, document.name, JSON.stringify(document), nowIso()])).rows[0];
       }
       results.push(...((existing.document as AnalysisDocument).report.results as Record<string, unknown>[] ?? []));
-      await runAnalysisStages(Number(existing.id));
+      await runAnalysisStages(Number(existing.id), { timedOutModelIds });
       const progress = { processed: results.length, total: symbols.length };
       await (await getDb()).query("UPDATE quant.jobs SET payload=(payload::jsonb || $2::jsonb)::text WHERE id=$1", [jobId, JSON.stringify({ progress })]);
     }
@@ -210,5 +226,6 @@ export async function resumeAnalysisBatches() {
   const rows = (await (await getDb()).query("SELECT id FROM quant.jobs WHERE status IN ('pending','running') AND payload::jsonb->>'analysis_version'='2'")).rows;
   for (const row of rows) void executeAnalysisBatch(Number(row.id)).catch(async error => { await updateJob(Number(row.id), { status: "failed", error: String(error), finished_at: nowIso() }); });
   const retries = (await (await getDb()).query("SELECT a.id,a.job_id FROM quant.stock_analyses a JOIN quant.jobs j ON j.id=a.job_id WHERE a.status IN ('pending','running') AND j.status IN ('success','failed') ORDER BY a.id LIMIT 5")).rows;
-  for (const row of retries) void runAnalysisStages(Number(row.id)).then(()=>refreshAnalysisSummary(Number(row.job_id))).catch(console.error);
+  const timedOutModelIds = new Set<number>();
+  for (const row of retries) void runAnalysisStages(Number(row.id), { timedOutModelIds }).then(()=>refreshAnalysisSummary(Number(row.job_id))).catch(console.error);
 }

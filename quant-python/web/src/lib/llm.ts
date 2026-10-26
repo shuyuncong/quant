@@ -51,14 +51,54 @@ export interface ChatWithFallbackResult {
   model: ModelProfile;
 }
 
+export interface ChatWithFallbackOptions {
+  timeoutMs?: number;
+  stream?: boolean;
+  visionOnly?: boolean;
+  purpose?: "technical" | "synthesis";
+  /**
+   * 本次批次内已经超时的模型 id。
+   *
+   * 调用方按批次创建并复用（个股分析一次任务 = 一个批次）：
+   *   - 进入循环前跳过集合里的模型；
+   *   - 某个模型超时后写入集合，供同批次后续阶段直接跳过。
+   * 这样第一个阶段支付一次超时后，后续 7 个阶段不再重复等待同一个慢模型。
+   */
+  timedOutModelIds?: Set<number>;
+}
+
+type ErrorWithCause = Error & { code?: string; cause?: { code?: string; message?: string } };
+
+/** 超时类错误：本地 AbortSignal.timeout、连接/读写超时、上游 HTTP 524。 */
+function isTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "TimeoutError" || error.name === "AbortError") return true;
+  const typed = error as ErrorWithCause;
+  const code = String(typed.cause?.code ?? typed.code ?? "");
+  if (/TIMEOUT|TIMEDOUT/i.test(code)) return true;
+  return /timeout|timed out|timedout|HTTP 524/i.test(`${error.message} ${typed.cause?.message ?? ""}`);
+}
+
+/** 只对连接类错误重试；超时和 HTTP 4xx/5xx 直接交给降级链。 */
+function isRetryableConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error) || isTimeoutError(error)) return false;
+  const typed = error as ErrorWithCause;
+  const code = String(typed.cause?.code ?? typed.code ?? "");
+  if (/^(ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EPIPE|UND_ERR_SOCKET)$/.test(code)) return true;
+  return /ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EPIPE|socket hang up|UND_ERR_SOCKET/i.test(
+    `${error.message} ${typed.cause?.message ?? ""}`,
+  );
+}
+
 /**
  * 按优先级（priority 升序）顺序尝试已启用模型：排序靠前的调用失败
  * （网络/HTTP/超时/内容错误）自动切换下一个，全部失败抛出最后一次错误。
  * visionOnly 时只尝试支持视觉的模型（图片识别链）。
+ * 传入 timedOutModelIds 时启用批次级熔断，超时模型不会在同一批次内再次尝试。
  */
 export async function chatWithFallback(
   messages: ChatMessage[],
-  options: { timeoutMs?: number; stream?: boolean; visionOnly?: boolean; purpose?: "technical" | "synthesis" } = {},
+  options: ChatWithFallbackOptions = {},
 ): Promise<ChatWithFallbackResult> {
   const candidates = await enabledModels(options.visionOnly === true);
   if (options.purpose) {
@@ -72,8 +112,14 @@ export async function chatWithFallback(
         : "未配置可用的模型（需启用并配置 API Key）",
     );
   }
+  const timedOut = options.timedOutModelIds;
+  const available = candidates.filter((profile) => !timedOut?.has(profile.id));
+  if (available.length === 0) {
+    const names = candidates.map((profile) => profile.name).join("、");
+    throw new Error(`本批次所有可用模型均已超时（${names}），跳过后续阶段`);
+  }
   let lastError: unknown;
-  for (const profile of candidates) {
+  for (const profile of available) {
     try {
       const content = await chatCompletion(
         profile,
@@ -84,6 +130,10 @@ export async function chatWithFallback(
       return { content, model: profile };
     } catch (error) {
       lastError = error;
+      if (isTimeoutError(error)) {
+        timedOut?.add(profile.id);
+        console.warn(`[llm] 模型 ${profile.name} 超时，本批次后续阶段跳过`);
+      }
     }
   }
   throw lastError instanceof Error ? lastError : new Error("所有可用模型调用均失败");
@@ -157,8 +207,9 @@ async function chatCompletion(
   try {
     return await doFetch();
   } catch (error) {
-    // one retry for transient network/timeout failures (including upstream HTTP 524)
-    if (error instanceof Error && /timeout|ECONNRESET|fetch failed|ETIMEDOUT|ENOTFOUND|HTTP 524|do_request_failed/i.test(error.message)) {
+    // 超时不再重试同一个模型：再发一次只会把同一个 180s 上限再付一遍。
+    // 只有连接类错误最多重试一次；HTTP 4xx/5xx 也立即交给降级链。
+    if (isRetryableConnectionError(error)) {
       return await doFetch();
     }
     throw error;

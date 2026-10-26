@@ -49,6 +49,12 @@ const okResponse = (content: string): UndiciResponse =>
 const failResponse = (): UndiciResponse =>
   new Response("boom", { status: 500, statusText: "boom" }) as unknown as UndiciResponse;
 
+const timeoutError = (): Error =>
+  Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+
+const connectionError = (): Error =>
+  Object.assign(new Error("fetch failed"), { cause: { code: "ECONNRESET" } });
+
 // 所有 describe 共享：避免前序测试的 fetch 调用与模型列表污染后续断言。
 beforeEach(() => {
   fetchMock.mockReset();
@@ -97,6 +103,66 @@ describe("chatWithFallback 模型降级链", () => {
 
     await expect(chatWithFallback([{ role: "user", content: "hi" }])).rejects.toThrow(/HTTP 500/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("超时不重试同一模型，直接切换到下一个", async () => {
+    listModelsMock.mockResolvedValue([
+      model({ id: 1, name: "slow" }),
+      model({ id: 2, name: "fast", base_url: "https://fast.test/v1" }),
+    ]);
+    fetchMock.mockRejectedValueOnce(timeoutError()).mockResolvedValueOnce(okResponse("fallback"));
+
+    const { content, model: used } = await chatWithFallback([{ role: "user", content: "hi" }]);
+
+    expect(content).toBe("fallback");
+    expect(used.name).toBe("fast");
+    // 慢模型只调用一次：不再像旧逻辑那样先重试一次再降级。
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("连接类错误仍然重试一次", async () => {
+    listModelsMock.mockResolvedValue([model({ id: 1, name: "flaky" })]);
+    fetchMock.mockRejectedValueOnce(connectionError()).mockResolvedValueOnce(okResponse("retried"));
+
+    const { content } = await chatWithFallback([{ role: "user", content: "hi" }]);
+
+    expect(content).toBe("retried");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("批次熔断后跳过已超时模型", async () => {
+    listModelsMock.mockResolvedValue([
+      model({ id: 1, name: "slow", base_url: "https://slow.test/v1" }),
+      model({ id: 2, name: "fast", base_url: "https://fast.test/v1" }),
+    ]);
+    fetchMock
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce(okResponse("fast"))
+      .mockResolvedValueOnce(okResponse("fast"));
+    const timedOutModelIds = new Set<number>();
+
+    const first = await chatWithFallback([{ role: "user", content: "hi" }], { timedOutModelIds });
+    const second = await chatWithFallback([{ role: "user", content: "hi" }], { timedOutModelIds });
+
+    expect(first.model.name).toBe("fast");
+    expect(second.model.name).toBe("fast");
+    expect(timedOutModelIds.has(1)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // 第二次调用没有再次访问慢模型。
+    expect(String(fetchMock.mock.calls[2][0])).toContain("fast.test");
+  });
+
+  it("所有可用模型都已熔断时快速失败", async () => {
+    listModelsMock.mockResolvedValue([
+      model({ id: 1, name: "first" }),
+      model({ id: 2, name: "second" }),
+    ]);
+    const timedOutModelIds = new Set([1, 2]);
+
+    await expect(
+      chatWithFallback([{ role: "user", content: "hi" }], { timedOutModelIds }),
+    ).rejects.toThrow(/本批次所有可用模型均已超时/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("visionOnly 时跳过不支持视觉的模型", async () => {

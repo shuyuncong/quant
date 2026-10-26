@@ -130,12 +130,19 @@ describe("model protocols", () => {
     expect(fetchApi).toHaveBeenCalledTimes(2);
   });
 
-  it("preserves the adapted request on one transient upstream retry", async () => {
+  it("preserves the adapted request on one connection retry", async () => {
     vi.mocked(fetchApi).mockResolvedValueOnce(new Response("invalid codex request", { status: 400 }) as unknown as ApiResponse)
-      .mockResolvedValueOnce(new Response('{"error":{"code":"do_request_failed"}}', { status: 500 }) as unknown as ApiResponse)
+      .mockRejectedValueOnce(Object.assign(new Error("fetch failed"), { cause: { code: "ECONNRESET" } }))
       .mockResolvedValueOnce(apiResponse(output("OK")));
     expect((await testProfile(profile)).ok).toBe(true);
     expect(fetchApi).toHaveBeenCalledTimes(3);
     expect(vi.mocked(fetchApi).mock.calls[1][1]?.body).toBe(vi.mocked(fetchApi).mock.calls[2][1]?.body);
+  });
+
+  it("does not retry an upstream 5xx", async () => {
+    vi.mocked(fetchApi).mockResolvedValueOnce(new Response("invalid codex request", { status: 400 }) as unknown as ApiResponse)
+      .mockResolvedValueOnce(new Response('{"error":{"code":"do_request_failed"}}', { status: 500 }) as unknown as ApiResponse);
+    expect((await testProfile(profile)).ok).toBe(false);
+    expect(fetchApi).toHaveBeenCalledTimes(2);
   });
 });

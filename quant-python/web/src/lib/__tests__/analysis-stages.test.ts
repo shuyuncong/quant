@@ -17,6 +17,25 @@ describe('analysis stage recovery',()=>{
     expect(doc.snapshot_hash).toBe('frozen');expect(doc.revision).toBe(2);
     expect(mocks.release).toHaveBeenCalledOnce();
   });
+  it('shares one timeout circuit set across technical and synthesis',async()=>{
+    const doc=document();
+    mocks.query.mockImplementation(async(sql:string)=>sql.includes('pg_try')?{rows:[{acquired:true}]}:sql.startsWith('SELECT *')?{rows:[{document:doc}]}:{rows:[]});
+    await runAnalysisStages(10);
+    expect(mocks.chat).toHaveBeenCalledTimes(2);
+    const first=mocks.chat.mock.calls[0][1].timedOutModelIds;
+    const second=mocks.chat.mock.calls[1][1].timedOutModelIds;
+    expect(first).toBeInstanceOf(Set);
+    expect(second).toBe(first);
+  });
+  it('reuses the batch-provided timeout circuit set',async()=>{
+    const doc=document();
+    const timedOutModelIds=new Set<number>([3]);
+    mocks.query.mockImplementation(async(sql:string)=>sql.includes('pg_try')?{rows:[{acquired:true}]}:sql.startsWith('SELECT *')?{rows:[{document:doc}]}:{rows:[]});
+    await runAnalysisStages(11,{timedOutModelIds});
+    expect(mocks.chat).toHaveBeenCalledTimes(2);
+    expect(mocks.chat.mock.calls[0][1].timedOutModelIds).toBe(timedOutModelIds);
+    expect(mocks.chat.mock.calls[1][1].timedOutModelIds).toBe(timedOutModelIds);
+  });
   it('retains data errors without spending LLM calls',async()=>{
     const doc=document();doc.strategies.forEach(item=>item.status='error');
     mocks.query.mockImplementation(async(sql:string)=>sql.includes('pg_try')?{rows:[{acquired:true}]}:sql.startsWith('SELECT *')?{rows:[{document:doc}]}:{rows:[]});
