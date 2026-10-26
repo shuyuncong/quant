@@ -19,7 +19,7 @@
 - Oracle Cloud 部署指南：`docs/DEPLOY-ORACLE.md`
   - 服务器落地部署（Docker Compose + Nginx 反代 + HTTPS + rclone 备份）；通用部署见 `quant-python/DEPLOY.md`
 - [Agent 服务器迁移与数据清单](ops/2026-10-26-agent服务器迁移与数据清单.md)
-  - 迁什么/不迁什么（BaoStock 独立缓存与报告；不覆盖服务器 backtest-cache）、单行迁移命令、omp/codex CLI 与 VS Code Remote-SSH 的取舍、验收与回滚
+  - 迁什么/不迁什么（BaoStock 独立缓存与报告；不覆盖服务器 backtest-cache）、单行迁移命令、omp/codex CLI 与 VS Code Remote-SSH 的取舍、双机分工与 `ops/sync-research-cache.sh`、验收与回滚
 
 - [三策略止损敏感性回测归档](2026-10-07-三策略止损敏感性回测归档.md)
   - 2024 年上半年、独立资金 25 万元、1%～10% 止损的 30 组结果；附完整 JSON、CSV、参数快照与复现边界
