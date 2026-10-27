@@ -11,6 +11,7 @@ from pathlib import Path
 import pickle
 import time
 from typing import Any
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -43,6 +44,14 @@ BAR_SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
     "tushare": ("tencent", "eastmoney", "sina"),
 }
 CALENDAR_SOURCES = ("tencent", "sina")
+
+# 单源连续失败后的进程内熔断。海外主机/源站反爬时，整轮扫描没必要对同一个
+# 源逐股重试：东财一次失败要打 4 个请求（HTTPS×2 + HTTP×2），一次全市场
+# 扫描会浪费数小时并加重封禁。达到阈值后暂停该源，由备用源接管；冷却期按
+# 2 倍递增并封顶，任一成功即复位。
+SOURCE_QUARANTINE_FAILURES = 3
+SOURCE_QUARANTINE_SECONDS = 10 * 60
+SOURCE_QUARANTINE_MAX_SECONDS = 60 * 60
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -258,15 +267,24 @@ class MarketDataClient:
                     {"http": self.market_proxy, "https": self.market_proxy}
                 )
             )
+            logger.info("行情请求出口: 代理 %s", self._mask_proxy(self.market_proxy))
         elif self.disable_system_proxy:
             self._http_opener = build_opener(ProxyHandler({}))
+            logger.info("行情请求出口: 直连（忽略系统代理环境变量）")
         else:
             self._http_opener = build_opener()
+            logger.info(
+                "行情请求出口: 系统代理环境变量（直连请设 data.disable_system_proxy=true）"
+            )
         token = data_config.get("tushare_token") or os.getenv("TUSHARE_TOKEN", "")
         self.tushare_token = "" if "你的" in str(token) else str(token)
         self._last_request = 0.0
         self._akshare = None
         self._tushare = None
+        # 熔断状态只在进程内生效：一次全市场扫描共用一个 client 才有意义。
+        self._source_failures: dict[str, int] = {}
+        self._source_quarantine_until: dict[str, float] = {}
+        self._source_quarantine_level: dict[str, int] = {}
 
     def _resolve_bar_providers(self, data_config: dict[str, Any]) -> tuple[str, ...]:
         """Build the ordered K-line source chain (primary first, deduplicated)."""
@@ -275,6 +293,13 @@ class MarketDataClient:
             logger.warning("未知行情源 %s，按腾讯源处理", self.provider)
             primary = "tencent"
         configured = data_config.get("fallback_providers")
+        env_fallbacks = os.getenv("MARKET_DATA_FALLBACKS", "").strip()
+        if env_fallbacks:
+            # 部署级覆盖：同一份 config 在 Oracle/本机可能需要不同备用链
+            # （例如 Oracle 云 IP 被东财拦截时用 MARKET_DATA_FALLBACKS=sina）。
+            configured = [
+                item.strip() for item in env_fallbacks.split(",") if item.strip()
+            ]
         fallbacks: list[str] = []
         if configured is None:
             fallbacks.extend(BAR_SOURCE_FALLBACKS.get(primary, ()))
@@ -287,7 +312,9 @@ class MarketDataClient:
                     fallbacks.append(name)
                 else:
                     logger.warning("忽略未知备用行情源: %s", name)
-        return tuple(dict.fromkeys([primary, *fallbacks]))
+        chain = tuple(dict.fromkeys([primary, *fallbacks]))
+        logger.info("行情源链: %s", " → ".join(chain))
+        return chain
 
     def _resolve_calendar_providers(self, data_config: dict[str, Any]) -> tuple[str, ...]:
         """Calendar sources follow the provider, with the other one as backup."""
@@ -296,6 +323,60 @@ class MarketDataClient:
         if "fallback_providers" in data_config and not data_config.get("fallback_providers"):
             return (primary,)
         return (primary, backup)
+
+    @staticmethod
+    def _mask_proxy(proxy: str) -> str:
+        """Log proxy address without userinfo (it may carry credentials)."""
+        scheme, separator, rest = proxy.partition("://")
+        if not separator or "@" not in rest:
+            return proxy
+        _, _, host = rest.rpartition("@")
+        return f"{scheme}://******@{host}"
+
+    def _source_available(self, source: str, now: float) -> bool:
+        return now >= self._source_quarantine_until.get(source, 0.0)
+
+    def _record_source_failure(self, source: str, exc: Exception) -> None:
+        """Count consecutive failures; quarantine a source after the threshold.
+
+        A 501 from Tencent or a reset from Eastmoney is edge-level refusal, not
+        a transient blip: retrying it once per symbol for a 5,000-symbol scan
+        just multiplies the request count and deepens the ban.  Quarantine is
+        a hint, not a hard block — the source stays in the chain as a last
+        resort once all healthy sources fail.
+        """
+        streak = self._source_failures.get(source, 0) + 1
+        self._source_failures[source] = streak
+        if streak < SOURCE_QUARANTINE_FAILURES:
+            return
+        level = self._source_quarantine_level.get(source, 0)
+        cooldown = min(
+            SOURCE_QUARANTINE_SECONDS * (2**level),
+            SOURCE_QUARANTINE_MAX_SECONDS,
+        )
+        self._source_quarantine_until[source] = time.monotonic() + cooldown
+        self._source_quarantine_level[source] = level + 1
+        self._source_failures[source] = 0
+        hint = ""
+        if isinstance(exc, (ConnectionError, TimeoutError, URLError)):
+            hint = (
+                "若为 501/连接重置，多为出口 IP/代理被源站拦截，"
+                "请核对服务器公网 IP 与 MARKET_DATA_PROXY"
+            )
+        logger.warning(
+            "行情源 %s 连续 %d 次失败，暂停 %d 分钟（由备用源接管；"
+            "最近错误: %s）。%s",
+            source,
+            SOURCE_QUARANTINE_FAILURES,
+            cooldown // 60,
+            exc,
+            hint,
+        )
+
+    def _record_source_success(self, source: str) -> None:
+        self._source_failures.pop(source, None)
+        self._source_quarantine_until.pop(source, None)
+        self._source_quarantine_level.pop(source, None)
 
     def _http_json(self, url: str, params: dict[str, Any]) -> Any:
         """Fetch JSON with a fallback for the intermittent Eastmoney kline API.
@@ -1416,23 +1497,36 @@ class MarketDataClient:
         A single provider outage must not blank out a scan, so every failure is
         logged and the next source takes over.  An empty frame means "no data"
         rather than an outage: when all sources are empty the caller still gets
-        the empty frame, and only an all-failure chain raises.
+        the empty frame, and only an all-failure chain raises.  Sources that hit
+        the consecutive-failure threshold are deprioritized to the end of the
+        chain (still tried as a last resort), so a blocked endpoint is not
+        hammered once per symbol.
         """
         failures: list[str] = []
         empty: pd.DataFrame | None = None
-        for index, source in enumerate(self.bar_providers):
+        now = time.monotonic()
+        healthy = [source for source in self.bar_providers if self._source_available(source, now)]
+        # 隔离中的源排到最后兜底：所有健康源都失败时仍再试一次，避免整轮扫描缺数据。
+        quarantined = [source for source in self.bar_providers if source not in healthy]
+        for source in [*healthy, *quarantined]:
             try:
                 frame = self._fetch_bars_from(source, symbol, timeframe, limit)
             except Exception as exc:  # noqa: BLE001 - 单源故障必须继续尝试备用源
                 failures.append(f"{source}: {exc}")
                 logger.warning("行情源 %s 获取 %s %s 失败: %s", source, symbol, timeframe, exc)
+                self._record_source_failure(source, exc)
                 continue
             if frame is None or frame.empty:
+                # 空结果也是一次成功响应（该源没有这只股票），必须复位失败计数，
+                # 否则“两次网络失败 + 大量新股空结果 + 一次失败”会误触发熔断。
+                if frame is not None:
+                    self._record_source_success(source)
                 failures.append(f"{source}: 无数据")
                 if empty is None and frame is not None:
                     empty = frame
                 continue
-            if index:
+            self._record_source_success(source)
+            if source != self.bar_providers[0] and failures:
                 logger.warning(
                     "行情源降级 %s %s → %s（跳过 %s）",
                     symbol,

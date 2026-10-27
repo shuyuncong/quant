@@ -751,6 +751,15 @@ crontab -e
 
 - **页面暂无登录密码**：公网使用前建议在 Nginx 加 Basic Auth（`sudo apt install -y apache2-utils && sudo htpasswd -c /etc/nginx/.htpasswd admin`，并在 server 块加 `auth_basic "Restricted";` 与 `auth_basic_user_file /etc/nginx/.htpasswd;`）或限制来源 IP。
 - **行情源**：默认 `provider: auto`（腾讯/新浪/东财），无需额外数据源；如需 akshare/tushare，见 [DEPLOY.md](DEPLOY.md)。
-- **海外服务器行情**：先在容器内用 `/opt/venv/bin/python` 或宿主 `curl` 测试腾讯 K 线是否直连可达；可达就保持 `disable_system_proxy: true`。不可达时在 `.env` 设置 `MARKET_DATA_PROXY`（Compose 已透传），只代理行情，不要复用全局 `HTTPS_PROXY`；容器里的 `127.0.0.1` 指向容器自身，代理地址要用可达的主机名/IP。
+- **海外服务器行情（501 / 连接被重置）**：`HTTP Error 501: Not Implemented` 说明请求已到达腾讯边缘后被拒（代理 CONNECT 被拒的报错是 `Tunnel connection failed: 501`，两者可区分）；东财的 `Remote end closed connection without response` 是对端直接断开。两者都指向**该服务器的出口 IP/代理被源站拦截**，不是“日本不能访问”：东京节点单请求实测腾讯与东财均返回 200。
+  - 先确认出口：`docker exec quant-web env | grep -i proxy`。注意 `data.disable_system_proxy: true` 只让 urllib 忽略 `HTTP(S)_PROXY`，**绕不过宿主机 TUN/iptables 透明代理**。
+  - 在容器内跑诊断（分别打印直连、系统代理、`MARKET_DATA_PROXY` 三条路径的公网 IP、DNS 与状态码）：
+    ```bash
+    docker exec quant-web sh -lc 'cd /app/signal_system && /opt/venv/bin/python data/network_diagnostic.py --skip-pytdx'
+    ```
+    > 旧镜像（未包含本次改动）的脚本只支持 `--output`；先部署本提交，或直接用内联 `requests` 脚本测试，别把 `unrecognized arguments: --skip-pytdx` 当成网络故障。
+  - 实测（2026-10-27，Oracle Cloud 大阪 `64.110.106.x`）：腾讯 K 线直连 200；东财 `push2his` 与 `82.push2` 持续 `RemoteDisconnected`。这类云 IP 被东财反爬拦截时，在 `.env` 设 `MARKET_DATA_FALLBACKS=sina`（Compose 已透传，等价于 `market_data.fallback_providers: ["sina"]`），K 线链走 腾讯→新浪，避免每只股票对东财重试 4 次；股票列表/指数仍会各失败一次后降级（分别有 24h/4h 缓存），可接受。
+  - 处理顺序：① 直连可用就保持 `disable_system_proxy: true`，并清掉全局 `HTTP(S)_PROXY`；② 直连被拦但经某代理可达，就在 `.env` 设置 `MARKET_DATA_PROXY`（Compose 已透传，容器内 `127.0.0.1` 是容器自身，代理地址要用可达的主机名/IP）；③ 直连与代理都被拦，就用国内出口（家庭服务器/国内 VPS 的 HTTP 代理）或把 `provider` 改为 `sina`。不要把全局 `HTTPS_PROXY` 复用到行情。
+  - 代码侧已有进程内熔断：某源连续 3 次失败后会暂停 10 分钟（2 倍递增、上限 1 小时），备用源直接接管，不再逐股重试被拦端点；成功一次即恢复。
 - **端口**：容器内固定 3111；改端口需同步修改 Compose 的 `ports` 与 Nginx 的 `proxy_pass`。
 - **时区**：Compose 已设置 `TZ=Asia/Shanghai`，定时任务按北京时间执行。

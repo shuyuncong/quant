@@ -598,6 +598,119 @@ class MarketDataTests(unittest.TestCase):
             self.assertTrue(frame.empty)
             self.assertEqual(1, client._fetch_tencent.call_count)
 
+    def test_failing_sources_are_quarantined_after_consecutive_failures(self):
+        """连续失败的源被熔断：整轮扫描不再逐股重试同一被拦截的端点。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            calls = []
+
+            def unavailable(name):
+                def fetch(*_args, **_kwargs):
+                    calls.append(name)
+                    raise ConnectionError(f"{name} down")
+
+                return fetch
+
+            client._fetch_tencent = unavailable("tencent")
+            client._fetch_eastmoney = unavailable("eastmoney")
+            client._fetch_sina = lambda *_args, **_kwargs: self._daily_frame(source="sina")
+
+            frames = [
+                client._fetch_bars_with_fallback(f"60000{index}.SH", "1d", 5)
+                for index in range(6)
+            ]
+
+            # 前 3 只触发熔断后，新浪直接接管，腾讯/东财不再被调用。
+            self.assertEqual(3, calls.count("tencent"))
+            self.assertEqual(3, calls.count("eastmoney"))
+            self.assertEqual(["sina"] * 6, [frame.attrs["source"] for frame in frames])
+
+    def test_quarantined_source_remains_a_last_resort_when_healthy_sources_fail(self):
+        """熔断是“降优先级”而不是“禁用”：健康源全挂时仍试隔离源，不能直接失败。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            tencent_calls = []
+
+            def tencent_down(*_args, **_kwargs):
+                tencent_calls.append(1)
+                raise ConnectionError("tencent down")
+
+            client._fetch_tencent = tencent_down
+            client._fetch_eastmoney = MagicMock(side_effect=ConnectionError("eastmoney down"))
+            client._fetch_sina = lambda *_args, **_kwargs: self._daily_frame(source="sina")
+
+            for index in range(3):
+                client._fetch_bars_with_fallback(f"60010{index}.SH", "1d", 5)
+            self.assertEqual(3, len(tencent_calls))
+
+            client._fetch_sina = MagicMock(side_effect=ConnectionError("sina down"))
+            with self.assertRaises(RuntimeError) as raised:
+                client._fetch_bars_with_fallback("600200.SH", "1d", 5)
+
+            self.assertEqual(4, len(tencent_calls))
+            self.assertIn("tencent", str(raised.exception))
+
+    def test_source_success_after_cooldown_clears_quarantine(self):
+        """冷却期结束后成功一次即复位，恢复主源优先顺序。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            client._fetch_eastmoney = lambda *_args, **_kwargs: self._daily_frame(
+                source="eastmoney"
+            )
+
+            for index in range(3):
+                frame = client._fetch_bars_with_fallback(f"60030{index}.SH", "1d", 5)
+                self.assertEqual("eastmoney", frame.attrs["source"])
+            self.assertIn("tencent", client._source_quarantine_until)
+
+            client._source_quarantine_until["tencent"] = time.monotonic() - 1
+            client._fetch_tencent = lambda *_args, **_kwargs: self._daily_frame(source="tencent")
+            frame = client._fetch_bars_with_fallback("600400.SH", "1d", 5)
+
+            self.assertEqual("tencent", frame.attrs["source"])
+            self.assertNotIn("tencent", client._source_quarantine_until)
+            self.assertNotIn("tencent", client._source_failures)
+
+    def test_no_data_is_not_a_source_failure(self):
+        """空 DataFrame 表示“该源没有这只股票”，不是端点故障，不能触发熔断。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._fetch_eastmoney = MagicMock(return_value=self._daily_frame(periods=0))
+            client._fetch_sina = lambda *_args, **_kwargs: self._daily_frame(source="sina")
+
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            for index in range(2):
+                client._fetch_bars_with_fallback(f"60050{index}.SH", "1d", 5)
+            self.assertEqual(2, client._source_failures["tencent"])
+
+            client._fetch_tencent = MagicMock(return_value=self._daily_frame(periods=0))
+            for index in range(2, 4):
+                client._fetch_bars_with_fallback(f"60050{index}.SH", "1d", 5)
+            self.assertEqual({}, client._source_failures)
+            self.assertEqual({}, client._source_quarantine_until)
+
+            # 复位后只有 2 次失败，未到阈值，不能提前熔断。
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            for index in range(4, 6):
+                client._fetch_bars_with_fallback(f"60050{index}.SH", "1d", 5)
+            self.assertNotIn("tencent", client._source_quarantine_until)
+            self.assertEqual(2, client._fetch_tencent.call_count)
+
+    def test_proxy_credentials_are_masked_in_egress_log(self):
+        self.assertEqual(
+            "http://******@proxy.example:7890",
+            MarketDataClient._mask_proxy("http://user:secret@proxy.example:7890"),
+        )
+        self.assertEqual(
+            "http://proxy.example:7890",
+            MarketDataClient._mask_proxy("http://proxy.example:7890"),
+        )
+
     def test_sina_source_normalizes_share_volume_to_lots(self):
         """新浪成交量单位是股，腾讯/东财是手：降级到新浪时必须折算，否则量能失真 100 倍。"""
         with tempfile.TemporaryDirectory() as directory:
@@ -643,6 +756,21 @@ class MarketDataTests(unittest.TestCase):
 
             self.assertEqual("akshare", frame.attrs["source"])
             self.assertEqual(0, client._fetch_eastmoney.call_count)
+
+    def test_bar_fallback_providers_env_override_replaces_config(self):
+        """Oracle 云 IP 被东财拦截时，用部署级环境变量只保留 腾讯→新浪。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MARKET_DATA_FALLBACKS": "sina"}):
+                client = MarketDataClient(
+                    {
+                        "market_data": {
+                            "cache_dir": directory,
+                            "provider": "auto",
+                            "fallback_providers": ["akshare"],
+                        }
+                    }
+                )
+            self.assertEqual(("tencent", "sina"), client.bar_providers)
 
     def test_trade_calendar_falls_back_to_sina_when_tencent_unavailable(self):
         """腾讯日历源故障时新浪日历接管，避免退化成工作日近似。"""

@@ -70,7 +70,9 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # 2026-10-22: 行情层遵守 data.disable_system_proxy（系统代理导致 501/断连）。
     # 2026-10-23: 收盘快照刷新幂等化（同一交易日重复调用不再重写未变化的
     # pkl）；行情字段、复权口径与策略读取路径未变。
-    "market_data": "5660d97781febf934255fdaab0032ac1ba98422ca5f269b0bf68c581f2764724",
+    # 2026-10-27: 新增按源熔断（连续失败降优先级，备用源接管）与出口日志；
+    # 不改变任何行情字段、复权口径或缓存内容。
+    "market_data": "3feef1e059cd62de9ffbc5f83f35d19794f9b2e0efd68710b443653ef07eec50",
     # 旧值 af70eab3… == c02418a(2026-08-14) 的 **CRLF** 形态 → Windows 产物。
     # 2026-10-23: 包含关系合并与笔 MACD 面积改为数组/二分切片，输出经
     # 300 只真实样本逐字段比对完全一致；策略判定逻辑未变。
@@ -89,7 +91,8 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     "utils_helpers": "4a224fad302a98f7fbbf69620969bbc168f259ecf47f92159e69bc22071feabc",
     # 2026-10-23: 仅重新登记 market_data 快照哈希（幂等刷新优化），
     # 本审计的成交量口径断言未变。
-    "volume_unit_continuity_audit": "d28a5574d2c391abd93e041b4be6c10699c1b6fef311858e94d8a45f98628bcb",
+    # 2026-10-27: 重新登记 market_data 熔断/出口日志；本文件仅同步哈希注释。
+    "volume_unit_continuity_audit": "d120af861aa3b2a03dbfedfb8f2e6291a233607fa40f3f5ca2c97761a2a1adad",
 }
 
 

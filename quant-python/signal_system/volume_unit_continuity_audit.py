@@ -93,8 +93,10 @@ EXPECTED_CONFIG_SHA256 = (
 #      显式代理；避免系统代理把腾讯/东财 K 线请求改写成 501/断连。不涉及成交量口径。
 # 2026-10-23 重新登记：收盘快照刷新幂等化（同一交易日重复调用不再重写
 # 未变化的 pkl）。不涉及成交量单位、复权或因子口径，旧值 9a5db2e6…
+# 2026-10-27 重新登记：行情源熔断（连续失败降优先级）与出口日志；
+# 不涉及成交量口径，旧值 5660d977…
 EXPECTED_MARKET_DATA_SHA256 = (
-    "5660d97781febf934255fdaab0032ac1ba98422ca5f269b0bf68c581f2764724"
+    "3feef1e059cd62de9ffbc5f83f35d19794f9b2e0efd68710b443653ef07eec50"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"
