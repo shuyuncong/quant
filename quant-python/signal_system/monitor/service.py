@@ -45,6 +45,7 @@ from strategy.market_gate import (
     resolve_market_gate_settings,
     resolve_min_confirmations,
 )
+from strategy.regime_guidance import build_regime_guidance
 from strategy.signal_policy import (
     resolve_signal_execution_policy,
     signal_execution_mode_with_regime,
@@ -817,6 +818,7 @@ class SignalMonitor:
         market_regime = market_context.get("regime")
         if market_regime not in {"bull", "range", "bear"}:
             market_regime = None
+        regime_guidance = build_regime_guidance(market_regime)
         channels = self.notifier.active_channels()
         for requested_symbol in symbols:
             symbol = normalize_symbol(requested_symbol)
@@ -838,6 +840,7 @@ class SignalMonitor:
                     errors,
                     regime=market_regime,
                 )
+                analysis["regime_guidance"] = regime_guidance
                 event_objects = analysis.pop("event_objects")
                 if getattr(self, "analysis_version", 1) == 2:
                     from strategy.registry import evaluate_strategies
@@ -936,6 +939,7 @@ class SignalMonitor:
             "trade_gate_rejection_count": len(gate_rejections),
             "delivery": delivery,
             "market_context": market_context,
+            "regime_guidance": regime_guidance,
             "results": results,
         }
         report.update(report_meta or {})

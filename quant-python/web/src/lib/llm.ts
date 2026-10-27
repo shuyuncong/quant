@@ -332,6 +332,9 @@ function compactAnalysisResult(value: unknown, barsPerTimeframe: number): JsonOb
     // 分批减仓的执行数字（档位触发价/建议股数/保本止损位）只存在于策略结果里；
     // 解读压缩时若丢掉 strategies，模型就只能凭感觉估仓位，和引擎口径不一致。
     strategies: Array.isArray(result.strategies) ? result.strategies : undefined,
+    // 环境适配是只读参考；保留它，AI 解释时才能说明“当前环境适合哪套策略”，
+    // 而不是只看单只股票的买卖条件。
+    regime_guidance: result.regime_guidance,
     timeframes: Object.fromEntries(
       Object.entries(timeframes).map(([key, report]) => [key, compactTimeframe(report, barsPerTimeframe)])
     ),
@@ -361,6 +364,8 @@ function compactReport(report: JsonObject, barsPerTimeframe: number, candidateLi
     candidate_count: report.candidate_count,
     delivery: report.delivery,
     output_file: report.output_file,
+    market_context: report.market_context,
+    regime_guidance: report.regime_guidance,
     results,
     candidates,
     errors: Array.isArray(report.errors) ? report.errors.slice(0, 50) : report.errors,

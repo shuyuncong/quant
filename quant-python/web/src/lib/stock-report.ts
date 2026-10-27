@@ -61,6 +61,8 @@ export interface DataSource {
   analyzed_at: string | null;
   scanned_at: string | null;
   market_context: Record<string, unknown> | null;
+  /** 只读的市场环境 → 策略适配提示；旧报告没有这个字段。 */
+  regime_guidance?: Record<string, unknown> | null;
   delivery: Record<string, unknown> | null;
   results: DataResult[];
   candidates: Array<Record<string, unknown>>;
@@ -150,6 +152,7 @@ export function compactDataSource(value: unknown): DataSource {
   return {
     mode: textOrNull(report.mode) ?? "", analyzed_at: textOrNull(report.analyzed_at),
     scanned_at: textOrNull(report.scanned_at), market_context: recordOrNull(report.market_context),
+    regime_guidance: recordOrNull(report.regime_guidance),
     delivery: recordOrNull(report.delivery),
     results: Array.isArray(report.results) ? report.results.map((item) => {
       const result = asRecord(item);

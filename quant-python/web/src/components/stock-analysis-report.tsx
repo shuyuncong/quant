@@ -5,7 +5,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, ChartCandlestick, CircleCheck, 
 import { StockPriceChart } from "@/components/stock-price-chart";
 import { Button } from "@/components/ui/button";
 import {
-  type DataResult, type DataSource, type DataTimeframe, type IndicatorValue,
+  asRecord, type DataResult, type DataSource, type DataTimeframe, type IndicatorValue,
   confirmationLabel, executionLabel, finiteNumber, formatPrice, formatRatio, formatTime, orderedTimeframes,
   positionRisk, priceChange, primaryTimeframe, signalLabel, structureLabel, timeframeLabel, timeframeSignals,
 } from "@/lib/stock-report";
@@ -58,6 +58,55 @@ function TimeframeTable({ timeframes, selected, onSelect }: { timeframes: DataTi
   </div>;
 }
 
+function textList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function RegimeGuidanceView({ guidance }: { guidance: Record<string, unknown> }) {
+  const label = typeof guidance.regime_label === "string" ? guidance.regime_label : "环境未提供";
+  const primary = typeof guidance.primary_name === "string" ? guidance.primary_name : "";
+  const secondary = typeof guidance.secondary_name === "string" ? guidance.secondary_name : "";
+  const avoid = textList(guidance.avoid_names);
+  const evidence = textList(guidance.evidence);
+  const caveats = textList(guidance.caveats);
+  const summary = typeof guidance.summary === "string" ? guidance.summary : "";
+  const confidence = typeof guidance.confidence === "string"
+    ? ({ low: "低（样本有限）", medium: "中", high: "高", none: "无" } as Record<string, string>)[guidance.confidence] ?? guidance.confidence
+    : "未提供";
+  return <div className="space-y-4">
+    <div className="grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg border bg-card p-3">
+        <p className="text-xs text-muted-foreground">当前市场环境</p>
+        <p className="mt-1 text-lg font-semibold">{label}</p>
+      </div>
+      <div className="rounded-lg border bg-card p-3">
+        <p className="text-xs text-muted-foreground">历史适配策略</p>
+        <p className="mt-1 text-sm font-semibold">{primary || "未提供"}</p>
+        {secondary && <p className="mt-1 text-xs text-muted-foreground">备选：{secondary}</p>}
+      </div>
+      <div className="rounded-lg border bg-card p-3">
+        <p className="text-xs text-muted-foreground">证据强度</p>
+        <p className="mt-1 text-sm font-semibold">{confidence}</p>
+        {avoid.length > 0 && <p className="mt-1 text-xs text-muted-foreground">避免：{avoid.join("、")}</p>}
+      </div>
+    </div>
+    {summary && <p className="text-sm leading-relaxed">{summary}</p>}
+    {evidence.length > 0 && <div>
+      <h4 className="text-xs font-semibold text-muted-foreground">历史依据</h4>
+      <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+        {evidence.map((item, index) => <li key={index} className="flex gap-2"><span aria-hidden="true">·</span>{item}</li>)}
+      </ul>
+    </div>}
+    {caveats.length > 0 && <div className="rounded-lg bg-muted/40 p-3">
+      <h4 className="text-xs font-semibold text-muted-foreground">限制</h4>
+      <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted-foreground">
+        {caveats.map((item, index) => <li key={index} className="flex gap-2"><span aria-hidden="true">·</span>{item}</li>)}
+      </ul>
+    </div>}
+    <p className="text-xs text-muted-foreground">只读参考，不改变策略信号或仓位规则，不构成交易指令。</p>
+  </div>;
+}
+
 function StockDetail({ result, source }: { result: DataResult; source: DataSource }) {
   const primary = primaryTimeframe(result);
   const timeframes = orderedTimeframes(result.timeframes);
@@ -68,6 +117,7 @@ function StockDetail({ result, source }: { result: DataResult; source: DataSourc
   const risk = positionRisk(daily);
   const indicators = selected?.indicators ?? {};
   const market = source.market_context;
+  const guidance = asRecord(source.regime_guidance);
   const regime = typeof market?.regime === "string" ? market.regime : null;
   const regimeName = regime ? ({ bull: "牛市", range: "震荡", bear: "熊市", strong: "强势", weak: "弱势" } as Record<string, string>)[regime] ?? regime : "环境未提供";
   const entryAllowed = typeof market?.allows_entries === "boolean" ? market.allows_entries : null;
@@ -148,6 +198,12 @@ function StockDetail({ result, source }: { result: DataResult; source: DataSourc
         <p className="mt-4 border-t pt-3 text-xs leading-relaxed text-muted-foreground">各周期数据截至时间可能不同；市场环境描述分析时状态，不能代表未来持有期。策略启用状态沿用报告记录。</p>
       </Section>
     </div>
+
+    <Section number="05" title="市场环境与策略适配" aside={<span className="text-xs text-muted-foreground">只读参考 · 非交易指令</span>}>
+      {Object.keys(guidance).length > 0
+        ? <RegimeGuidanceView guidance={guidance} />
+        : <p className="text-sm text-muted-foreground">本报告未提供环境适配数据，请以报告记录中的市场环境为准。</p>}
+    </Section>
 
     {selected && <details className="report-panel">
       <summary className="cursor-pointer text-sm font-medium">{timeframeLabel(selected.timeframe)}数据明细 <span className="ml-2 text-xs font-normal text-muted-foreground">OHLCV / MACD · {selected.bars.length} 根</span></summary>

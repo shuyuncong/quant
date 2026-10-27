@@ -131,6 +131,29 @@ describe("buildInterpretationContext", () => {
     expect(advice.next.trigger_price).toBe(11.5);
     expect(advice.next.quantity).toBe(500);
   });
+
+  it("keeps the read-only regime guidance for the AI explanation", () => {
+    const guidance = {
+      regime: "bear",
+      regime_label: "熊市/下行",
+      primary_name: "零轴＋底背离",
+      summary: "深熊优先底背离。",
+      caveats: ["没有正 Sharpe CI。"],
+    };
+    const report = {
+      mode: "analyze",
+      regime_guidance: guidance,
+      results: [{
+        symbol: "600036.SH",
+        name: "招商银行",
+        regime_guidance: guidance,
+        timeframes: { "1d": { status: "ok", indicators: { dif: 2 }, chan: {}, recent_bars: bars("600036.SH", 100) } },
+      }],
+    };
+    const parsed = JSON.parse(buildInterpretationContext(JSON.stringify(report), 20_000)) as typeof report;
+    expect(parsed.regime_guidance.primary_name).toBe("零轴＋底背离");
+    expect(parsed.results[0].regime_guidance.regime).toBe("bear");
+  });
 });
 
 describe("buildCandidateReviewContext", () => {

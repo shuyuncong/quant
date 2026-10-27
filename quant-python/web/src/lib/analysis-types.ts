@@ -91,6 +91,29 @@ export interface StrategyResult {
   warnings: string[];
   parameters: Record<string, unknown>;
 }
+/**
+ * 只读的市场环境 → 策略适配提示。后端在个股分析报告里生成；
+ * 它不改变任何策略信号，也不能当作交易指令。
+ */
+export interface RegimeGuidance {
+  version: string;
+  regime: "bull" | "range" | "bear" | "unknown" | string;
+  regime_label: string;
+  primary_strategy: StrategyId | null;
+  primary_name: string;
+  secondary_strategy?: StrategyId | null;
+  secondary_name?: string | null;
+  avoid_strategies?: StrategyId[];
+  avoid_names?: string[];
+  confidence?: "low" | "medium" | "high" | "none" | string;
+  summary: string;
+  evidence?: string[];
+  caveats?: string[];
+  source?: string;
+  read_only?: boolean;
+  disclaimer?: string;
+}
+
 export interface AnalysisStage {
   status: "pending" | "running" | "success" | "failed";
   content: string;
@@ -109,6 +132,8 @@ export interface AnalysisDocument {
   report: Record<string, unknown>;
   portfolio: Record<string, unknown>;
   strategies: StrategyResult[];
+  /** 可选：旧记录没有这个字段，前端必须容忍缺失。 */
+  regime_guidance?: RegimeGuidance;
   technical: AnalysisStage;
   synthesis: AnalysisStage;
   revision: number;

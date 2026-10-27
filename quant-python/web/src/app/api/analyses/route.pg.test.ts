@@ -43,6 +43,7 @@ const slimDocument = (symbol: string, name: string) => JSON.stringify({
   report: { results: [{ timeframes: { "1m": "x".repeat(200_000) } }] },
   portfolio: { cash: 1, positions: "y".repeat(20_000) },
   strategies: [{ strategy_id: "macd_zero_axis", name: "日线零轴金叉", buy: true, sell: null, buy_conditions: [], sell_conditions: [], warnings: [] }],
+  regime_guidance: { regime: "bear", regime_label: "熊市/下行", primary_strategy: "macd_divergence", primary_name: "零轴＋底背离", summary: "深熊优先底背离。", confidence: "low" },
   technical: { status: "success", content: "技术分析正文" },
   synthesis: { status: "success", content: "综合结论正文" },
 });
@@ -134,7 +135,7 @@ describe("GET /api/analyses against real Postgres", () => {
     for (const record of records) {
       expect(record.document).not.toHaveProperty("report");
       expect(record.document).not.toHaveProperty("portfolio");
-      for (const key of ["strategies", "technical", "synthesis", "as_of", "revision", "symbol"]) {
+      for (const key of ["strategies", "regime_guidance", "technical", "synthesis", "as_of", "revision", "symbol"]) {
         expect(record.document).toHaveProperty(key);
       }
     }

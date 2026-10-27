@@ -23,6 +23,7 @@ const SUMMARY_DOCUMENT = `jsonb_build_object(
          'snapshot_hash', s.document->'snapshot_hash',
          'revision', s.document->'revision',
          'strategies', s.document->'strategies',
+         'regime_guidance', s.document->'regime_guidance',
          'technical', s.document->'technical',
          'synthesis', s.document->'synthesis'
        )`;

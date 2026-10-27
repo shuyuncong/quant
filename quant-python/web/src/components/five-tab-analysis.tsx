@@ -156,6 +156,7 @@ export function FiveTabAnalysis({
     content: "",
   };
   const strategies = document.strategies ?? [];
+  const guidance = document.regime_guidance;
   const failed = technical.status === "failed" || synthesis.status === "failed";
 
   const buyStrategies = strategies.filter((s) => s.buy);
@@ -220,6 +221,29 @@ export function FiveTabAnalysis({
           )}
         </div>
       </div>
+
+      {guidance && (
+        <div className="rounded-lg border bg-card p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">市场环境：{guidance.regime_label}</span>
+            <Badge variant="outline">历史适配：{guidance.primary_name || "未提供"}</Badge>
+            {guidance.secondary_name && (
+              <span className="text-muted-foreground">备选：{guidance.secondary_name}</span>
+            )}
+            {guidance.avoid_names?.length ? (
+              <span className="text-muted-foreground">避免：{guidance.avoid_names.join("、")}</span>
+            ) : null}
+            {guidance.confidence && (
+              <span className="text-muted-foreground">证据：{guidance.confidence === "low" ? "低" : guidance.confidence}</span>
+            )}
+          </div>
+          <p className="mt-1.5 leading-relaxed text-muted-foreground">{guidance.summary}</p>
+          {guidance.caveats?.[0] && (
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">限制：{guidance.caveats[0]}</p>
+          )}
+          <p className="mt-1 text-[11px] text-muted-foreground">只读参考，不改变策略信号或仓位规则。</p>
+        </div>
+      )}
 
       {/* 多策略共识状态微型看板 */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

@@ -22,7 +22,15 @@ function fixture(): DataSource {
     },
   };
   return compactDataSource({
-    analyzed_at: "2026-09-03T16:00:00", market_context: { regime: "bull", allows_entries: true },
+    analyzed_at: "2026-09-03T16:00:00", market_context: { regime: "bear", allows_entries: true },
+    regime_guidance: {
+      regime: "bear", regime_label: "熊市/下行",
+      primary_name: "零轴＋底背离", secondary_name: "日线零轴金叉",
+      avoid_names: ["年线趋势"], confidence: "low",
+      summary: "深熊优先底背离，浅熊可看零轴。",
+      evidence: ["2018H2 底背离 −3.67%"],
+      caveats: ["没有正 Sharpe CI。"],
+    },
     results: [
       { symbol: "000001", name: "甲股票", timeframes: { "60m": timeframe, "1d": timeframe, "1w": timeframe } },
       { symbol: "000002", name: "乙股票", timeframes: { "1d": { ...timeframe, latest_price: 22 }, "60m": timeframe } },
@@ -211,6 +219,15 @@ describe("chart rendering boundaries", () => {
     markerTitle = [...host.querySelectorAll("svg text > title")].find((title) => title.textContent?.includes("一类买点"));
     expect(markerTitle?.textContent).toContain("策略启用");
     expect(markerTitle?.parentElement?.textContent).toMatch(/B$/);
+  });
+
+  it("renders read-only regime guidance in the individual report", async () => {
+    const source = fixture();
+    await render(createElement(StockAnalysisReport, { source }));
+    expect(host.textContent).toContain("市场环境与策略适配");
+    expect(host.textContent).toContain("零轴＋底背离");
+    expect(host.textContent).toContain("年线趋势");
+    expect(host.textContent).toContain("只读参考");
   });
 });
 

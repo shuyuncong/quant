@@ -64,4 +64,24 @@ describe("五页签退出提示", () => {
     expect(html).toContain("等待生成");
     expect(html).toContain("分析结果生成后将在此处实时展示");
   });
+
+  it("展示只读的市场环境与策略适配提示", () => {
+    const withGuidance = document(false);
+    withGuidance.regime_guidance = {
+      version: "2026-10-26",
+      regime: "bear",
+      regime_label: "熊市/下行",
+      primary_strategy: "macd_divergence",
+      primary_name: "零轴＋底背离",
+      secondary_strategy: "macd_zero_axis",
+      secondary_name: "日线零轴金叉",
+      confidence: "low",
+      summary: "深熊优先底背离，浅熊可看零轴。",
+      caveats: ["没有正 Sharpe CI。"],
+    };
+    const html = renderToStaticMarkup(createElement(FiveTabAnalysis, { document: withGuidance, held: false }));
+    expect(html).toContain("市场环境：熊市/下行");
+    expect(html).toContain("零轴＋底背离");
+    expect(html).toContain("日线零轴金叉");
+  });
 });
