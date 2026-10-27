@@ -25,6 +25,7 @@ import argparse
 from copy import deepcopy
 import glob
 import json
+import logging
 import os
 import re
 import sys
@@ -659,6 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # 桥进程由 Web 调起，默认 root logger 只有 WARNING 级 lastResort 处理器，
+    # 行情出口/降级链的 INFO 诊断会整条丢失。日志走 stderr，不污染 stdout 的 JSON。
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     try:
         payload = _read_payload(args.payload)
         return COMMANDS[args.command](args.config, payload)
