@@ -199,11 +199,34 @@ def egress_check(mode: str, proxy: str = "", timeout: float = 10.0) -> CheckResu
         )
 
 
+# requests/urllib 只认这些标准变量；空值和行情专用 MARKET_DATA_PROXY
+# 不属于“系统代理”，否则空的 MARKET_DATA_PROXY= 会被误报成检测到代理。
+_PROXY_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+)
+
+
 def collect_proxy_env() -> Dict[str, str]:
     return {
         key: value
-        for key, value in os.environ.items()
-        if "proxy" in key.lower()
+        for key in _PROXY_ENV_KEYS
+        if (value := os.environ.get(key, "")).strip()
+    }
+
+
+def collect_market_config() -> Dict[str, str]:
+    keys = ("MARKET_DATA_PROVIDER", "MARKET_DATA_FALLBACKS")
+    return {
+        key: value.strip()
+        for key in keys
+        if (value := os.environ.get(key, "")).strip()
     }
 
 
@@ -224,11 +247,22 @@ def build_summary(
     results: List[CheckResult],
     proxy_env: Dict[str, str],
     market_proxy: str = "",
+    market_config: Optional[Dict[str, str]] = None,
 ) -> Dict:
+    market_config = dict(market_config or {})
+    provider = str(market_config.get("MARKET_DATA_PROVIDER", "")).strip().lower()
+    fallbacks = [
+        item.strip().lower()
+        for item in str(market_config.get("MARKET_DATA_FALLBACKS", "")).split(",")
+        if item.strip()
+    ]
     failures = [result for result in results if not result.ok]
     summary = {
         "proxy_env": proxy_env,
         "market_data_proxy": market_proxy,
+        "market_config": market_config,
+        "market_provider": provider,
+        "market_fallbacks": fallbacks,
         "results": [asdict(result) for result in results],
         "all_ok": not failures,
         "failed_count": len(failures),
@@ -310,16 +344,37 @@ def build_summary(
         for name in ("sina_kline", "sina_quote_list")
     )
     if tencent_blocked and sina_ok:
-        summary["diagnosis"].append(
-            "腾讯直连被拒，但新浪 K 线与股票列表可访问 → 在 .env 设 "
-            "MARKET_DATA_PROVIDER=sina（Compose 已透传），K 线/日历/列表/指数改走新浪；"
-            "MARKET_DATA_FALLBACKS 可留空或设为 tencent。"
-        )
+        if provider == "sina":
+            summary["diagnosis"].append(
+                "腾讯直连被拒；Sina 已是主源（MARKET_DATA_PROVIDER=sina），无需处理。"
+            )
+        elif "sina" in fallbacks:
+            summary["diagnosis"].append(
+                "腾讯直连被拒；当前 MARKET_DATA_FALLBACKS 已含 sina，备用链会自动接管，"
+                "无需再改。"
+            )
+        else:
+            summary["diagnosis"].append(
+                "腾讯直连被拒，但新浪 K 线与股票列表可访问 → 在 .env 设 "
+                "MARKET_DATA_PROVIDER=sina（Compose 已透传），K 线/日历/列表/指数改走新浪；"
+                "MARKET_DATA_FALLBACKS 可留空或设为 tencent。"
+            )
     elif eastmoney_blocked and sina_ok:
-        summary["diagnosis"].append(
-            "东财直连被拒（腾讯可用）→ 设 MARKET_DATA_FALLBACKS=sina 让备用链接管，"
-            "避免每只股票对东财重试；若腾讯也出现间歇 501，改用 MARKET_DATA_PROVIDER=sina。"
-        )
+        if provider == "sina":
+            summary["diagnosis"].append(
+                "东财直连被拒；Sina 已是主源（MARKET_DATA_PROVIDER=sina），"
+                "东财不在 K 线链中，无需处理。"
+            )
+        elif "sina" in fallbacks:
+            summary["diagnosis"].append(
+                "东财直连被拒；当前 MARKET_DATA_FALLBACKS 已含 sina，K 线链会跳过东财，"
+                "股票列表/指数/股票池历史也已跳过，无需再改。"
+            )
+        else:
+            summary["diagnosis"].append(
+                "东财直连被拒（腾讯可用）→ 设 MARKET_DATA_FALLBACKS=sina 让备用链接管，"
+                "避免每只股票对东财重试；若腾讯也出现间歇 501，改用 MARKET_DATA_PROVIDER=sina。"
+            )
     elif blocked_http and not sina_ok:
         summary["diagnosis"].append(
             "腾讯/东财/新浪直连均被拒 → 需要国内出口：给行情单独设 MARKET_DATA_PROXY，"
@@ -354,6 +409,7 @@ def main() -> int:
 
     results: List[CheckResult] = []
     proxy_env = collect_proxy_env()
+    market_config = collect_market_config()
     market_proxy = (args.proxy or os.getenv("MARKET_DATA_PROXY", "")).strip()
 
     results.append(egress_check("direct", timeout=args.timeout))
@@ -395,7 +451,7 @@ def main() -> int:
         for host in DEFAULT_TDX_HOSTS:
             results.append(socket_check(host, 7709))
 
-    summary = build_summary(results, proxy_env, market_proxy)
+    summary = build_summary(results, proxy_env, market_proxy, market_config)
 
     print("=== Proxy Environment ===")
     if proxy_env:
@@ -404,6 +460,14 @@ def main() -> int:
     else:
         print("none")
     print(f"MARKET_DATA_PROXY={market_proxy or 'none'}")
+
+    print("\n=== Market Data Config ===")
+    if market_config:
+        for key, value in market_config.items():
+            print(f"{key}={value}")
+    else:
+        print("MARKET_DATA_PROVIDER=(config default)")
+        print("MARKET_DATA_FALLBACKS=(config default)")
 
     print("\n=== Checks ===")
     for result in results:

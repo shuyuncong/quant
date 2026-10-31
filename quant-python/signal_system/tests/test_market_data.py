@@ -855,6 +855,38 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(["浦发银行", "宁德时代"], list(frame["name"]))
             self.assertEqual(0, client._fetch_eastmoney_stock_list.call_count)
 
+    def test_stock_list_skips_eastmoney_when_chain_excludes_it(self):
+        """MARKET_DATA_FALLBACKS=sina 时，股票列表也不应先打被拦的东财。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MARKET_DATA_FALLBACKS": "sina"}):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": "auto"}}
+                )
+            self.assertNotIn("eastmoney", client.bar_providers)
+            client._fetch_eastmoney_stock_list = MagicMock(
+                side_effect=AssertionError("eastmoney stock list must not be used")
+            )
+            client._fetch_sina_stock_snapshot = MagicMock(
+                return_value=[{"code": "600000", "name": "浦发银行", "symbol": "sh600000"}]
+            )
+
+            frame = client.get_stock_list()
+
+            self.assertEqual(["600000"], list(frame["code"]))
+            self.assertEqual(0, client._fetch_eastmoney_stock_list.call_count)
+
+    def test_index_sources_follow_chain_when_eastmoney_excluded(self):
+        """部署链排除东财后，指数日线也不再把东财放在第一位。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MARKET_DATA_FALLBACKS": "sina"}):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": "auto"}}
+                )
+            self.assertEqual(
+                ("tencent", "sina", "eastmoney"),
+                client._index_bar_sources(),
+            )
+
     def test_trade_calendar_falls_back_to_sina_when_tencent_unavailable(self):
         """腾讯日历源故障时新浪日历接管，避免退化成工作日近似。"""
         with tempfile.TemporaryDirectory() as directory:

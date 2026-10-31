@@ -970,9 +970,9 @@ class MarketDataClient:
             result = self._get_akshare().stock_info_a_code_name().rename(
                 columns={"code": "code", "name": "name"}
             )
-        elif self.provider == "sina":
-            # 新浪主源部署（Oracle 云 IP）不要再先打东财：股票列表每天只需一次，
-            # 但东财被拦时要白等 4 次重试才降级，日志也会误报成行情故障。
+        elif self.provider == "sina" or "eastmoney" not in self.bar_providers:
+            # 新浪主源或部署链已排除东财（Oracle 常用 MARKET_DATA_FALLBACKS=sina）：
+            # 不要再先打被拦的东财列表端点，否则每天要白等 4 次重试并误报行情故障。
             self._throttle()
             items = self._fetch_sina_stock_snapshot()
             result = pd.DataFrame(
@@ -1226,6 +1226,12 @@ class MarketDataClient:
         """
         if self.provider == "sina":
             return ("sina", "eastmoney", "tencent")
+        if "eastmoney" not in self.bar_providers:
+            # 部署链已排除东财：按链顺序先行，东财只留最后兜底，
+            # 避免 Oracle 每 4 小时白打 4 次被拦的 push2his。
+            ordered = [source for source in self.bar_providers if source in ("tencent", "sina")]
+            ordered.append("eastmoney")
+            return tuple(dict.fromkeys(ordered))
         return ("eastmoney", "tencent", "sina")
 
     def get_index_bars(self, symbol: str = "000001.SH", limit: int = 300) -> pd.DataFrame:

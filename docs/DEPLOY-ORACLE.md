@@ -764,7 +764,7 @@ crontab -e
     ```
     > 旧镜像（未包含本次改动）的脚本只支持 `--output`；先部署本提交，或直接用内联 `requests` 脚本测试，别把 `unrecognized arguments: --skip-pytdx` 当成网络故障。
   - 部署后看诊断里的 `tencent_fqkline:direct`：应为 200。若它仍是 501/断连，说明该出口被腾讯做了 IP 级拦截，再按下面切新浪主源。
-  - **`MARKET_DATA_FALLBACKS=sina` 只改备用链，不改变主源**：主源仍是腾讯，每轮扫描/每次进程重启都会先吃几次失败。要彻底绕开被拦端点，设**主源**：
+  - **`MARKET_DATA_FALLBACKS=sina` 只改备用链，不改变主源**：主源仍是腾讯，每轮扫描/每次进程重启都会先吃几次失败；但股票列表、指数日线和股票池历史会识别“部署链已排除东财”，直接走新浪，不再逐只重试东财。要彻底绕开被拦端点（腾讯也 501 时），设**主源**：
     ```dotenv
     # /opt/docker/quant/quant-python/quant-python/.env
     MARKET_DATA_PROVIDER=sina
