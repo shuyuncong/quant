@@ -246,14 +246,15 @@
 - [x] 输出候选层和组合层双报告
 - [x] 当前探索性回测：val 移除 18 笔，组合收益 `28.57% → 31.15%`
 - [x] 当前结论登记为 `insufficient_sample_exploratory`，不改变生产
-- [x] 在候选生成前隔离真正未查看的时间外 holdout（v2 final：全 A 5007，只含预冻结信息，未生成/查看候选收益）
-- [ ] 使用 2026-09 之后新窗口重新验证 near 降级
+- [x] v2 时间外 holdout 已隔离（全 A 5007，未生成候选），但 2026-10-31 复核发现冻结代码 hash 与工作区漂移：`strategy/macd.py` 在 2026-09-14（`b7e5143`）改了 near 多金叉去重，冻结版本也不在任何 git 提交里。**v2 作废**，不再运行其生成器。
+- [x] v3 重新冻结（2026-10-31，起点 2026-11-02）：`D:\tmp\holdout_v3\holdout_freeze.json`，seal `af58e5af…`，29 个代码文件 + 规则/universe/配置/运行时全部通过；旧 v2 计划任务已禁用。
+- [ ] 使用 2026-11 之后新窗口重新验证 near 降级（v3）
 - [ ] holdout 至少满足：30 个唯一候选、10 只股票、10 个信号日
 - [x] v2 双阶段 seal：初始 freeze seal + 一次性 candidate seal，候选 hash 不允许为空
 - [x] 候选生成强制 `--local-data-only`，禁止行情或股票池历史联网回填
-- [x] 全池本地缓存已补齐并通过复核：NONE 5007/5007、QFQ 5007/5007、缺失 0，指数更新至 2026-09-01；生产库未连接
+- [x] v2 全池本地缓存已补齐并通过复核：NONE 5007/5007、QFQ 5007/5007、缺失 0，指数更新至 2026-09-01；生产库未连接。v3 的缓存正在重新更新到 2026-10-30
 - [x] 新增只读 `holdout_readiness_status.py`：自动检查 freeze、全池覆盖、Holdout 交易日、候选二阶段 seal 和结果成熟度，不生成或修改任何产物
-- [ ] 当前 Holdout 状态：`waiting_for_signal_days`，2026-09-01 起仅 1/10 个完整交易日；达到 10 日后才允许探测一次性候选生成
+- [ ] 当前 Holdout 状态：v3 `waiting_for_signal_days`，0/10（起点 2026-11-02）；本地缓存正在更新到 2026-10-30，11/13 18:00 由 `Quant Holdout v3 Day10 Readiness` 自动检查；达到 10 日后才允许探测一次性候选生成
 - [ ] 样本门首次满足后一次性封存候选；封存后停止生成器并等待至少 40 个后续指数交易日，正式审计仍须 `baseline_replay_complete=true`
 
 产物：
@@ -264,8 +265,11 @@
 - `quant-python/signal_system/holdout_integrity.py`
 - `quant-python/signal_system/holdout_readiness_status.py`
 - `D:\tmp\macd_near_regime_audit_final\macd_near_regime_audit.json`
-- `D:\tmp\holdout_full_a_v2_final\holdout_freeze.json`
-- `D:\tmp\holdout_full_a_v2_final\holdout_freeze.seal`
+- `D:\tmp\holdout_full_a_v2_final\holdout_freeze.json`（v2，已作废，仅留档）
+- `D:\tmp\holdout_full_a_v2_final\holdout_freeze.seal`（v2，已作废）
+- `D:\tmp\holdout_v3\holdout_freeze.json`（v3，生效）
+- `D:\tmp\holdout_v3\holdout_freeze.seal`（v3，生效）
+- `scripts\run_holdout_v3_day10.ps1`（v3 定时检查脚本，只读检查、不生成候选）
 
 ### 27. 第一优先级：入场与市场环境因子
 
@@ -304,9 +308,11 @@
   - [x] `research_sample_builder.py --cache-dir/--out-dir/--config`：离线冻结输入、配置快照与窗口；计算信号前裁掉终点以后行情，避免生成未来 holdout 候选。
   - [x] `liquidity_strategy_study.py`：固定近 30 日均换手率 1%～5%，复用三策略真实资金回放；分“全信号 / 可评估基线 / 规则过滤”三组，缺失值单独统计，收益差只比较后两组。
   - [x] 60 只固定种子分层样本实拉 89,551 根（2016-12-01～2024-12-31，晚上市从实际上市起）；三窗口资金回放均标记 `insufficient_sample`，零轴过滤在 2023H1 反转、年线过滤会损失盈利单，不默认启用。完整 JSON 在 `signal_system/output/backtests/_history_expansion_20261026/`，明细见 `signal_system/README.md`。
-  - [x] 扩到 344 只分层样本（526,921 根，成交额/换手率全覆盖）：零轴、年线候选池在三窗口均达 `sufficient`。零轴换手率过滤 1 好 2 坏；**年线 3/3 同向改善（+4.9/+11.2/+3.4pp）**，是唯一值得进入独立 holdout 与 cluster bootstrap 的候选，但仍是当前在市样本、非 PIT，生产不变。
+  - [x] 扩到 344 只分层样本（526,921 根，成交额/换手率全覆盖）：零轴、年线候选池在三窗口均达 `sufficient`。零轴换手率过滤 1 好 2 坏；**年线 3/3 同向改善（+4.9/+11.2/+3.4pp）**，进入配对 cluster bootstrap。
+  - [x] 2026-10-31 配对 block bootstrap（重放冻结样本保留日权益，block=5、reps=2000）：年线 3/3 窗口正 Δ、中位 +4.90pp，但三窗口 95% CI 全跨 0（p=0.212–0.329）；零轴 1/3 正 Δ、中位 −7.81pp。**无统计证据，不升级生产，不做 2025–2026 holdout**；见 `docs/2026-10-31-过滤候选复核.md`。
+  - [x] 2026-10-31 年线趋势 + MA20 预注册 holdout（2025H1/2025H2/2026H1）：样本门通过，但判决 `fail`（1/3 窗口正收益，中位 −2.16pp；2026H1 −11.80pp），开发期 7/8 改善属过拟合；不投产。
   - [x] 同批样本五窗口闸门复验（2018H2/2019H1/2020H1/2021H2/2023H1）：回撤多数下降、收益方向随窗口反复；2018H2 闸门全关使零轴/年线避开 −17.6%/−15.5%，但 2023H1 年线被闸门砍掉 +12.15%。不支持统一加闸门。
-  - [ ] 全市场回填（`symbol_order_stratified.txt` 剩余约 4,600 只）与年线换手率候选的 holdout/bootstrap 待跑。
+  - [ ] 全市场回填（`symbol_order_stratified.txt` 剩余约 4,300 只）仍待跑；换手率候选已关闭，回填只剩 gate 扩样复验用途，优先级下调。
   - [ ] 原“成交额、换手率及流动性稳定度”的全池正式审计仍待独立验收；固定换手率研究工具不等于全部因子通过，更不自动改变生产参数。
 - [x] 低 Beta60 风险候选层审计器已实现：全 canonical 同日 low-high 为主；原 range/bear-only 方案因 train/test 先天样本不足在实现前调整；regime、correlation、downside beta、残差波动仅诊断
 - [x] 低 Beta60 正式候选层回测：train/val/test 主结果方向不一致，全部 bootstrap CI 跨 0，`candidate_gate.pass=false`；不进入组合层，生产维持 P0

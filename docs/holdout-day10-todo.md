@@ -1,5 +1,12 @@
 # Holdout 第 10 个交易日执行 TODO
 
+> **2026-10-31 更新：v2 已作废。** 冻结代码 hash 与工作区漂移（`strategy/macd.py` 在 2026-09-14 改了 near 多金叉去重），且冻结版本不在任何 git 提交里。改用 v3：
+> - 清单：`D:\tmp\holdout_v3\holdout_freeze.json`，起点 `2026-11-02`，seal `af58e5af…`
+> - 计划任务：`Quant Holdout v3 Day10 Readiness`，2026-11-13 18:00
+> - 脚本：`scripts\run_holdout_v3_day10.ps1`（只读检查，不生成候选）
+>
+> 本文件以下内容保留为 v2 执行记录；**不要对 v2 运行生成器**。
+
 ## 状态
 
 - [ ] 待执行
