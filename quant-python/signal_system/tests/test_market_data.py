@@ -772,6 +772,52 @@ class MarketDataTests(unittest.TestCase):
                 )
             self.assertEqual(("tencent", "sina"), client.bar_providers)
 
+    def test_provider_env_override_makes_sina_primary(self):
+        """海外云 IP 被腾讯/东财同时拦截时，MARKET_DATA_PROVIDER=sina 无需改 config.yaml。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {"MARKET_DATA_PROVIDER": "sina", "MARKET_DATA_FALLBACKS": ""},
+            ):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": "auto"}}
+                )
+            self.assertEqual("sina", client.provider)
+            self.assertEqual(("sina", "tencent", "eastmoney"), client.bar_providers)
+            self.assertEqual(("sina", "tencent"), client.calendar_providers)
+
+    def test_unknown_provider_env_override_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MARKET_DATA_PROVIDER": "bogus"}):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": "auto"}}
+                )
+            self.assertEqual("auto", client.provider)
+            self.assertEqual(("tencent", "eastmoney", "sina"), client.bar_providers)
+
+    def test_sina_provider_reads_stock_list_from_sina_directly(self):
+        """provider=sina 时不再先打被拦截的东财列表端点。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "sina"}}
+            )
+            client._fetch_eastmoney_stock_list = MagicMock(
+                side_effect=AssertionError("eastmoney stock list must not be used")
+            )
+            client._fetch_sina_stock_snapshot = MagicMock(
+                return_value=[
+                    {"code": "600000", "name": "浦发银行", "symbol": "sh600000"},
+                    {"code": "300750", "name": "宁德时代", "symbol": "sz300750"},
+                    {"code": "830799", "name": "艾融软件", "symbol": "bj830799"},
+                ]
+            )
+
+            frame = client.get_stock_list()
+
+            self.assertEqual(["600000", "300750"], list(frame["code"]))
+            self.assertEqual(["浦发银行", "宁德时代"], list(frame["name"]))
+            self.assertEqual(0, client._fetch_eastmoney_stock_list.call_count)
+
     def test_trade_calendar_falls_back_to_sina_when_tencent_unavailable(self):
         """腾讯日历源故障时新浪日历接管，避免退化成工作日近似。"""
         with tempfile.TemporaryDirectory() as directory:
@@ -822,12 +868,78 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(date(2025, 1, 2), frame["datetime"].iloc[0].date())
             self.assertEqual(10.2, frame["close"].iloc[-1])
 
+    def test_index_bars_prefers_sina_when_provider_is_sina(self):
+        """provider=sina 时市场闸门指数直接走新浪，不再先打被拦的东财/腾讯。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "sina"}}
+            )
+            client._throttle = lambda: None
+            client._fetch_index_bars_eastmoney = MagicMock(
+                side_effect=AssertionError("eastmoney index must not be used")
+            )
+            client._fetch_index_bars_tencent = MagicMock(
+                side_effect=AssertionError("tencent index must not be used")
+            )
+            index_frame = pd.DataFrame(
+                {
+                    "datetime": pd.bdate_range("2025-01-02", periods=30),
+                    "open": [10.0] * 30,
+                    "high": [10.5] * 30,
+                    "low": [9.5] * 30,
+                    "close": [10.2] * 30,
+                    "volume": [100_000.0] * 30,
+                    "amount": [0.0] * 30,
+                    "is_closed": [True] * 30,
+                }
+            )
+            client._fetch_index_bars_sina = MagicMock(return_value=index_frame)
+
+            frame = client.get_index_bars("000001.SH", limit=300)
+
+            self.assertEqual(30, len(frame))
+            self.assertEqual(0, client._fetch_index_bars_eastmoney.call_count)
+            self.assertEqual(0, client._fetch_index_bars_tencent.call_count)
+
+    def test_index_bars_falls_back_to_sina_after_http_sources(self):
+        """东财与腾讯指数都被云 IP 拦截时，新浪指数兜底，市场闸门不落 unknown。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {"market_data": {"cache_dir": directory, "provider": "auto"}}
+            )
+            client._throttle = lambda: None
+            client._http_json = MagicMock(
+                side_effect=ConnectionError("Remote end closed connection without response")
+            )
+            client._fetch_index_bars_tencent = lambda *_args, **_kwargs: None
+            ak = MagicMock()
+            ak.stock_zh_index_daily.return_value = pd.DataFrame(
+                {
+                    "date": pd.bdate_range("2025-01-02", periods=30),
+                    "open": [10.0] * 30,
+                    "high": [10.5] * 30,
+                    "low": [9.5] * 30,
+                    "close": [10.2] * 30,
+                    "volume": [5_000_000.0] * 30,
+                }
+            )
+            client._get_akshare = lambda: ak
+
+            frame = client.get_index_bars("000001.SH", limit=300)
+
+            self.assertEqual("sina-index", frame.attrs["source"])
+            self.assertEqual(30, len(frame))
+            # 新浪指数成交量是股，除以 100 与腾讯/东财的"手"对齐。
+            self.assertEqual(50_000.0, frame["volume"].iloc[-1])
+            self.assertEqual("sh000001", ak.stock_zh_index_daily.call_args.kwargs["symbol"])
+
     def test_index_bars_raises_when_all_sources_unavailable(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient({"market_data": {"cache_dir": directory}})
             client._throttle = lambda: None
             client._http_json = MagicMock(side_effect=RuntimeError("no eastmoney"))
             client._fetch_index_bars_tencent = lambda *_args, **_kwargs: None
+            client._fetch_index_bars_sina = lambda *_args, **_kwargs: None
             with self.assertRaises(RuntimeError):
                 client.get_index_bars("000001.SH")
 

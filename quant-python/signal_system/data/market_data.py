@@ -45,6 +45,11 @@ BAR_SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
 }
 CALENDAR_SOURCES = ("tencent", "sina")
 
+# 2026-10-30 起 `web.ifzq.gtimg.cn` 对 `fqkline/get`（日线复权、指数、日历）
+# 返回 501 WAF 挑战页，同一路径在 `ifzq.gtimg.cn` 仍返回正常 JSON。
+# 日线/复权/日历统一走后者；分钟线本来就走 ifzq.gtimg.cn。
+TENCENT_IFZQ_BASE = "https://ifzq.gtimg.cn/appstock/app"
+
 # 单源连续失败后的进程内熔断。海外主机/源站反爬时，整轮扫描没必要对同一个
 # 源逐股重试：东财一次失败要打 4 个请求（HTTPS×2 + HTTP×2），一次全市场
 # 扫描会浪费数小时并加重封禁。达到阈值后暂停该源，由备用源接管；冷却期按
@@ -228,7 +233,25 @@ class MarketDataClient:
     def __init__(self, config: dict[str, Any]):
         data_config = config.get("market_data", config.get("data_source", {}))
         stock_pool_config = config.get("stock_pool", {})
-        self.provider = str(data_config.get("provider", "auto")).lower()
+        configured_provider = str(data_config.get("provider", "auto")).lower()
+        env_provider = os.getenv("MARKET_DATA_PROVIDER", "").strip().lower()
+        if env_provider and env_provider not in (*BAR_SOURCE_FALLBACKS, "auto"):
+            logger.warning(
+                "忽略未知的 MARKET_DATA_PROVIDER=%s（可用: auto/%s）",
+                env_provider,
+                "/".join(BAR_SOURCE_FALLBACKS),
+            )
+        elif env_provider:
+            # 部署级主源覆盖：Oracle 云 IP 被腾讯/东财同时拦截时，
+            # 只改 .env（MARKET_DATA_PROVIDER=sina）即可把新浪设为主源，
+            # 不必修改镜像内的 config.yaml。
+            logger.info(
+                "行情源主源由 MARKET_DATA_PROVIDER 覆盖: %s → %s",
+                configured_provider,
+                env_provider,
+            )
+            configured_provider = env_provider
+        self.provider = configured_provider
         self.bar_providers = self._resolve_bar_providers(data_config)
         self.calendar_providers = self._resolve_calendar_providers(data_config)
         self.adjust = str(data_config.get("adjust", "none")).strip().lower() or "none"
@@ -947,6 +970,18 @@ class MarketDataClient:
             result = self._get_akshare().stock_info_a_code_name().rename(
                 columns={"code": "code", "name": "name"}
             )
+        elif self.provider == "sina":
+            # 新浪主源部署（Oracle 云 IP）不要再先打东财：股票列表每天只需一次，
+            # 但东财被拦时要白等 4 次重试才降级，日志也会误报成行情故障。
+            self._throttle()
+            items = self._fetch_sina_stock_snapshot()
+            result = pd.DataFrame(
+                [
+                    {"code": item.get("code"), "name": item.get("name", "")}
+                    for item in items
+                    if not str(item.get("symbol", "")).startswith("bj")
+                ]
+            )
         else:
             self._throttle()
             try:
@@ -1175,24 +1210,48 @@ class MarketDataClient:
         self._save_cache(cache_key, frame)
         return frame
 
+    def _index_bar_sources(self) -> tuple[str, ...]:
+        """Order the index fetchers; Sina leads when it is the configured primary.
+
+        Oracle Cloud egress is rejected by Eastmoney (connection reset) and the
+        Tencent legacy host served 501 challenge pages for fqkline until
+        2026-10-30, while Sina still answers.  In a ``sina`` deployment the
+        market gate must therefore try Sina first instead of burning two
+        unreliable endpoints on every index refresh.
+        """
+        if self.provider == "sina":
+            return ("sina", "eastmoney", "tencent")
+        return ("eastmoney", "tencent", "sina")
+
     def get_index_bars(self, symbol: str = "000001.SH", limit: int = 300) -> pd.DataFrame:
         """Fetch closed daily index bars for the market-regime gate.
 
-        Primary source: Eastmoney push2his.  Falls back to Tencent ifzq when
-        Eastmoney is unavailable or returns no klines (observed outage:
-        "Remote end closed connection"), so the market gate degrades to a
-        stale-data / fallback decision instead of regime "unknown".
+        Primary source: Eastmoney push2his, then Tencent ifzq, then Sina.
+        Eastmoney/Tencent can be unavailable from some cloud egress IPs or
+        hosts, so Sina is the last resort that keeps the gate from degrading
+        to regime "unknown".
         """
         key = f"index_bars|{str(symbol).upper()}|1d|{limit}"
         cached = self._cached(key, 4 * 3600)
         if cached is not None:
             return cached.tail(limit).reset_index(drop=True)
 
-        frame = self._fetch_index_bars_eastmoney(symbol, limit)
+        frame: pd.DataFrame | None = None
+        attempted: list[str] = []
+        for source in self._index_bar_sources():
+            attempted.append(source)
+            if source == "eastmoney":
+                frame = self._fetch_index_bars_eastmoney(symbol, limit)
+            elif source == "tencent":
+                frame = self._fetch_index_bars_tencent(symbol, limit)
+            else:
+                frame = self._fetch_index_bars_sina(symbol, limit)
+            if frame is not None and not frame.empty:
+                break
         if frame is None or frame.empty:
-            frame = self._fetch_index_bars_tencent(symbol, limit)
-        if frame is None or frame.empty:
-            raise RuntimeError(f"指数日线获取失败: {symbol}")
+            raise RuntimeError(
+                f"指数日线获取失败: {symbol}（已尝试: {', '.join(attempted)}）"
+            )
         frame = frame[frame["is_closed"]].tail(limit).reset_index(drop=True)
         self._save_cache(key, frame)
         return frame
@@ -1247,7 +1306,7 @@ class MarketDataClient:
         try:
             self._throttle()
             payload = self._http_json(
-                "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+                f"{TENCENT_IFZQ_BASE}/fqkline/get",
                 {"param": f"{code},day,,,{max(limit, 300)},qfq"},
             )
             data = payload.get("data", {})
@@ -1276,6 +1335,37 @@ class MarketDataClient:
         if not rows:
             return None
         return standardize_bars(pd.DataFrame(rows), "1d", "tencent-ifzq-index", adjust="none")
+
+    @staticmethod
+    def _sina_index_symbol(symbol: str) -> str:
+        text = str(symbol).strip().upper()
+        code = normalize_symbol(text)
+        if text.endswith(".SZ"):
+            return f"sz{code}"
+        if text.endswith(".SH") or code.startswith("000"):
+            return f"sh{code}"
+        return tencent_symbol(text)
+
+    def _fetch_index_bars_sina(self, symbol: str, limit: int) -> pd.DataFrame | None:
+        """Sina index daily bars via AkShare (works where 东财/腾讯 edge rejects).
+
+        Sina reports index volume in shares while Eastmoney/Tencent report lots,
+        so divide by ``volume_unit_shares`` to keep one unit across the chain
+        (the same conversion ``_fetch_sina`` applies to stocks).
+        """
+        sina_symbol = self._sina_index_symbol(symbol)
+        try:
+            self._throttle()
+            raw = self._get_akshare().stock_zh_index_daily(symbol=sina_symbol)
+        except Exception as exc:
+            logger.warning("新浪指数日线失败 %s: %s", sina_symbol, exc)
+            return None
+        if raw is None or raw.empty:
+            return None
+        frame = standardize_bars(raw, "1d", "sina-index", adjust="none")
+        if not frame.empty and self.volume_unit_shares > 0:
+            frame["volume"] = frame["volume"] / self.volume_unit_shares
+        return frame.tail(max(limit, 300)).reset_index(drop=True)
 
     def _fetch_akshare(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
         ak = self._get_akshare()
@@ -1359,7 +1449,7 @@ class MarketDataClient:
         self._throttle()
         if timeframe == "1d":
             if self.adjust in ("", "none"):
-                endpoint = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
+                endpoint = f"{TENCENT_IFZQ_BASE}/kline/kline"
                 payload = self._http_json(
                     endpoint,
                     {"param": f"{stock},day,,,{max(limit, 300)}"},
@@ -1368,7 +1458,7 @@ class MarketDataClient:
                 items = data.get("day") or []
             else:
                 adjust_prefix = "hfq" if self.adjust == "hfq" else "qfq"
-                endpoint = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+                endpoint = f"{TENCENT_IFZQ_BASE}/fqkline/get"
                 payload = self._http_json(
                     endpoint,
                     {"param": f"{stock},day,,,{max(limit, 300)},{adjust_prefix}"},
@@ -1382,7 +1472,7 @@ class MarketDataClient:
                     "或切换支持该口径的行情源"
                 )
             period = f"m{TIMEFRAME_MINUTES[timeframe]}"
-            endpoint = "https://ifzq.gtimg.cn/appstock/app/kline/mkline"
+            endpoint = f"{TENCENT_IFZQ_BASE}/kline/mkline"
             payload = self._http_json(
                 endpoint,
                 {"param": f"{stock},{period},,{max(limit, 300)}"},
@@ -1688,7 +1778,7 @@ class MarketDataClient:
             column = "trade_date" if "trade_date" in raw.columns else raw.columns[0]
             return pd.DataFrame({"trade_date": pd.to_datetime(raw[column])})
         payload = self._http_json(
-            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+            f"{TENCENT_IFZQ_BASE}/fqkline/get",
             {"param": "sh000001,day,,,1500,qfq"},
         )
         data = (payload.get("data") or {}).get("sh000001") or {}

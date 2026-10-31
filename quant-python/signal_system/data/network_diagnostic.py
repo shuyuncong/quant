@@ -10,9 +10,11 @@ connection without response".  It separates the variables that matter:
 * whether the failure is an HTTP refusal (501) or a TCP-level drop
 
 The quote endpoints are *not* blocked by geography: a single request from
-Tokyo/Hong Kong/US nodes reaches both Tencent and Eastmoney.  A server that
-fails every request is being rejected by the source edge because of its
-egress IP / proxy / request rate, so the egress IP is printed explicitly.
+Tokyo/Hong Kong/US nodes reaches Sina, and TDX is a separate TCP path.  Tencent
+and Eastmoney, however, do reject some cloud egress IPs: Tencent answers 501,
+Eastmoney drops the connection.  The diagnostic prints the egress IP and tests
+Sina as the independent source, so a blocked Tencent/Eastmoney can be told apart
+from a dead network.
 """
 
 from __future__ import annotations
@@ -30,12 +32,14 @@ import requests
 DEFAULT_HTTP_TARGETS = [
     {
         "name": "tencent_kline",
-        "url": "https://web.ifzq.gtimg.cn/appstock/app/kline/kline",
+        # 生产路径：web.ifzq.gtimg.cn 自 2026-10-30 起对 fqkline/get 返回 501，
+        # 日线/复权/日历统一改走 ifzq.gtimg.cn。
+        "url": "https://ifzq.gtimg.cn/appstock/app/kline/kline",
         "params": {"param": "sh600276,day,,,5"},
     },
     {
         "name": "tencent_fqkline",
-        "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+        "url": "https://ifzq.gtimg.cn/appstock/app/fqkline/get",
         "params": {"param": "sh600276,day,,,5,qfq"},
     },
     {
@@ -66,6 +70,26 @@ DEFAULT_HTTP_TARGETS = [
             "fid": "f12",
             "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
             "fields": "f12,f14",
+        },
+    },
+    {
+        "name": "sina_kline",
+        "url": "https://finance.sina.com.cn/realstock/company/sh600276/hisdata/klc_kl.js",
+        "params": {},
+    },
+    {
+        "name": "sina_quote_list",
+        "url": (
+            "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+            "Market_Center.getHQNodeData"
+        ),
+        "params": {
+            "page": "1",
+            "num": "5",
+            "sort": "symbol",
+            "asc": "1",
+            "node": "hs_a",
+            "symbol": "",
         },
     },
 ]
@@ -267,6 +291,39 @@ def build_summary(
         summary["diagnosis"].append(
             f"直连出口 {direct_egress.detail}；行情代理出口 {proxy_egress.detail}。"
             "源站按出口 IP 判定，两个出口不同即可解释“本机可、服务器不可”。"
+        )
+
+    blocked_http = [
+        name
+        for name in (
+            "tencent_kline",
+            "tencent_fqkline",
+            "eastmoney_kline",
+            "eastmoney_spot",
+        )
+        if (result := _lookup(results, f"{name}:direct")) is not None and not result.ok
+    ]
+    tencent_blocked = any(name.startswith("tencent_") for name in blocked_http)
+    eastmoney_blocked = any(name.startswith("eastmoney_") for name in blocked_http)
+    sina_ok = all(
+        (result := _lookup(results, f"{name}:direct")) is not None and result.ok
+        for name in ("sina_kline", "sina_quote_list")
+    )
+    if tencent_blocked and sina_ok:
+        summary["diagnosis"].append(
+            "腾讯直连被拒，但新浪 K 线与股票列表可访问 → 在 .env 设 "
+            "MARKET_DATA_PROVIDER=sina（Compose 已透传），K 线/日历/列表/指数改走新浪；"
+            "MARKET_DATA_FALLBACKS 可留空或设为 tencent。"
+        )
+    elif eastmoney_blocked and sina_ok:
+        summary["diagnosis"].append(
+            "东财直连被拒（腾讯可用）→ 设 MARKET_DATA_FALLBACKS=sina 让备用链接管，"
+            "避免每只股票对东财重试；若腾讯也出现间歇 501，改用 MARKET_DATA_PROVIDER=sina。"
+        )
+    elif blocked_http and not sina_ok:
+        summary["diagnosis"].append(
+            "腾讯/东财/新浪直连均被拒 → 需要国内出口：给行情单独设 MARKET_DATA_PROXY，"
+            "不要把全局 HTTPS_PROXY 复用到行情。"
         )
 
     if any(result.name == "pytdx_import" and not result.ok for result in results):

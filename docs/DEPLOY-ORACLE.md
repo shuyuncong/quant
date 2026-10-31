@@ -94,6 +94,9 @@ services:
       DATABASE_SSL_REJECT_UNAUTHORIZED: "${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}"
       DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-5}"
       TUSHARE_TOKEN: "${TUSHARE_TOKEN:-}"
+      MARKET_DATA_PROVIDER: "${MARKET_DATA_PROVIDER:-}"
+      MARKET_DATA_PROXY: "${MARKET_DATA_PROXY:-}"
+      MARKET_DATA_FALLBACKS: "${MARKET_DATA_FALLBACKS:-}"
       WECHAT_WEBHOOK_URL: "${WECHAT_WEBHOOK_URL:-}"
       SIGNAL_WEBHOOK_URL: "${SIGNAL_WEBHOOK_URL:-}"
       SIGNAL_WEBHOOK_AUTH: "${SIGNAL_WEBHOOK_AUTH:-}"
@@ -751,15 +754,25 @@ crontab -e
 
 - **页面暂无登录密码**：公网使用前建议在 Nginx 加 Basic Auth（`sudo apt install -y apache2-utils && sudo htpasswd -c /etc/nginx/.htpasswd admin`，并在 server 块加 `auth_basic "Restricted";` 与 `auth_basic_user_file /etc/nginx/.htpasswd;`）或限制来源 IP。
 - **行情源**：默认 `provider: auto`（腾讯/新浪/东财），无需额外数据源；如需 akshare/tushare，见 [DEPLOY.md](DEPLOY.md)。
-- **海外服务器行情（501 / 连接被重置）**：`HTTP Error 501: Not Implemented` 说明请求已到达腾讯边缘后被拒（代理 CONNECT 被拒的报错是 `Tunnel connection failed: 501`，两者可区分）；东财的 `Remote end closed connection without response` 是对端直接断开。两者都指向**该服务器的出口 IP/代理被源站拦截**，不是“日本不能访问”：东京节点单请求实测腾讯与东财均返回 200。
+- **海外服务器行情（501 / 连接被重置）**：先把两类失败分开，它们的处理方式不同：
+  1. **`HTTP Error 501: Not Implemented`（腾讯）**：2026-10-30 日志里的 501 来自 `web.ifzq.gtimg.cn/appstock/app/fqkline/get`（复权日线/指数/日历）。该主机对这条路径返回 501 WAF 挑战页，**与出口 IP 无关**（本机直连同样复现）；同一路径换 `ifzq.gtimg.cn` 立即 200。代码已把日线/复权/日历统一切到 `ifzq.gtimg.cn`，部署本提交后 `yearline_pullback` / 底背离（qfq）扫描不会再有这个 501。
+  2. **东财 `Remote end closed connection without response`**：这是出口 IP 被东财反爬拦截（Oracle 大阪 `64.110.106.x` 实测持续复现），只能换出口或走新浪。
   - 先确认出口：`docker exec quant-web env | grep -i proxy`。注意 `data.disable_system_proxy: true` 只让 urllib 忽略 `HTTP(S)_PROXY`，**绕不过宿主机 TUN/iptables 透明代理**。
   - 在容器内跑诊断（分别打印直连、系统代理、`MARKET_DATA_PROXY` 三条路径的公网 IP、DNS 与状态码）：
     ```bash
     docker exec quant-web sh -lc 'cd /app/signal_system && /opt/venv/bin/python data/network_diagnostic.py --skip-pytdx'
     ```
     > 旧镜像（未包含本次改动）的脚本只支持 `--output`；先部署本提交，或直接用内联 `requests` 脚本测试，别把 `unrecognized arguments: --skip-pytdx` 当成网络故障。
-  - 实测（2026-10-27，Oracle Cloud 大阪 `64.110.106.x`）：腾讯 K 线直连 200；东财 `push2his` 与 `82.push2` 持续 `RemoteDisconnected`。这类云 IP 被东财反爬拦截时，在 `.env` 设 `MARKET_DATA_FALLBACKS=sina`（Compose 已透传，等价于 `market_data.fallback_providers: ["sina"]`），K 线链走 腾讯→新浪，避免每只股票对东财重试 4 次；股票列表/指数仍会各失败一次后降级（分别有 24h/4h 缓存），可接受。
-  - 处理顺序：① 直连可用就保持 `disable_system_proxy: true`，并清掉全局 `HTTP(S)_PROXY`；② 直连被拦但经某代理可达，就在 `.env` 设置 `MARKET_DATA_PROXY`（Compose 已透传，容器内 `127.0.0.1` 是容器自身，代理地址要用可达的主机名/IP）；③ 直连与代理都被拦，就用国内出口（家庭服务器/国内 VPS 的 HTTP 代理）或把 `provider` 改为 `sina`。不要把全局 `HTTPS_PROXY` 复用到行情。
+  - 部署后看诊断里的 `tencent_fqkline:direct`：应为 200。若它仍是 501/断连，说明该出口被腾讯做了 IP 级拦截，再按下面切新浪主源。
+  - **`MARKET_DATA_FALLBACKS=sina` 只改备用链，不改变主源**：主源仍是腾讯，每轮扫描/每次进程重启都会先吃几次失败。要彻底绕开被拦端点，设**主源**：
+    ```dotenv
+    # /opt/docker/quant/quant-python/quant-python/.env
+    MARKET_DATA_PROVIDER=sina
+    # 可选：只留腾讯作为新浪失败时的兜底；留空则默认 新浪→腾讯→东财
+    MARKET_DATA_FALLBACKS=tencent
+    ```
+    `MARKET_DATA_PROVIDER` 由 Compose 透传，重建后生效（`docker compose -f docker-compose.oracle.yml -f docker-compose.oracle.db.yml up -d`）。设为 `sina` 后：K 线主源/交易日历/股票列表/指数日线都优先走新浪；ETF 名称列表会跳过（只影响 ETF 中文名展示）。指数日线新增新浪兜底，东财与腾讯同时不可用时市场闸门不会落 `unknown`。
+  - 处理顺序：① 直连可用就保持 `disable_system_proxy: true`，并清掉全局 `HTTP(S)_PROXY`；② 东财被拦而腾讯可用，设 `MARKET_DATA_FALLBACKS=sina`（保留腾讯为主源）；③ 腾讯也被 IP 级拦截，设 `MARKET_DATA_PROVIDER=sina`；④ 新浪也不可用，才给行情单独设 `MARKET_DATA_PROXY` 走国内出口。不要把全局 `HTTPS_PROXY` 复用到行情。
   - 代码侧已有进程内熔断：某源连续 3 次失败后会暂停 10 分钟（2 倍递增、上限 1 小时），备用源直接接管，不再逐股重试被拦端点；成功一次即恢复。
 - **端口**：容器内固定 3111；改端口需同步修改 Compose 的 `ports` 与 Nginx 的 `proxy_pass`。
 - **时区**：Compose 已设置 `TZ=Asia/Shanghai`，定时任务按北京时间执行。

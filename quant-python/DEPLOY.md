@@ -212,7 +212,8 @@ sudo systemctl status quant-web
 | `DATABASE_POOL_MAX` | PostgreSQL 连接池上限，默认 `5` |
 | `PYTHON_BIN` | Python 可执行文件（Linux 填 `python3`，Windows 可省略） |
 | `MARKET_DATA_PROXY` | 行情 K 线专用 HTTP 代理（如 `http://proxy:7890`）。不设时按 `data.disable_system_proxy` 直连或走系统代理；海外服务器建议只给行情设代理，不要复用全局 `HTTPS_PROXY`。 |
-| `MARKET_DATA_FALLBACKS` | 覆盖 `market_data.fallback_providers` 的部署级备用源链（逗号分隔，如 `sina` 或 `sina,tencent`）。Oracle 云 IP 被东财拦截时设为 `sina`，K 线走 腾讯→新浪，不再逐股重试东财。 |
+| `MARKET_DATA_PROVIDER` | 部署级主源覆盖（`auto`/`tencent`/`eastmoney`/`sina`/`akshare`/`tushare`）。海外云 IP 被腾讯 501 与东财断连同时拦截时设为 `sina`，主源、指数日线与股票列表都优先走新浪，无需改镜像内 `config.yaml`。 |
+| `MARKET_DATA_FALLBACKS` | 覆盖 `market_data.fallback_providers` 的部署级备用源链（逗号分隔，如 `sina` 或 `sina,tencent`）。**只改主源失败后的顺序，不改主源**；主源被拦截请用 `MARKET_DATA_PROVIDER`。Oracle 若设 `MARKET_DATA_PROVIDER=sina`，本变量建议留空或设为 `tencent`。 |
 | `WEB_DATA_DIR` | Web 运行时文件目录，默认 `web/data`；不再存放 Web 业务数据库 |
 | `TUSHARE_TOKEN` | Tushare Token |
 | `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook |
