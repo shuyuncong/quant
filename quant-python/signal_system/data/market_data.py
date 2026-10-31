@@ -1066,24 +1066,29 @@ class MarketDataClient:
             return cached.tail(requested).reset_index(drop=True)
 
         klines: list[Any] = []
-        try:
-            self._throttle()
-            payload = self._http_json(
-                "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-                {
-                    "secid": eastmoney_secid(symbol),
-                    "klt": "101",
-                    "fqt": 0,
-                    "beg": 0,
-                    "end": end_day.strftime("%Y%m%d"),
-                    "lmt": max(requested, 300),
-                    "fields1": "f1,f2,f3,f4,f5,f6",
-                    "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-                },
-            )
-            klines = (payload.get("data") or {}).get("klines") or []
-        except Exception as exc:
-            logger.warning("东方财富股票池历史失败，降级 AkShare/Sina: %s", exc)
+        # 部署级链若已排除东财（例如 Oracle 的 MARKET_DATA_FALLBACKS=sina），
+        # 这里也不该再对每只股票先打 4 次东财再降级；直接走 AkShare/新浪，
+        # 否则全市场股票池会白等数小时并刷满“行情端点请求失败”日志。
+        use_eastmoney = self.provider != "sina" and "eastmoney" in self.bar_providers
+        if use_eastmoney:
+            try:
+                self._throttle()
+                payload = self._http_json(
+                    "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                    {
+                        "secid": eastmoney_secid(symbol),
+                        "klt": "101",
+                        "fqt": 0,
+                        "beg": 0,
+                        "end": end_day.strftime("%Y%m%d"),
+                        "lmt": max(requested, 300),
+                        "fields1": "f1,f2,f3,f4,f5,f6",
+                        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                    },
+                )
+                klines = (payload.get("data") or {}).get("klines") or []
+            except Exception as exc:
+                logger.warning("东方财富股票池历史失败，降级 AkShare/Sina: %s", exc)
         rows: list[dict[str, Any]] = []
         for line in klines:
             fields = str(line).split(",")

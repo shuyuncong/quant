@@ -75,7 +75,7 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # 2026-10-31: 腾讯日线/复权/日历改用 ifzq.gtimg.cn（web. 主机对 fqkline
     # 返回 501 WAF），新增 MARKET_DATA_PROVIDER 主源覆盖与 Sina 指数兜底；
     # 仍不改变行情字段、成交量单位或复权口径。
-    "market_data": "e0072b8d157080d251b91a75373f40212c9b49816fec1120c9112e5172e6d428",
+    "market_data": "b27d368be071593ef945aef6fea8a348b20467e66146b24a71a857d788c12b23",
     # 旧值 af70eab3… == c02418a(2026-08-14) 的 **CRLF** 形态 → Windows 产物。
     # 2026-10-23: 包含关系合并与笔 MACD 面积改为数组/二分切片，输出经
     # 300 只真实样本逐字段比对完全一致；策略判定逻辑未变。
@@ -97,7 +97,7 @@ DEPENDENCY_EXPECTED_SHA256: dict[str, str] = {
     # 2026-10-27: 重新登记 market_data 熔断/出口日志；本文件仅同步哈希注释。
     # 2026-10-31: 重新登记 market_data 的腾讯主机切换/Sina 指数兜底；
     # 本文件仅同步哈希注释，成交量口径断言未变。
-    "volume_unit_continuity_audit": "3a9ad689488740febea2736488fafe046b6347512a62a54e133eda866a6f7295",
+    "volume_unit_continuity_audit": "b643a7e2449b26c05cabf8fab6996ba21577cf36ff9e5a658dcbd5908f7376cf",
 }
 
 

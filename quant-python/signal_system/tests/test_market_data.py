@@ -294,6 +294,43 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(2.0, frame.iloc[0]["turnover_rate"])
             self.assertEqual(100.0, frame.iloc[0]["circulating_market_cap"])
 
+    def test_stock_pool_history_skips_eastmoney_when_chain_excludes_it(self):
+        """Oracle 设 MARKET_DATA_FALLBACKS=sina 后，股票池历史不应再逐只重试东财。"""
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MARKET_DATA_FALLBACKS": "sina"}):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": "auto"}}
+                )
+            self.assertNotIn("eastmoney", client.bar_providers)
+            client._throttle = lambda: None
+            client._http_json = MagicMock(
+                side_effect=AssertionError("eastmoney must not be called")
+            )
+            ak = MagicMock()
+            ak.stock_zh_a_daily.return_value = pd.DataFrame(
+                [
+                    {
+                        "date": date(2025, 1, 2),
+                        "close": 10.0,
+                        "volume": 20_000_000.0,
+                        "amount": 200_000_000.0,
+                        "outstanding_share": 1_000_000_000.0,
+                        "turnover": 0.02,
+                    }
+                ]
+            )
+            client._get_akshare = lambda: ak
+
+            frame = client.get_stock_pool_history(
+                "000001",
+                limit=300,
+                end=date(2025, 1, 2),
+            )
+
+            self.assertEqual(0, client._http_json.call_count)
+            self.assertEqual(2.0, frame.iloc[0]["turnover_rate"])
+            self.assertEqual(100.0, frame.iloc[0]["circulating_market_cap"])
+
     def test_suspended_zero_snapshot_is_not_written_as_fresh_daily_bar(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient({"market_data": {"cache_dir": directory}})
