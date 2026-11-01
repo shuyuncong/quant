@@ -330,6 +330,20 @@ class BaostockDailyProviderTests(unittest.TestCase):
 
     # ------------------------------------------------------- error vs no data
 
+    def test_repeating_pagination_is_bounded(self):
+        class RepeatingResult(FakeResult):
+            def _fetch_next_page(self):
+                # Broken session: the same full page is handed back forever.
+                self.cur_row_num = 0
+                return True
+
+        pages = paged_rows([PAGE_SIZE], stock_row)
+        result = RepeatingResult(STOCK_FIELDS.split(","), pages)
+        provider = make_provider(result)
+
+        with self.assertRaisesRegex(BaostockDataError, "行数超过区间上限"):
+            provider.get_daily_data("000001.SZ", "20150101", "20160101")
+
     def test_query_error_is_not_no_data(self):
         result = FakeResult(STOCK_FIELDS.split(","), [[]], error_code="10004011",
                             error_msg="无效的证券代码")

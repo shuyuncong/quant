@@ -281,7 +281,12 @@ class BaostockDailyProvider:
             raise BaostockError(f"BaoStock 交易日历查询异常：{type(exc).__name__}: {exc}") from exc
         self._raise_on_error(result, ts_code="trade_calendar", stage="交易日历查询")
         rows: list[list[str]] = []
+        row_limit = self._row_limit(start, end)
         while result.next():
+            if len(rows) >= row_limit:
+                raise BaostockDataError(
+                    f"BaoStock 交易日历分页行数超过区间上限：已返回 {len(rows)} 行，上限 {row_limit}"
+                )
             rows.append(result.get_row_data())
         self._raise_on_error(result, ts_code="trade_calendar", stage="交易日历分页")
         page_size = self._page_size()
@@ -352,7 +357,16 @@ class BaostockDailyProvider:
             # requested row field is authoritative and identifies every page's basis.
             adjustment_index = expected.index("adjustflag")
             rows: list[list[str]] = []
+            row_limit = self._row_limit(start_date, end_date)
             while result.next():
+                # A broken SDK session can leave an unframed response and make
+                # next() repeat rows forever.  A calendar-day bound turns that
+                # spin into a retryable data error instead of burning CPU.
+                if len(rows) >= row_limit:
+                    raise BaostockDataError(
+                        f"BaoStock 分页行数超过区间上限（{ts_code}）："
+                        f"已返回 {len(rows)} 行，上限 {row_limit}"
+                    )
                 row = result.get_row_data()
                 if len(row) != len(expected) or row[code_index] != symbol:
                     raise BaostockDataError(f"BaoStock 返回了不同证券或列数错误的历史行（请求 {symbol}）")
@@ -404,6 +418,15 @@ class BaostockDailyProvider:
                 f"BaoStock {stage}失败（{ts_code}）：{code or '<empty>'} "
                 f"{getattr(result, 'error_msg', '')}"
             )
+
+    @classmethod
+    def _row_limit(cls, start_date: str, end_date: str) -> int:
+        """Bound one chunk at two SDK pages.
+
+        Real chunks are far below one page; the slack keeps legitimate SDK
+        pagination working while an unframed response cannot spin forever.
+        """
+        return max(2, cls._page_size() * 2)
 
     @staticmethod
     def _page_size() -> int:
