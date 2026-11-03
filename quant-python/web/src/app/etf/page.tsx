@@ -43,6 +43,18 @@ interface EtfSignal {
   reason: string;
 }
 
+interface EtfHistoryEntry {
+  as_of: string;
+  generated_at?: string;
+  gate: boolean;
+  core: string | null;
+  picks: string[];
+  target_weights: Record<string, number>;
+  cash_weight: number;
+  vol_scale: number;
+  reason: string;
+}
+
 interface EtfOverview {
   strategy: string;
   strategy_id: string;
@@ -57,6 +69,7 @@ interface EtfOverview {
   signal: EtfSignal;
   target: EtfTarget[];
   curve: Array<{ date: string; equity: number }>;
+  history?: EtfHistoryEntry[];
 }
 
 const METRIC_CARDS = [
@@ -163,6 +176,8 @@ export default function EtfPage() {
   const [overview, setOverview] = useState<EtfOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const load = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -178,6 +193,24 @@ export default function EtfPage() {
       setError(cause instanceof Error ? cause.message : "ETF 概览读取失败");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const response = await fetch("/api/etf/refresh", { method: "POST" });
+      const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+      if (!response.ok || !payload.overview) {
+        throw new Error(payload.error || "ETF 信号刷新失败");
+      }
+      setOverview(payload.overview);
+      setError(null);
+    } catch (cause) {
+      setRefreshError(cause instanceof Error ? cause.message : "ETF 信号刷新失败");
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
@@ -249,15 +282,25 @@ export default function EtfPage() {
             {overview.strategy} · 数据截至 {overview.as_of}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{overview.mode === "research_snapshot" ? "研究快照" : overview.mode}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{overview.mode === "research_snapshot" ? "研究快照" : overview.mode === "local_refresh" ? "本地刷新" : overview.mode}</Badge>
           <Badge variant="secondary">{signal.gate ? "闸门开启" : "闸门关闭"}</Badge>
           <Badge variant="outline">只读</Badge>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => void refresh()} disabled={refreshing}>
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "刷新中" : "刷新信号"}
+          </Button>
         </div>
       </div>
 
+      {refreshError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <AlertCircle className="size-4" /> {refreshError}
+        </div>
+      )}
+
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-        {overview.refresh_note} 当前页面展示已冻结的研究回测快照，不触发下单，也不代表实盘收益。
+        {overview.refresh_note} 当前页面展示研究/本地刷新快照，不触发下单，也不代表实盘收益。
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -416,6 +459,47 @@ export default function EtfPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>最近信号</CardTitle>
+          <CardDescription>本地刷新按信号日覆盖同一天记录，最多保留 30 条。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {overview.history?.length ? (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-medium">信号日</th>
+                    <th className="px-2 py-1.5 text-left font-medium">闸门</th>
+                    <th className="px-2 py-1.5 text-left font-medium">核心</th>
+                    <th className="px-2 py-1.5 text-left font-medium">卫星</th>
+                    <th className="px-2 py-1.5 text-left font-medium">目标</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...overview.history].reverse().map((entry) => (
+                    <tr key={entry.as_of} className="border-t">
+                      <td className="px-2 py-1.5">{entry.as_of}</td>
+                      <td className="px-2 py-1.5">{entry.gate ? "开" : "关"}</td>
+                      <td className="px-2 py-1.5">{entry.core || "—"}</td>
+                      <td className="px-2 py-1.5">{entry.picks.length ? entry.picks.join(" / ") : "—"}</td>
+                      <td className="px-2 py-1.5">
+                        {Object.entries(entry.target_weights)
+                          .map(([symbol, weight]) => `${symbol} ${(weight * 100).toFixed(0)}%`)
+                          .join(" / ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">还没有本地刷新记录。点击右上角“刷新信号”生成第一条。</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

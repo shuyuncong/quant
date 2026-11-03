@@ -13,6 +13,7 @@ Commands:
     test-notify     发送测试通知
     outbox-status   返回 outbox 摘要
     etf-overview    返回 ETF 轮动只读快照
+    etf-refresh     从本地 ETF 行情缓存刷新当前信号
     calendar        返回交易日/交易时段/当前时间
 
 Exit codes: 0 success, 1 business failure, 2 argument/usage error.
@@ -629,6 +630,14 @@ def _cmd_etf_overview(config_path: str, payload: dict[str, Any]) -> int:
     return _emit({"overview": get_overview()})
 
 
+def _cmd_etf_refresh(config_path: str, payload: dict[str, Any]) -> int:
+    del config_path, payload
+    from etf_rotation.service import get_overview, refresh_snapshot
+
+    refresh_snapshot()
+    return _emit({"overview": get_overview()})
+
+
 COMMANDS = {
     "config": lambda p, o: _cmd_config(p, o),
     "normalize": lambda p, o: _cmd_normalize((o or {}).get("text", "")),
@@ -641,6 +650,7 @@ COMMANDS = {
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "etf-overview": lambda p, o: _cmd_etf_overview(p, o),
+    "etf-refresh": lambda p, o: _cmd_etf_refresh(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
     "positions": lambda p, o: _cmd_positions(p, o),
