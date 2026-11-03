@@ -54,17 +54,20 @@
   {
    "symbol": "511260",
    "name": "十年国债",
-   "weight": 0.86
+   "weight": 0.86,
+   "price": 135.327
   },
   {
    "symbol": "518880",
    "name": "黄金",
-   "weight": 0.14
+   "weight": 0.14,
+   "price": 8.115
   },
   {
    "symbol": "CASH",
    "name": "现金",
-   "weight": 0.0
+   "weight": 0.0,
+   "price": 1.0
   }
  ],
  "curve": [

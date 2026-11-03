@@ -14,6 +14,7 @@ Commands:
     outbox-status   返回 outbox 摘要
     etf-overview    返回 ETF 轮动只读快照
     etf-refresh     从本地 ETF 行情缓存刷新当前信号
+    etf-paper       读取/初始化/再平衡纸面账本
     calendar        返回交易日/交易时段/当前时间
 
 Exit codes: 0 success, 1 business failure, 2 argument/usage error.
@@ -638,6 +639,25 @@ def _cmd_etf_refresh(config_path: str, payload: dict[str, Any]) -> int:
     return _emit({"overview": get_overview()})
 
 
+def _cmd_etf_paper(config_path: str, payload: dict[str, Any]) -> int:
+    del config_path
+    from etf_rotation.service import (
+        get_overview,
+        get_paper_ledger,
+        initialize_paper,
+        rebalance_paper,
+    )
+
+    action = str(payload.get("action") or "status")
+    if action == "init":
+        initialize_paper(float(payload.get("capital") or 250_000.0))
+    elif action == "rebalance":
+        rebalance_paper()
+    elif action != "status":
+        return _emit_error(f"不支持的 ETF 纸面账本动作: {action}", 2)
+    return _emit({"overview": get_overview(), "paper": get_paper_ledger()})
+
+
 COMMANDS = {
     "config": lambda p, o: _cmd_config(p, o),
     "normalize": lambda p, o: _cmd_normalize((o or {}).get("text", "")),
@@ -651,6 +671,7 @@ COMMANDS = {
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "etf-overview": lambda p, o: _cmd_etf_overview(p, o),
     "etf-refresh": lambda p, o: _cmd_etf_refresh(p, o),
+    "etf-paper": lambda p, o: _cmd_etf_paper(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
     "positions": lambda p, o: _cmd_positions(p, o),

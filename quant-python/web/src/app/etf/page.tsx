@@ -43,6 +43,27 @@ interface EtfSignal {
   reason: string;
 }
 
+interface EtfPaperPosition {
+  symbol: string;
+  name: string;
+  shares: number;
+  avg_cost: number;
+  last_price: number;
+  market_value: number;
+}
+
+interface EtfPaperLedger {
+  initialized: boolean;
+  capital: number;
+  cash: number;
+  market_value: number;
+  equity: number;
+  pnl_pct: number | null;
+  positions: EtfPaperPosition[];
+  as_of: string | null;
+  updated_at: string | null;
+}
+
 interface EtfHistoryEntry {
   as_of: string;
   generated_at?: string;
@@ -70,6 +91,7 @@ interface EtfOverview {
   target: EtfTarget[];
   curve: Array<{ date: string; equity: number }>;
   history?: EtfHistoryEntry[];
+  paper?: EtfPaperLedger;
 }
 
 const METRIC_CARDS = [
@@ -178,6 +200,8 @@ export default function EtfPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [paperLoading, setPaperLoading] = useState(false);
+  const [paperError, setPaperError] = useState<string | null>(null);
 
   const load = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -211,6 +235,27 @@ export default function EtfPage() {
       setRefreshError(cause instanceof Error ? cause.message : "ETF 信号刷新失败");
     } finally {
       setRefreshing(false);
+    }
+  }, []);
+
+  const paperAction = useCallback(async (action: "init" | "rebalance") => {
+    setPaperLoading(true);
+    setPaperError(null);
+    try {
+      const response = await fetch("/api/etf/paper", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, capital: 250_000 }),
+      });
+      const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+      if (!response.ok || !payload.overview) {
+        throw new Error(payload.error || "纸面账本操作失败");
+      }
+      setOverview(payload.overview);
+    } catch (cause) {
+      setPaperError(cause instanceof Error ? cause.message : "纸面账本操作失败");
+    } finally {
+      setPaperLoading(false);
     }
   }, []);
 
@@ -271,6 +316,7 @@ export default function EtfPage() {
   }
 
   const { metrics, signal } = overview;
+  const paper = overview.paper;
   const targetRows = overview.target.filter((row) => row.weight > 0);
 
   return (
@@ -399,6 +445,86 @@ export default function EtfPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>纸面账本</CardTitle>
+          <CardDescription>按当前目标权重和快照价格模拟持仓、现金与净值；不触发真实下单。</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {paperError && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              <AlertCircle className="size-4" /> {paperError}
+            </div>
+          )}
+          {!paper?.initialized ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+              <div className="text-xs leading-5 text-muted-foreground">
+                尚未初始化。纸面账本只使用当前快照价格，不会产生真实委托。
+              </div>
+              <Button size="sm" className="gap-2" onClick={() => void paperAction("init")} disabled={paperLoading}>
+                <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
+                {paperLoading ? "初始化中" : "初始化 25 万纸面账本"}
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["初始资金", `¥${paper.capital.toLocaleString("zh-CN")}`],
+                  ["现金", `¥${paper.cash.toLocaleString("zh-CN")}`],
+                  ["持仓市值", `¥${paper.market_value.toLocaleString("zh-CN")}`],
+                  ["总权益", `¥${paper.equity.toLocaleString("zh-CN")}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                    <div className="mt-1 text-sm font-semibold tabular-nums">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  纸面收益：{paper.pnl_pct === null ? "—" : `${signed(paper.pnl_pct, 2)}%`} · 更新于 {paper.updated_at || "—"}
+                </span>
+                <Button size="sm" variant="outline" className="gap-2" onClick={() => void paperAction("rebalance")} disabled={paperLoading}>
+                  <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
+                  {paperLoading ? "再平衡中" : "按当前目标再平衡"}
+                </Button>
+              </div>
+              {paper.positions.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left font-medium">标的</th>
+                        <th className="px-2 py-1.5 text-left font-medium">名称</th>
+                        <th className="px-2 py-1.5 text-right font-medium">份额</th>
+                        <th className="px-2 py-1.5 text-right font-medium">成本</th>
+                        <th className="px-2 py-1.5 text-right font-medium">现价</th>
+                        <th className="px-2 py-1.5 text-right font-medium">市值</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paper.positions.map((position) => (
+                        <tr key={position.symbol} className="border-t">
+                          <td className="px-2 py-1.5 font-mono">{position.symbol}</td>
+                          <td className="px-2 py-1.5">{position.name}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{position.shares}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{position.avg_cost.toFixed(3)}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{position.last_price.toFixed(3)}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">¥{position.market_value.toLocaleString("zh-CN")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">当前没有纸面持仓。</p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
