@@ -12,6 +12,7 @@ Commands:
     dispatch-outbox 尝试投递待发送队列
     test-notify     发送测试通知
     outbox-status   返回 outbox 摘要
+    etf-overview    返回 ETF 轮动只读快照
     calendar        返回交易日/交易时段/当前时间
 
 Exit codes: 0 success, 1 business failure, 2 argument/usage error.
@@ -621,6 +622,13 @@ def _cmd_calendar(config_path: str, payload: dict[str, Any]) -> int:
     )
 
 
+def _cmd_etf_overview(config_path: str, payload: dict[str, Any]) -> int:
+    del config_path, payload
+    from etf_rotation.service import get_overview
+
+    return _emit({"overview": get_overview()})
+
+
 COMMANDS = {
     "config": lambda p, o: _cmd_config(p, o),
     "normalize": lambda p, o: _cmd_normalize((o or {}).get("text", "")),
@@ -632,6 +640,7 @@ COMMANDS = {
     "test-notify": lambda p, o: _cmd_test_notify(p, o),
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
+    "etf-overview": lambda p, o: _cmd_etf_overview(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
     "positions": lambda p, o: _cmd_positions(p, o),

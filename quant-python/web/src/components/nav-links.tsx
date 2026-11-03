@@ -13,6 +13,7 @@ import {
   Wallet,
   Workflow,
   ChartNoAxesCombined,
+  Layers,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/results", label: "个股分析", icon: LayoutDashboard },
   { href: "/assets", label: "股票与持仓", icon: Wallet },
+  { href: "/etf", label: "ETF 轮动", icon: Layers },
   { href: "/backtest", label: "策略回测", icon: ChartNoAxesCombined },
 ];
 const SETTINGS = [
