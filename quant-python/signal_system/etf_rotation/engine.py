@@ -73,6 +73,15 @@ def load_panel(data_dir: Path | None = None) -> tuple[pd.DataFrame, pd.DataFrame
     return close, volume
 
 
+def load_open_panel(data_dir: Path | None = None) -> pd.DataFrame:
+    """Return the aligned opening-price panel."""
+    root = data_dir or _data_dir()
+    symbols = [*SATELLITE, MARKET, *CORE]
+    frames = {symbol: _read_frame(root, symbol) for symbol in symbols}
+    master = frames[MARKET].index
+    return pd.DataFrame({symbol: frame["open"].reindex(master) for symbol, frame in frames.items()})
+
+
 def _last_finite(panel: pd.DataFrame, symbol: str, day: pd.Timestamp) -> float:
     value = float(panel[symbol].loc[day])
     return value if math.isfinite(value) else float("nan")

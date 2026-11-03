@@ -652,29 +652,54 @@ def _cmd_etf_data_sync(config_path: str, payload: dict[str, Any]) -> int:
 def _cmd_etf_cycle(config_path: str, payload: dict[str, Any]) -> int:
     del payload
     from etf_rotation.data_sync import sync
-    from etf_rotation.service import get_overview, mark_paper_to_market, refresh_snapshot
+    from etf_rotation.service import (
+        fill_paper,
+        get_overview,
+        mark_paper_to_market,
+        plan_paper,
+        refresh_snapshot,
+    )
 
     sync_result = sync(config_path=config_path)
     refresh_snapshot()
+    fill_error = None
+    plan_error = None
+    try:
+        fill_paper()
+    except ValueError as exc:
+        fill_error = str(exc)
+    try:
+        plan_paper()
+    except ValueError as exc:
+        plan_error = str(exc)
     mark_paper_to_market()
-    return _emit({"sync": sync_result, "overview": get_overview()})
+    return _emit({
+        "sync": sync_result,
+        "overview": get_overview(),
+        "fill_error": fill_error,
+        "plan_error": plan_error,
+    })
 
 
 def _cmd_etf_paper(config_path: str, payload: dict[str, Any]) -> int:
     del config_path
     from etf_rotation.service import (
+        fill_paper,
         get_overview,
         get_paper_ledger,
         initialize_paper,
         mark_paper_to_market,
+        plan_paper,
         rebalance_paper,
     )
 
     action = str(payload.get("action") or "status")
     if action == "init":
         initialize_paper(float(payload.get("capital") or 250_000.0))
-    elif action == "rebalance":
-        rebalance_paper()
+    elif action in {"plan", "rebalance"}:
+        rebalance_paper() if action == "rebalance" else plan_paper()
+    elif action == "fill":
+        fill_paper(payload.get("as_of"))
     elif action == "mark":
         mark_paper_to_market(payload.get("as_of"))
     elif action != "status":

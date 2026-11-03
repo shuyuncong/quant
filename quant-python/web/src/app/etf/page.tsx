@@ -68,6 +68,22 @@ interface EtfPaperTracking {
   tracking_error_pct: number | null;
 }
 
+interface EtfPaperPlanRow {
+  symbol: string;
+  name: string;
+  weight: number;
+}
+
+interface EtfPaperPlan {
+  as_of: string;
+  created_at: string;
+  status: string;
+  equity_at_plan: number;
+  target: EtfPaperPlanRow[];
+  fill_note?: string;
+  fill_date?: string;
+}
+
 interface EtfPaperLedger {
   initialized: boolean;
   capital: number;
@@ -77,6 +93,8 @@ interface EtfPaperLedger {
   pnl_pct: number | null;
   positions: EtfPaperPosition[];
   nav_history?: EtfPaperNav[];
+  pending_plan?: EtfPaperPlan | null;
+  last_plan?: EtfPaperPlan | null;
   tracking?: EtfPaperTracking;
   as_of: string | null;
   updated_at: string | null;
@@ -256,7 +274,7 @@ export default function EtfPage() {
     }
   }, []);
 
-  const paperAction = useCallback(async (action: "init" | "rebalance" | "mark") => {
+  const paperAction = useCallback(async (action: "init" | "plan" | "fill" | "mark") => {
     setPaperLoading(true);
     setPaperError(null);
     try {
@@ -509,12 +527,44 @@ export default function EtfPage() {
                     <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
                     {paperLoading ? "更新中" : "更新纸面净值"}
                   </Button>
-                  <Button size="sm" variant="outline" className="gap-2" onClick={() => void paperAction("rebalance")} disabled={paperLoading}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => void paperAction("plan")}
+                    disabled={paperLoading || paper.pending_plan?.status === "planned"}
+                  >
                     <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
-                    {paperLoading ? "再平衡中" : "按当前目标再平衡"}
+                    {paperLoading ? "生成中" : "生成调仓计划"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => void paperAction("fill")}
+                    disabled={paperLoading || paper.pending_plan?.status !== "planned"}
+                  >
+                    <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
+                    {paperLoading ? "成交中" : "按开盘价成交"}
                   </Button>
                 </div>
               </div>
+              {paper.pending_plan?.status === "planned" && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-amber-800 dark:text-amber-200">
+                      待成交计划：{paper.pending_plan.as_of} 收盘生成
+                    </span>
+                    <span className="text-amber-700 dark:text-amber-300">{paper.pending_plan.fill_note || "下一交易日开盘价成交"}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-amber-800 dark:text-amber-200">
+                    {paper.pending_plan.target.map((row) => (
+                      <span key={row.symbol} className="rounded bg-white/70 px-2 py-1 font-mono dark:bg-black/20">
+                        {row.symbol} {(row.weight * 100).toFixed(0)}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {paper.positions.length > 0 ? (
                 <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-xs">

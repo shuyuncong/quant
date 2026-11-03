@@ -15,7 +15,7 @@ from typing import Any
 
 import pandas as pd
 
-from .engine import EtfDataError, compute_signal, load_panel
+from .engine import EtfDataError, compute_signal, load_open_panel, load_panel
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 STATE_DIR = Path(os.getenv("ETF_ROTATION_STATE_DIR", Path(__file__).resolve().parents[1] / "state"))
@@ -180,9 +180,14 @@ def _target_map(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return target
 
 
-def _rebalance_paper(ledger: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+def _rebalance_paper(
+    ledger: dict[str, Any],
+    snapshot: dict[str, Any],
+    prices_override: dict[str, float] | None = None,
+    fill_date: str | None = None,
+) -> dict[str, Any]:
     target = _target_map(snapshot)
-    prices = {symbol: row["price"] for symbol, row in target.items() if row["price"] > 0}
+    prices = prices_override or {symbol: row["price"] for symbol, row in target.items() if row["price"] > 0}
     if not prices:
         raise EtfSnapshotError("ETF 目标缺少有效价格，无法生成纸面账本")
     positions = ledger.setdefault("positions", {})
@@ -270,14 +275,100 @@ def _rebalance_paper(ledger: dict[str, Any], snapshot: dict[str, Any]) -> dict[s
             "fee": round(fee, 2),
         })
 
+    for order in orders:
+        order["status"] = "filled" if fill_date else "paper"
+        if fill_date:
+            order["fill_date"] = fill_date
     ledger.update({
         "initialized": True,
         "cash": round(cash, 2),
         "positions": positions,
         "orders": (ledger.get("orders") or []) + orders,
-        "as_of": snapshot.get("as_of"),
+        "as_of": fill_date or snapshot.get("as_of"),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
+    _save_paper(ledger)
+    return ledger
+
+
+def plan_paper() -> dict[str, Any]:
+    ledger = _load_paper()
+    if not ledger.get("initialized"):
+        raise ValueError("纸面账本尚未初始化")
+    pending = ledger.get("pending_plan")
+    if isinstance(pending, dict) and pending.get("status") == "planned":
+        raise ValueError("已有待成交的纸面计划，请先按开盘价成交")
+    snapshot = load_snapshot()
+    target = _target_map(snapshot)
+    if not target:
+        raise EtfSnapshotError("ETF 目标为空，无法生成纸面计划")
+    positions = ledger.get("positions") or {}
+    equity = float(ledger.get("cash") or 0.0) + sum(
+        int(position.get("shares") or 0) * float(position.get("last_price") or 0)
+        for position in positions.values()
+    )
+    ledger["pending_plan"] = {
+        "as_of": snapshot.get("as_of"),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "status": "planned",
+        "equity_at_plan": round(equity, 2),
+        "target": [
+            {
+                "symbol": symbol,
+                "name": row["name"],
+                "weight": round(row["weight"], 6),
+            }
+            for symbol, row in sorted(target.items())
+            if row["weight"] > 0
+        ],
+        "fill_note": "下一交易日开盘价成交",
+    }
+    _save_paper(ledger)
+    return ledger
+
+
+def fill_paper(as_of: str | None = None) -> dict[str, Any]:
+    ledger = _load_paper()
+    plan = ledger.get("pending_plan")
+    if not isinstance(plan, dict) or plan.get("status") != "planned":
+        raise ValueError("没有待成交的纸面计划")
+    plan_date = str(plan.get("as_of") or "")
+    opens = load_open_panel()
+    dates = [day for day in opens.index if day.strftime("%Y-%m-%d") > plan_date]
+    if as_of:
+        dates = [day for day in dates if day.strftime("%Y-%m-%d") <= as_of]
+    if not dates:
+        raise ValueError("行情还没有下一交易日开盘价，暂不能成交")
+    day = dates[0]
+    prices: dict[str, float] = {}
+    missing: list[str] = []
+    for row in plan.get("target", []):
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "")
+        price = float(opens[symbol].loc[day]) if symbol in opens.columns else float("nan")
+        if not math.isfinite(price) or price <= 0:
+            missing.append(symbol)
+        else:
+            prices[symbol] = price
+    if missing:
+        raise EtfDataError(f"缺少下一交易日开盘价: {missing}")
+    snapshot = load_snapshot()
+    names = {row.get("symbol"): row.get("name") for row in snapshot.get("target", []) if isinstance(row, dict)}
+    snapshot["as_of"] = day.strftime("%Y-%m-%d")
+    snapshot["target"] = [
+        {
+            "symbol": str(row["symbol"]),
+            "name": str(names.get(row["symbol"]) or row.get("name") or row["symbol"]),
+            "weight": float(row["weight"]),
+            "price": prices[str(row["symbol"])],
+        }
+        for row in plan.get("target", [])
+        if isinstance(row, dict) and str(row.get("symbol")) in prices
+    ]
+    ledger = _rebalance_paper(ledger, snapshot, prices_override=prices, fill_date=day.strftime("%Y-%m-%d"))
+    ledger["pending_plan"] = {**plan, "status": "filled", "fill_date": day.strftime("%Y-%m-%d")}
+    ledger["last_plan"] = ledger["pending_plan"]
     _save_paper(ledger)
     return ledger
 
@@ -286,16 +377,15 @@ def initialize_paper(capital: float = 250_000.0) -> dict[str, Any]:
     if not math.isfinite(capital) or capital <= 0:
         raise ValueError("纸面账本初始资金必须大于 0")
     ledger = _paper_default()
+    ledger["initialized"] = True
     ledger["capital"] = round(capital, 2)
     ledger["cash"] = round(capital, 2)
-    return _rebalance_paper(ledger, load_snapshot())
+    _save_paper(ledger)
+    return plan_paper()
 
 
 def rebalance_paper() -> dict[str, Any]:
-    ledger = _load_paper()
-    if not ledger.get("initialized"):
-        raise ValueError("纸面账本尚未初始化")
-    return _rebalance_paper(ledger, load_snapshot())
+    return plan_paper()
 
 
 def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:
