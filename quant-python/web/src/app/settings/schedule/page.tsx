@@ -22,6 +22,7 @@ import {
   Activity,
   Calendar,
   CalendarClock,
+  ChartNoAxesCombined,
   Clock,
   Loader2,
   Play,
@@ -45,6 +46,13 @@ const DEFINITIONS = [
     subtitle: "收盘全市场规则筛选（不调用 AI）",
     description: "在指定时刻（推荐设在交易日收盘后 15:20）筛选全市场 A 股并更新日线金叉、底背离、年线指标候选池；只按规则和行情数据筛选，不调用 AI 模型，同日内仅触发一次。",
     icon: CalendarClock,
+  },
+  {
+    kind: "etf_cycle",
+    title: "ETF 轮动刷新",
+    subtitle: "收盘刷新 ETF 信号与纸面净值",
+    description: "在指定时刻（推荐交易日收盘后 15:35）读取本地 ETF 行情缓存，重算 ETF 核心—卫星目标，并把已启用的纸面账本按最新收盘价盯市；不产生真实委托。",
+    icon: ChartNoAxesCombined,
   },
   {
     kind: "monitor_cycle",
@@ -138,7 +146,7 @@ export default function SchedulePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: row.kind === "daily_scan" ? "daily-scan" : "monitor-once",
+          kind: row.kind === "daily_scan" ? "daily-scan" : row.kind === "etf_cycle" ? "etf-cycle" : "monitor-once",
           scope: row.scope,
           notify: true,
         }),
@@ -324,16 +332,16 @@ export default function SchedulePage() {
                 <CardContent className="space-y-4 pt-1">
                   {/* 配置参数工具行 */}
                   <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/20 p-3">
-                    {definition.kind === "daily_scan" ? (
+                    {definition.kind === "daily_scan" || definition.kind === "etf_cycle" ? (
                       <div className="flex items-center gap-2">
-                        <Label htmlFor="daily-time" className="text-xs whitespace-nowrap">
+                        <Label htmlFor={`${definition.kind}-time`} className="text-xs whitespace-nowrap">
                           执行时刻 (北京时间)
                         </Label>
                         <Input
-                          id="daily-time"
+                          id={`${definition.kind}-time`}
                           type="time"
                           className="h-8.5 w-32 bg-background font-mono text-xs"
-                          value={row?.time ?? "15:20"}
+                          value={row?.time ?? (definition.kind === "etf_cycle" ? "15:35" : "15:20")}
                           onChange={(event) =>
                             patch(definition.kind, { time: event.target.value })
                           }
@@ -435,7 +443,7 @@ export default function SchedulePage() {
                   </div>
 
                   {/* 选股与分析范围选择器 */}
-                  {definition.kind !== "daily_scan" && (
+                  {(definition.kind === "monitor_cycle" || definition.kind === "monitor_fixed") && (
                     <div className="pt-1">
                       <div className="mb-1.5 text-xs font-medium text-muted-foreground">
                         巡检分析股票范围

@@ -633,9 +633,10 @@ def _cmd_etf_overview(config_path: str, payload: dict[str, Any]) -> int:
 
 def _cmd_etf_refresh(config_path: str, payload: dict[str, Any]) -> int:
     del config_path, payload
-    from etf_rotation.service import get_overview, refresh_snapshot
+    from etf_rotation.service import get_overview, mark_paper_to_market, refresh_snapshot
 
     refresh_snapshot()
+    mark_paper_to_market()
     return _emit({"overview": get_overview()})
 
 

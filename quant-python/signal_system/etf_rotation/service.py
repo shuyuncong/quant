@@ -345,6 +345,62 @@ def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:
     return ledger
 
 
+def _tracking(ledger: dict[str, Any]) -> dict[str, Any]:
+    nav = sorted(
+        [item for item in ledger.get("nav_history", []) if isinstance(item, dict)],
+        key=lambda item: str(item.get("date") or ""),
+    )
+    empty = {
+        "points": len(nav),
+        "paper_return_pct": None,
+        "backtest_return_pct": None,
+        "difference_pct": None,
+        "tracking_error_pct": None,
+    }
+    if len(nav) < 2:
+        return empty
+    snapshot = load_snapshot()
+    curve = {
+        str(item.get("date")): float(item.get("equity") or 0.0)
+        for item in snapshot.get("curve", [])
+        if isinstance(item, dict)
+    }
+    if not curve:
+        return empty
+    backtest_dates = sorted(curve)
+    aligned: list[tuple[float, float]] = []
+    for item in nav:
+        date = str(item.get("date") or "")
+        candidates = [day for day in backtest_dates if day <= date]
+        if not candidates:
+            continue
+        aligned.append((float(item.get("equity") or 0.0), curve[candidates[-1]]))
+    if len(aligned) < 2:
+        return empty
+    paper_returns = []
+    backtest_returns = []
+    for (prev_paper, prev_bt), (cur_paper, cur_bt) in zip(aligned, aligned[1:]):
+        if prev_paper <= 0 or prev_bt <= 0:
+            continue
+        paper_returns.append(cur_paper / prev_paper - 1.0)
+        backtest_returns.append(cur_bt / prev_bt - 1.0)
+    if len(paper_returns) < 1:
+        return empty
+    diffs = [paper - backtest for paper, backtest in zip(paper_returns, backtest_returns)]
+    mean = sum(diffs) / len(diffs)
+    variance = sum((value - mean) ** 2 for value in diffs) / len(diffs)
+    tracking_error = math.sqrt(variance) * math.sqrt(252.0) * 100.0
+    paper_return = aligned[-1][0] / aligned[0][0] - 1.0
+    backtest_return = aligned[-1][1] / aligned[0][1] - 1.0
+    return {
+        "points": len(aligned),
+        "paper_return_pct": round(paper_return * 100, 2),
+        "backtest_return_pct": round(backtest_return * 100, 2),
+        "difference_pct": round((paper_return - backtest_return) * 100, 2),
+        "tracking_error_pct": round(tracking_error, 2),
+    }
+
+
 def get_paper_ledger() -> dict[str, Any]:
     ledger = _load_paper()
     positions = ledger.get("positions") or {}
@@ -367,6 +423,7 @@ def get_paper_ledger() -> dict[str, Any]:
         "market_value": round(market_value, 2),
         "equity": round(equity, 2),
         "pnl_pct": round((equity / capital - 1.0) * 100, 2) if capital > 0 else None,
+        "tracking": _tracking(ledger),
     }
 
 

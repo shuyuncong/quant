@@ -60,6 +60,14 @@ interface EtfPaperNav {
   pnl_pct: number | null;
 }
 
+interface EtfPaperTracking {
+  points: number;
+  paper_return_pct: number | null;
+  backtest_return_pct: number | null;
+  difference_pct: number | null;
+  tracking_error_pct: number | null;
+}
+
 interface EtfPaperLedger {
   initialized: boolean;
   capital: number;
@@ -69,6 +77,7 @@ interface EtfPaperLedger {
   pnl_pct: number | null;
   positions: EtfPaperPosition[];
   nav_history?: EtfPaperNav[];
+  tracking?: EtfPaperTracking;
   as_of: string | null;
   updated_at: string | null;
 }
@@ -565,6 +574,33 @@ export default function EtfPage() {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">还没有净值记录。点击“更新纸面净值”写入第一条。</p>
+              )}
+              <div className="rounded-lg border p-3">
+                <div className="mb-2 text-xs font-medium">纸面 vs 回测</div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["对齐净值日", paper.tracking?.points ?? 0],
+                    ["纸面收益", paper.tracking?.paper_return_pct == null ? "—" : `${signed(paper.tracking.paper_return_pct, 2)}%`],
+                    ["回测收益", paper.tracking?.backtest_return_pct == null ? "—" : `${signed(paper.tracking.backtest_return_pct, 2)}%`],
+                    ["跟踪误差", paper.tracking?.tracking_error_pct == null ? "—" : `${paper.tracking.tracking_error_pct.toFixed(2)}%`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md bg-muted/30 p-2">
+                      <div className="text-[11px] text-muted-foreground">{label}</div>
+                      <div className="mt-0.5 text-sm font-semibold tabular-nums">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                  {paper.tracking?.points && paper.tracking.points >= 2
+                    ? `累计差异 ${paper.tracking.difference_pct == null ? "—" : `${signed(paper.tracking.difference_pct, 2)}%`}；跟踪误差按对齐后的净值日收益差年化。样本很短时仅供观察。`
+                    : "至少需要 2 个净值日才能计算跟踪误差。当前样本不足，不构成有效统计。"}
+                </p>
+              </div>
+              {paper.nav_history && paper.nav_history.length >= 2 && (
+                <div className="rounded-lg border p-2">
+                  <div className="mb-1 px-1 text-xs font-medium">纸面净值曲线</div>
+                  <EquityChart rows={paper.nav_history.map((row) => ({ date: row.date, equity: row.equity }))} />
+                </div>
               )}
             </>
           )}

@@ -6,7 +6,7 @@ export interface DueSlot { key: string; at: string; missed: boolean }
 export function dueSlots(row: ScheduleRow, calendar: { is_trading_day: boolean; is_trading_session: boolean }, now: Date): DueSlot[] {
   if (!row.enabled || (row.trading_days_only && !calendar.is_trading_day)) return [];
   const day = shanghaiDate(now), hhmm = shanghaiHhmm(now);
-  if (row.kind === "daily_scan") return hhmm >= row.time ? [{ key: `${row.id}:${day}`, at: `${day} ${row.time}:00`, missed: false }] : [];
+  if (row.kind === "daily_scan" || row.kind === "etf_cycle") return hhmm >= row.time ? [{ key: `${row.id}:${day}`, at: `${day} ${row.time}:00`, missed: false }] : [];
   const minute = now.getHours()*60+now.getMinutes();
   if (row.kind === "monitor_fixed") return row.fixed_times.filter(time => time <= hhmm).map(time => {
     const [h,m] = time.split(":").map(Number);
@@ -48,8 +48,13 @@ export async function runScheduleTick(rows: ScheduleRow[], calendar: { is_tradin
       if (String(run.scheduled_at).slice(0, 10) !== shanghaiDate(now)) {
         await db.query("UPDATE quant.schedule_runs SET status='missed',detail='已超过计划交易日' WHERE run_key=$1", [run.run_key]); continue;
       }
-      const kind = row.kind === "daily_scan" ? "daily-scan" : "monitor-cycle";
-      const active = (await db.query("SELECT id FROM quant.jobs WHERE status IN ('pending','running') AND kind=ANY($1::text[]) LIMIT 1", [row.kind === "daily_scan" ? ["daily-scan","scan"] : ["analyze","monitor-cycle","monitor-once"]])).rows.length > 0;
+      const kind = row.kind === "daily_scan" ? "daily-scan" : row.kind === "etf_cycle" ? "etf-cycle" : "monitor-cycle";
+      const activeKinds = row.kind === "daily_scan"
+        ? ["daily-scan", "scan"]
+        : row.kind === "etf_cycle"
+          ? ["etf-cycle"]
+          : ["analyze", "monitor-cycle", "monitor-once"];
+      const active = (await db.query("SELECT id FROM quant.jobs WHERE status IN ('pending','running') AND kind=ANY($1::text[]) LIMIT 1", [activeKinds])).rows.length > 0;
       if (active) continue;
       if (row.kind === "monitor_cycle" && !calendar.is_trading_session) continue;
       if (row.kind === "monitor_fixed" && now.getTime()-new Date(run.scheduled_at).getTime()>300_000) {

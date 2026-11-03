@@ -29,6 +29,7 @@ export type JobKind =
   | "daily-scan"
   | "monitor-once"
   | "monitor-cycle"
+  | "etf-cycle"
   | "test-notify"
   | "dispatch-outbox";
 
@@ -196,6 +197,7 @@ const KIND_TO_COMMAND: Record<JobKind, string> = {
   "daily-scan": "scan",
   "monitor-once": "monitor-once",
   "monitor-cycle": "monitor-once",
+  "etf-cycle": "etf-refresh",
   "test-notify": "test-notify",
   "dispatch-outbox": "dispatch-outbox",
 };

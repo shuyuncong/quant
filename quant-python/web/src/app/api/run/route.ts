@@ -6,6 +6,7 @@ const VALID_KINDS: Partial<Record<JobKind, true>> = {
   scan: true,
   "daily-scan": true,
   "monitor-once": true,
+  "etf-cycle": true,
   "test-notify": true,
   "dispatch-outbox": true,
 };

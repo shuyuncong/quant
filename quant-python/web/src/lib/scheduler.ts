@@ -103,7 +103,7 @@ export async function estimateNextRun(
   now = shanghaiNow()
 ): Promise<string | null> {
   if (!row.enabled || (row.kind === "monitor_fixed" && !row.fixed_times.length)) return null;
-  if (row.kind === "daily_scan") {
+  if (row.kind === "daily_scan" || row.kind === "etf_cycle") {
     const [hour, minute] = row.time.split(":").map(Number);
     const target = new Date(now);
     target.setHours(hour, minute, 0, 0);

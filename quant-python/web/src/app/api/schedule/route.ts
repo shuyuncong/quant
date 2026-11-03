@@ -28,7 +28,7 @@ export async function PUT(request: Request) {
   const validated: { kind: ScheduleRow["kind"]; input: Parameters<typeof upsertScheduleRow>[1] }[] = [];
   for (const row of rows) {
     const kind = String(row.kind ?? "");
-    if (kind !== "daily_scan" && kind !== "monitor_cycle" && kind !== "monitor_fixed") {
+    if (kind !== "daily_scan" && kind !== "monitor_cycle" && kind !== "monitor_fixed" && kind !== "etf_cycle") {
       return NextResponse.json({ error: `未知定时类型: ${kind}` }, { status: 422 });
     }
     const input: Record<string, unknown> = {};

@@ -102,6 +102,7 @@ async function ensureDefaultSchedules(pool: Pool): Promise<void> {
     `INSERT INTO quant.schedule (kind, time, interval_seconds, fixed_times, trading_days_only, enabled, updated_at)
      VALUES
        ('daily_scan', '15:20', 60, '[]', TRUE, FALSE, $1),
+       ('etf_cycle', '15:35', 60, '[]', TRUE, FALSE, $1),
        ('monitor_cycle', '09:30', 3600, '[]', TRUE, FALSE, $1),
        ('monitor_fixed', '15:20', 3600, '["15:20"]', TRUE, FALSE, $1)
      ON CONFLICT (kind) DO NOTHING`,
