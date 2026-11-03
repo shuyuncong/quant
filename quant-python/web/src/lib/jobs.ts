@@ -197,7 +197,7 @@ const KIND_TO_COMMAND: Record<JobKind, string> = {
   "daily-scan": "scan",
   "monitor-once": "monitor-once",
   "monitor-cycle": "monitor-once",
-  "etf-cycle": "etf-refresh",
+  "etf-cycle": "etf-cycle",
   "test-notify": "test-notify",
   "dispatch-outbox": "dispatch-outbox",
 };

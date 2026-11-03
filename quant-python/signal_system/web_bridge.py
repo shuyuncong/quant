@@ -13,7 +13,9 @@ Commands:
     test-notify     发送测试通知
     outbox-status   返回 outbox 摘要
     etf-overview    返回 ETF 轮动只读快照
+    etf-data-sync   同步 ETF qfq 日线到本地缓存
     etf-refresh     从本地 ETF 行情缓存刷新当前信号
+    etf-cycle       同步行情、刷新信号并盯市纸面账本
     etf-paper       读取/初始化/再平衡纸面账本
     calendar        返回交易日/交易时段/当前时间
 
@@ -640,6 +642,24 @@ def _cmd_etf_refresh(config_path: str, payload: dict[str, Any]) -> int:
     return _emit({"overview": get_overview()})
 
 
+def _cmd_etf_data_sync(config_path: str, payload: dict[str, Any]) -> int:
+    from etf_rotation.data_sync import sync
+
+    result = sync(config_path=config_path, data_dir=payload.get("data_dir"))
+    return _emit({"sync": result})
+
+
+def _cmd_etf_cycle(config_path: str, payload: dict[str, Any]) -> int:
+    del payload
+    from etf_rotation.data_sync import sync
+    from etf_rotation.service import get_overview, mark_paper_to_market, refresh_snapshot
+
+    sync_result = sync(config_path=config_path)
+    refresh_snapshot()
+    mark_paper_to_market()
+    return _emit({"sync": sync_result, "overview": get_overview()})
+
+
 def _cmd_etf_paper(config_path: str, payload: dict[str, Any]) -> int:
     del config_path
     from etf_rotation.service import (
@@ -674,7 +694,9 @@ COMMANDS = {
     "outbox-status": lambda p, o: _cmd_outbox_status(p, o),
     "outbox-log": lambda p, o: _cmd_outbox_log(p, o),
     "etf-overview": lambda p, o: _cmd_etf_overview(p, o),
+    "etf-data-sync": lambda p, o: _cmd_etf_data_sync(p, o),
     "etf-refresh": lambda p, o: _cmd_etf_refresh(p, o),
+    "etf-cycle": lambda p, o: _cmd_etf_cycle(p, o),
     "etf-paper": lambda p, o: _cmd_etf_paper(p, o),
     "notify-summary": lambda p, o: _cmd_notify_summary(p, o),
     "candidates": lambda p, o: _cmd_candidates(p, o),
