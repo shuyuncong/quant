@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { runBridge } from "@/lib/bridge";
+import { etfBridgeScript } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const outcome = await runBridge("etf-paper", { action: "status" }, { timeoutMs: 20_000 });
+  const outcome = await runBridge(
+    "paper",
+    { action: "status" },
+    { timeoutMs: 20_000, script: etfBridgeScript }
+  );
   if (!outcome.ok) {
     return NextResponse.json(
       { error: outcome.error || "ETF 纸面账本读取失败", code: outcome.code },
@@ -30,9 +35,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "初始资金必须大于 0" }, { status: 422 });
   }
   const outcome = await runBridge(
-    "etf-paper",
+    "paper",
     { action, capital },
-    { timeoutMs: 30_000 }
+    { timeoutMs: 30_000, script: etfBridgeScript }
   );
   if (!outcome.ok) {
     return NextResponse.json(

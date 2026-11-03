@@ -13,10 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
-from .engine import EtfDataError, compute_signal, load_open_panel, load_panel
-
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 STATE_DIR = Path(os.getenv("ETF_ROTATION_STATE_DIR", Path(__file__).resolve().parents[1] / "state"))
 RUNTIME_SNAPSHOT = STATE_DIR / "etf_rotation_snapshot.json"
@@ -76,6 +72,8 @@ def load_snapshot(path: Path | None = None) -> dict[str, Any]:
 
 def refresh_snapshot() -> dict[str, Any]:
     """Recompute the current signal from the local qfq cache and persist it."""
+    from .engine import compute_signal, load_panel
+
     close, volume = load_panel()
     signal = compute_signal(close, volume)
     snapshot = load_snapshot()
@@ -332,6 +330,8 @@ def fill_paper(as_of: str | None = None) -> dict[str, Any]:
     plan = ledger.get("pending_plan")
     if not isinstance(plan, dict) or plan.get("status") != "planned":
         raise ValueError("没有待成交的纸面计划")
+    from .engine import EtfDataError, load_open_panel
+
     plan_date = str(plan.get("as_of") or "")
     opens = load_open_panel()
     dates = [day for day in opens.index if day.strftime("%Y-%m-%d") > plan_date]
@@ -389,6 +389,10 @@ def rebalance_paper() -> dict[str, Any]:
 
 
 def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:
+    import pandas as pd
+
+    from .engine import EtfDataError, load_panel
+
     ledger = _load_paper()
     if not ledger.get("initialized"):
         return ledger

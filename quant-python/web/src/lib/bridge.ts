@@ -11,6 +11,8 @@ export interface BridgeOutcome {
 export interface BridgeOptions {
   timeoutMs?: number;
   env?: Record<string, string>;
+  /** Optional bridge entrypoint; defaults to signal_system/web_bridge.py. */
+  script?: string;
   /** Cancels the bridge process; the promise still settles exactly once. */
   signal?: AbortSignal;
 }
@@ -29,7 +31,7 @@ export function runBridge(
   let child;
   try {
     const pythonBin = process.env.PYTHON_BIN?.trim() || "python";
-    child = spawn(/* turbopackIgnore: true */ pythonBin, ["-B", bridgeScript, command, "--payload", "-"], {
+    child = spawn(/* turbopackIgnore: true */ pythonBin, ["-B", options.script ?? bridgeScript, command, "--payload", "-"], {
       cwd: signalSystemDir,
       windowsHide: true,
       env: { ...process.env, PYTHONIOENCODING: "utf-8", ...options.env },
