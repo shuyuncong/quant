@@ -272,7 +272,8 @@ export async function startJob(kind: JobKind, payload: Record<string, unknown>):
     const { startAnalysisBatch } = await import("./analysis-service");
     return startAnalysisBatch(kind, payload);
   }
-  const jobId = await createJob(kind, payload);
+  const existingJobId = Number(payload.existing_job_id ?? 0);
+  const jobId = existingJobId > 0 ? existingJobId : await createJob(kind, payload);
   await updateJob(jobId, { status: "running", started_at: nowIso() });
   await addOperationLog({
     job_id: jobId,
