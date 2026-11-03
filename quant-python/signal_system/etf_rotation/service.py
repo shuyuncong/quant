@@ -13,7 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .engine import compute_signal, load_panel
+import pandas as pd
+
+from .engine import EtfDataError, compute_signal, load_panel
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 STATE_DIR = Path(os.getenv("ETF_ROTATION_STATE_DIR", Path(__file__).resolve().parents[1] / "state"))
@@ -121,6 +123,7 @@ def _paper_default() -> dict[str, Any]:
         "cash": 0.0,
         "positions": {},
         "orders": [],
+        "nav_history": [],
         "as_of": None,
         "updated_at": None,
     }
@@ -141,6 +144,8 @@ def _load_paper() -> dict[str, Any]:
         merged["positions"] = {}
     if not isinstance(merged.get("orders"), list):
         merged["orders"] = []
+    if not isinstance(merged.get("nav_history"), list):
+        merged["nav_history"] = []
     return merged
 
 
@@ -291,6 +296,53 @@ def rebalance_paper() -> dict[str, Any]:
     if not ledger.get("initialized"):
         raise ValueError("纸面账本尚未初始化")
     return _rebalance_paper(ledger, load_snapshot())
+
+
+def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:
+    ledger = _load_paper()
+    if not ledger.get("initialized"):
+        return ledger
+    close, _volume = load_panel()
+    target_day = pd.Timestamp(as_of) if as_of else close.index[-1]
+    day = close.index[close.index <= target_day].max()
+    if pd.isna(day):
+        raise EtfDataError("没有可用于盯市的行情日期")
+    positions = ledger.get("positions") or {}
+    for symbol, position in positions.items():
+        if symbol not in close.columns:
+            continue
+        price = float(close[symbol].loc[day])
+        if math.isfinite(price) and price > 0:
+            position["last_price"] = price
+    market_value = sum(
+        int(position.get("shares") or 0) * float(position.get("last_price") or 0)
+        for position in positions.values()
+    )
+    cash = float(ledger.get("cash") or 0.0)
+    equity = cash + market_value
+    capital = float(ledger.get("capital") or 0.0)
+    entry = {
+        "date": day.strftime("%Y-%m-%d"),
+        "cash": round(cash, 2),
+        "market_value": round(market_value, 2),
+        "equity": round(equity, 2),
+        "pnl_pct": round((equity / capital - 1.0) * 100, 2) if capital > 0 else None,
+    }
+    history = [
+        item for item in ledger.get("nav_history", [])
+        if isinstance(item, dict) and item.get("date") != entry["date"]
+    ]
+    history.append(entry)
+    history.sort(key=lambda item: str(item.get("date") or ""))
+    ledger.update({
+        "cash": round(cash, 2),
+        "positions": positions,
+        "nav_history": history,
+        "as_of": entry["date"],
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    })
+    _save_paper(ledger)
+    return ledger
 
 
 def get_paper_ledger() -> dict[str, Any]:

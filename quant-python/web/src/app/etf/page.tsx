@@ -52,6 +52,14 @@ interface EtfPaperPosition {
   market_value: number;
 }
 
+interface EtfPaperNav {
+  date: string;
+  cash: number;
+  market_value: number;
+  equity: number;
+  pnl_pct: number | null;
+}
+
 interface EtfPaperLedger {
   initialized: boolean;
   capital: number;
@@ -60,6 +68,7 @@ interface EtfPaperLedger {
   equity: number;
   pnl_pct: number | null;
   positions: EtfPaperPosition[];
+  nav_history?: EtfPaperNav[];
   as_of: string | null;
   updated_at: string | null;
 }
@@ -238,7 +247,7 @@ export default function EtfPage() {
     }
   }, []);
 
-  const paperAction = useCallback(async (action: "init" | "rebalance") => {
+  const paperAction = useCallback(async (action: "init" | "rebalance" | "mark") => {
     setPaperLoading(true);
     setPaperError(null);
     try {
@@ -486,10 +495,16 @@ export default function EtfPage() {
                 <span>
                   纸面收益：{paper.pnl_pct === null ? "—" : `${signed(paper.pnl_pct, 2)}%`} · 更新于 {paper.updated_at || "—"}
                 </span>
-                <Button size="sm" variant="outline" className="gap-2" onClick={() => void paperAction("rebalance")} disabled={paperLoading}>
-                  <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
-                  {paperLoading ? "再平衡中" : "按当前目标再平衡"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => void paperAction("mark")} disabled={paperLoading}>
+                    <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
+                    {paperLoading ? "更新中" : "更新纸面净值"}
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => void paperAction("rebalance")} disabled={paperLoading}>
+                    <RefreshCw className={`size-4 ${paperLoading ? "animate-spin" : ""}`} />
+                    {paperLoading ? "再平衡中" : "按当前目标再平衡"}
+                  </Button>
+                </div>
               </div>
               {paper.positions.length > 0 ? (
                 <div className="overflow-hidden rounded-lg border">
@@ -520,6 +535,36 @@ export default function EtfPage() {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">当前没有纸面持仓。</p>
+              )}
+              {paper.nav_history?.length ? (
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 text-muted-foreground">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left font-medium">净值日期</th>
+                        <th className="px-2 py-1.5 text-right font-medium">现金</th>
+                        <th className="px-2 py-1.5 text-right font-medium">持仓市值</th>
+                        <th className="px-2 py-1.5 text-right font-medium">总权益</th>
+                        <th className="px-2 py-1.5 text-right font-medium">收益</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...paper.nav_history].reverse().map((row) => (
+                        <tr key={row.date} className="border-t">
+                          <td className="px-2 py-1.5">{row.date}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">¥{row.cash.toLocaleString("zh-CN")}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">¥{row.market_value.toLocaleString("zh-CN")}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">¥{row.equity.toLocaleString("zh-CN")}</td>
+                          <td className={`px-2 py-1.5 text-right tabular-nums ${(row.pnl_pct ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                            {row.pnl_pct === null ? "—" : `${signed(row.pnl_pct, 2)}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">还没有净值记录。点击“更新纸面净值”写入第一条。</p>
               )}
             </>
           )}

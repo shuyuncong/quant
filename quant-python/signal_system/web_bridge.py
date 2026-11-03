@@ -645,6 +645,7 @@ def _cmd_etf_paper(config_path: str, payload: dict[str, Any]) -> int:
         get_overview,
         get_paper_ledger,
         initialize_paper,
+        mark_paper_to_market,
         rebalance_paper,
     )
 
@@ -653,6 +654,8 @@ def _cmd_etf_paper(config_path: str, payload: dict[str, Any]) -> int:
         initialize_paper(float(payload.get("capital") or 250_000.0))
     elif action == "rebalance":
         rebalance_paper()
+    elif action == "mark":
+        mark_paper_to_market(payload.get("as_of"))
     elif action != "status":
         return _emit_error(f"不支持的 ETF 纸面账本动作: {action}", 2)
     return _emit({"overview": get_overview(), "paper": get_paper_ledger()})

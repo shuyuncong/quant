@@ -22,8 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   const action = String(body.action ?? "");
-  if (action !== "init" && action !== "rebalance") {
-    return NextResponse.json({ error: "action 必须是 init 或 rebalance" }, { status: 422 });
+  if (action !== "init" && action !== "rebalance" && action !== "mark") {
+    return NextResponse.json({ error: "action 必须是 init、rebalance 或 mark" }, { status: 422 });
   }
   const capital = Number(body.capital ?? 250_000);
   if (action === "init" && (!Number.isFinite(capital) || capital <= 0)) {
