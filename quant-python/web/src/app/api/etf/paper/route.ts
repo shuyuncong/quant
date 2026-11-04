@@ -13,7 +13,7 @@ export async function GET() {
   if (!outcome.ok) {
     return NextResponse.json(
       { error: outcome.error || "ETF 纸面账本读取失败", code: outcome.code },
-      { status: 502 }
+      { status: outcome.code === 2 ? 409 : 502 }
     );
   }
   return NextResponse.json(outcome.data);
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (!outcome.ok) {
     return NextResponse.json(
       { error: outcome.error || "ETF 纸面账本操作失败", code: outcome.code },
-      { status: 502 }
+      { status: outcome.code === 2 ? 409 : 502 }
     );
   }
   return NextResponse.json(outcome.data);

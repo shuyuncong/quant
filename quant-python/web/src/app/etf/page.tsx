@@ -230,6 +230,17 @@ function EquityChart({ rows }: { rows: Array<{ date: string; equity: number }> }
   );
 }
 
+async function readApiJson<T>(response: Response): Promise<T> {
+  const raw = await response.text();
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const contentType = response.headers.get("content-type") || "";
+    const kind = contentType.includes("text/html") ? "HTML 错误页" : "非 JSON 内容";
+    throw new Error(`接口返回了${kind}（HTTP ${response.status}），请查看服务端日志后重试`);
+  }
+}
+
 export default function EtfPage() {
   const [overview, setOverview] = useState<EtfOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -243,7 +254,7 @@ export default function EtfPage() {
     if (showLoading) setLoading(true);
     try {
       const response = await fetch("/api/etf/overview", { cache: "no-store" });
-      const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+      const payload = await readApiJson<{ overview?: EtfOverview; error?: string }>(response);
       if (!response.ok || !payload.overview) {
         throw new Error(payload.error || "ETF 概览读取失败");
       }
@@ -261,7 +272,7 @@ export default function EtfPage() {
     setRefreshError(null);
     try {
       const response = await fetch("/api/etf/refresh", { method: "POST" });
-      const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+      const payload = await readApiJson<{ overview?: EtfOverview; error?: string }>(response);
       if (!response.ok || !payload.overview) {
         throw new Error(payload.error || "ETF 信号刷新失败");
       }
@@ -283,7 +294,7 @@ export default function EtfPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, capital: 250_000 }),
       });
-      const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+      const payload = await readApiJson<{ overview?: EtfOverview; error?: string }>(response);
       if (!response.ok || !payload.overview) {
         throw new Error(payload.error || "纸面账本操作失败");
       }
@@ -299,7 +310,7 @@ export default function EtfPage() {
     let active = true;
     fetch("/api/etf/overview", { cache: "no-store" })
       .then(async (response) => {
-        const payload = (await response.json()) as { overview?: EtfOverview; error?: string };
+        const payload = await readApiJson<{ overview?: EtfOverview; error?: string }>(response);
         if (!response.ok || !payload.overview) {
           throw new Error(payload.error || "ETF 概览读取失败");
         }
