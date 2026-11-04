@@ -13,6 +13,7 @@ Pins the facts that broke on 2026-11-04:
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -109,6 +110,50 @@ class BacktestParityTests(unittest.TestCase):
         self.assertAlmostEqual(float(research.curve.iloc[-1]),
                                runtime["curve"][-1]["equity"], places=4)
         self.assertEqual(research.trades, runtime["trades"])
+
+
+def snapshot_payload(strategy_id: str, total_return_pct: float) -> dict:
+    return {
+        "strategy": "ETF v5.1",
+        "strategy_id": strategy_id,
+        "as_of": "2026-11-04",
+        "mode": "local_refresh",
+        "metrics": {"total_return_pct": total_return_pct},
+        "signal": {},
+        "target": [],
+        "curve": [],
+    }
+
+
+class SnapshotVersionTests(unittest.TestCase):
+    def test_stale_runtime_snapshot_falls_back_to_committed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            committed = root / "snapshot.json"
+            runtime = root / "runtime.json"
+            committed.write_text(json.dumps(snapshot_payload(service.CANONICAL["strategy_id"], 90.01)),
+                                 encoding="utf-8")
+            runtime.write_text(json.dumps(snapshot_payload("etf_v5.1_backfill_65_35", 123.63)),
+                               encoding="utf-8")
+            with mock.patch.object(service, "SNAPSHOT_PATH", committed), \
+                    mock.patch.object(service, "RUNTIME_SNAPSHOT", runtime):
+                loaded = service.load_snapshot()
+            self.assertEqual(loaded["strategy_id"], service.CANONICAL["strategy_id"])
+            self.assertEqual(loaded["metrics"]["total_return_pct"], 90.01)
+
+    def test_current_runtime_snapshot_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            committed = root / "snapshot.json"
+            runtime = root / "runtime.json"
+            committed.write_text(json.dumps(snapshot_payload(service.CANONICAL["strategy_id"], 90.01)),
+                                 encoding="utf-8")
+            runtime.write_text(json.dumps(snapshot_payload(service.CANONICAL["strategy_id"], 91.5)),
+                               encoding="utf-8")
+            with mock.patch.object(service, "SNAPSHOT_PATH", committed), \
+                    mock.patch.object(service, "RUNTIME_SNAPSHOT", runtime):
+                loaded = service.load_snapshot()
+            self.assertEqual(loaded["metrics"]["total_return_pct"], 91.5)
 
 
 class PaperLedgerTests(unittest.TestCase):

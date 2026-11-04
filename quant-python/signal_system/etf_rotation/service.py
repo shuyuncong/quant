@@ -24,6 +24,30 @@ COMMISSION = 0.0003
 MIN_COMMISSION = 5.0
 SLIPPAGE = 0.0005
 
+METRIC_KEYS = (
+    "total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe",
+    "daily_win_rate_pct", "daily_payoff", "trade_win_rate_pct", "trade_payoff",
+    "avg_exposure", "trades", "closed_rounds",
+)
+CANONICAL = {
+    "strategy": "ETF v5.1 40/35 + 回填35",
+    "strategy_id": "etf_v5.1_backfill_40_35",
+    "config": {
+        "core_weight": 0.40,
+        "satellite_max_weight": 0.35,
+        "backfill_weight": 0.35,
+        "backfill_gold": 0.40,
+        "backfill_bond": 0.60,
+        "target_vol_pct": 10,
+        "max_picks": 1,
+        "breadth": "min(1, N_trend/2)",
+        "crash_overlay": "off",
+        "rebalance": "weekly last trading day, next open",
+        "commission_bps": 3,
+        "slippage_bps": 5,
+    },
+}
+
 
 class EtfSnapshotError(ValueError):
     """Raised when the committed ETF snapshot is missing or malformed."""
@@ -64,7 +88,23 @@ def _history() -> list[dict[str, Any]]:
 
 
 def load_snapshot(path: Path | None = None) -> dict[str, Any]:
-    source = path or (RUNTIME_SNAPSHOT if RUNTIME_SNAPSHOT.exists() else SNAPSHOT_PATH)
+    """Load the snapshot, ignoring a runtime file written by a retired rule set.
+
+    `state/etf_rotation_snapshot.json` survives deploys. After a rule change it
+    still carries the old metrics and curve, so preferring it would put a
+    retired strategy back on the page. A strategy_id mismatch falls back to the
+    committed canonical snapshot; the next refresh then rewrites the runtime
+    copy with a fresh signal.
+    """
+    if path is not None:
+        source = path
+    elif RUNTIME_SNAPSHOT.exists():
+        cached = _read_json(RUNTIME_SNAPSHOT)
+        if cached.get("strategy_id") == CANONICAL["strategy_id"]:
+            return cached
+        source = SNAPSHOT_PATH
+    else:
+        source = SNAPSHOT_PATH
     if not source.exists():
         raise EtfSnapshotError(f"ETF snapshot 不存在: {source}")
     return _read_json(source)
@@ -112,31 +152,6 @@ def refresh_snapshot() -> dict[str, Any]:
         encoding="utf-8",
     )
     return snapshot
-
-
-METRIC_KEYS = (
-    "total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe",
-    "daily_win_rate_pct", "daily_payoff", "trade_win_rate_pct", "trade_payoff",
-    "avg_exposure", "trades", "closed_rounds",
-)
-CANONICAL = {
-    "strategy": "ETF v5.1 40/35 + 回填35",
-    "strategy_id": "etf_v5.1_backfill_40_35",
-    "config": {
-        "core_weight": 0.40,
-        "satellite_max_weight": 0.35,
-        "backfill_weight": 0.35,
-        "backfill_gold": 0.40,
-        "backfill_bond": 0.60,
-        "target_vol_pct": 10,
-        "max_picks": 1,
-        "breadth": "min(1, N_trend/2)",
-        "crash_overlay": "off",
-        "rebalance": "weekly last trading day, next open",
-        "commission_bps": 3,
-        "slippage_bps": 5,
-    },
-}
 
 
 def _week_end(index: Any, day: Any, trade_dates: Any = None) -> dict[str, Any]:
