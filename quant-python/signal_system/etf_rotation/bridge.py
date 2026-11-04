@@ -39,10 +39,19 @@ def _overview() -> int:
 
 
 def _refresh() -> int:
+    from time import monotonic
+
     from etf_rotation.service import get_overview, refresh_snapshot
 
+    started = monotonic()
     refresh_snapshot()
-    return _emit({"ok": True, "data": {"overview": get_overview()}})
+    return _emit({
+        "ok": True,
+        "data": {
+            "overview": get_overview(),
+            "elapsed_ms": int((monotonic() - started) * 1000),
+        },
+    })
 
 
 def _data_sync(config_path: str, payload: dict[str, Any]) -> int:

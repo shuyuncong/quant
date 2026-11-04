@@ -45,6 +45,7 @@ export function runBridge(
   let stdout = "";
   let stderr = "";
   let settled = false;
+  let timedOut = false;
   let timer: NodeJS.Timeout | undefined;
 
   /** Kill Python without caring whether it already exited. */
@@ -57,7 +58,10 @@ export function runBridge(
   };
 
   if (options.timeoutMs && options.timeoutMs > 0) {
-    timer = setTimeout(kill, options.timeoutMs);
+    timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+    }, options.timeoutMs);
   }
 
   // Cancellation kills Python; the close handler settles once the process has actually exited.
@@ -100,8 +104,10 @@ export function runBridge(
     } else {
       settle({
         ok: false,
-        error: stderr.trim() || `桥接进程退出码 ${exitCode}`,
-        code: exitCode,
+        error: timedOut
+          ? `桥接命令 ${command} 超过 ${options.timeoutMs}ms 未返回`
+          : stderr.trim() || `桥接进程退出码 ${exitCode}`,
+        code: timedOut ? 124 : exitCode,
       });
     }
   });
