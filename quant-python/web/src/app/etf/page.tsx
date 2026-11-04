@@ -236,8 +236,20 @@ async function readApiJson<T>(response: Response): Promise<T> {
     return JSON.parse(raw) as T;
   } catch {
     const contentType = response.headers.get("content-type") || "";
-    const kind = contentType.includes("text/html") ? "HTML 错误页" : "非 JSON 内容";
-    throw new Error(`接口返回了${kind}（HTTP ${response.status}），请查看服务端日志后重试`);
+    const trimmed = raw.trim();
+    const kind = contentType.includes("text/html")
+      ? "HTML 错误页"
+      : trimmed
+        ? "非 JSON 内容"
+        : "空响应";
+    const where = response.url ? `（${response.url}）` : "";
+    const hint =
+      response.status === 502 || response.status === 504
+        ? "网关或反向代理没有连到应用，多半是页面地址与实际服务端口不一致；开发环境默认 http://localhost:3111"
+        : trimmed
+          ? "请查看服务端日志后重试"
+          : "服务端没有返回内容，检查应用是否在运行的端口上";
+    throw new Error(`接口${where}返回了${kind}（HTTP ${response.status}），${hint}`);
   }
 }
 
