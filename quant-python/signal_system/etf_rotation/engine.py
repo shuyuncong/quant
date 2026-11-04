@@ -1,7 +1,8 @@
 """Pure ETF core-satellite signal engine.
 
-Reads the local qfq cache, evaluates the frozen 65/35 + backfill35 rules, and
-returns a target portfolio. No network, database, orders, or UI concerns here.
+Reads the local qfq cache, evaluates the canonical 40/35 + backfill35 rules
+(core 40%, satellite <=35%, backfill 35%, 10% vol target, crash overlay off),
+and returns a target portfolio. No network, database, orders, or UI concerns.
 """
 from __future__ import annotations
 
@@ -29,7 +30,9 @@ SATELLITE = {
     "516510": "云计算", "516780": "稀土", "516970": "基建", "588000": "科创50",
 }
 NAMES = {**SATELLITE, **CORE, MARKET: "沪深300"}
-CORE_WEIGHT = 0.65
+# Canonical allocation (frozen 2026-11-02, see docs/backtest-results/2026-11-02-etf-forward-test):
+# core 40% + satellite <=35% + backfill 35%, 10% vol target, crash overlay off.
+CORE_WEIGHT = 0.40
 SATELLITE_MAX = 0.35
 BACKFILL_WEIGHT = 0.35
 BACKFILL_GOLD = 0.40
@@ -128,7 +131,10 @@ def compute_signal(close: pd.DataFrame, volume: pd.DataFrame, as_of: pd.Timestam
     core = max(core_momentum, key=core_momentum.get) if core_momentum else None
 
     candidates: list[dict[str, Any]] = []
-    if gate or crash:
+    # The crash overlay (30/70 sizing, vol cap off) stays off in the canonical
+    # rule set, and the undocumented "crash bypasses the gate" branch is removed:
+    # satellite candidates require an open gate, full stop.
+    if gate:
         for symbol in SATELLITE:
             if int(valid[symbol].loc[day]) < 253:
                 continue

@@ -717,10 +717,10 @@ export default function EtfPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-xs leading-5 text-muted-foreground">
-            <p>核心 65%：黄金/十年国债中选 12−1 动量更强的正动量资产。</p>
+            <p>核心 40%：黄金/十年国债中选 12−1 动量更强的正动量资产。</p>
             <p>卫星 35%：趋势模板 + 12−1 动量 / 60 日波动，top1；候选不足时预算减半。</p>
             <p>无卫星回填 35%：黄金 40% / 十年国债 60%，目标波动率 10%。</p>
-            <p>该版本名义满仓 100%，没有现金缓冲；2024–2026 已多次查看，不是严格盲测 OOS。</p>
+            <p>闸门关闭且无卫星时保留约 25% 现金；2024–2026 已多次查看，不是严格盲测 OOS。</p>
             <a href="/workflow" className="mt-1 inline-flex items-center gap-1 font-medium text-primary hover:underline">
               查看完整策略说明 <ArrowUpRight className="size-3.5" />
             </a>

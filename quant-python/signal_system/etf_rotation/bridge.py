@@ -60,6 +60,7 @@ def _cycle(config_path: str) -> int:
         mark_paper_to_market,
         plan_paper,
         refresh_snapshot,
+        week_end_status,
     )
 
     sync_result = sync(config_path=config_path)
@@ -70,10 +71,25 @@ def _cycle(config_path: str) -> int:
         fill_paper()
     except ValueError as exc:
         fill_error = str(exc)
+    trade_dates = None
     try:
-        plan_paper()
-    except ValueError as exc:
-        plan_error = str(exc)
+        from data.market_data import MarketDataClient
+        from utils.helpers import load_config
+
+        trade_dates = MarketDataClient(load_config(config_path)).get_trade_dates()
+    except Exception:  # noqa: BLE001 - calendar is best-effort, fall back to Friday
+        trade_dates = None
+    schedule = week_end_status(trade_dates=trade_dates)
+    if schedule["is_week_end"]:
+        try:
+            plan_paper()
+        except ValueError as exc:
+            plan_error = str(exc)
+    else:
+        plan_error = (
+            f"非周度调仓日（本周最后交易日 {schedule['week_last_session']}），"
+            "今日只成交与盯市，不生成新计划"
+        )
     mark_paper_to_market()
     return _emit({
         "ok": True,
@@ -82,6 +98,21 @@ def _cycle(config_path: str) -> int:
             "overview": get_overview(),
             "fill_error": fill_error,
             "plan_error": plan_error,
+            "plan_schedule": schedule,
+        },
+    })
+
+
+def _backtest(_payload: dict[str, Any]) -> int:
+    from etf_rotation.service import rebuild_snapshot
+
+    snapshot = rebuild_snapshot(persist_committed=True)
+    return _emit({
+        "ok": True,
+        "data": {
+            "metrics": snapshot["metrics"],
+            "backtest": snapshot.get("backtest"),
+            "strategy": snapshot.get("strategy"),
         },
     })
 
@@ -115,7 +146,7 @@ def _paper(payload: dict[str, Any]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ETF rotation lightweight bridge")
-    parser.add_argument("command", choices=["overview", "refresh", "data-sync", "cycle", "paper"])
+    parser.add_argument("command", choices=["overview", "refresh", "data-sync", "cycle", "paper", "backtest"])
     parser.add_argument("--config", default=str(SIGNAL_SYSTEM / "config" / "config.yaml"))
     parser.add_argument("--payload", default="-")
     args = parser.parse_args(argv)
@@ -129,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
             return _data_sync(args.config, payload)
         if args.command == "cycle":
             return _cycle(args.config)
+        if args.command == "backtest":
+            return _backtest(payload)
         return _paper(payload)
     except (ValueError, TypeError) as exc:
         return _emit({"ok": False, "error": str(exc), "code": 2}, 2)

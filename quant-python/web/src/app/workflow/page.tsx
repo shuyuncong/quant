@@ -1,7 +1,7 @@
-import Image from "next/image";
 import {
   ArrowDown,
   ArrowRight,
+  ArrowUpRight,
   BellRing,
   BrainCircuit,
   ChartNoAxesCombined,
@@ -445,30 +445,30 @@ export default function WorkflowPage() {
           <div>
             <h1 className="text-xl font-semibold">ETF 核心—卫星策略</h1>
             <p className="text-sm text-muted-foreground">
-              研究版：65% 核心 + 35% 卫星，没有卫星候选时把 35% 回填黄金/国债，目标波动率 10%，名义总仓位上限 100%。以下均为 2020-01-01 至 2026-10-30 的回测口径，不是生产交易建议。
+              运行版：40% 核心 + 35% 卫星，没有卫星候选时把 35% 回填黄金/国债，目标波动率 10%，总仓位上限 75%。2026-11-04 起页面曲线、实时信号与纸面账本使用同一套规则；以下数字为 2020-01-02 至 2026-11-03 的快照，实时值见 ETF 轮动页。
             </p>
           </div>
 
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ChartNoAxesCombined className="size-4" /> 当前最佳版本
+                <ChartNoAxesCombined className="size-4" /> 当前运行版本
               </CardTitle>
               <CardDescription>
-                ETF v5.1 满仓版：核心 65% / 卫星 35% / 无卫星回填 35%。它是收益优先版本，已突破原始 75% 仓位上限，风险预算高于稳健版。
+                ETF v5.1 40/35 + 回填 35：核心 40% / 卫星 35% / 无卫星时回填 35%，闸门关闭且无卫星时保留约 25% 现金。
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { label: "全期收益", value: "+123.63%" },
-                  { label: "年化收益", value: "12.51%" },
-                  { label: "最大回撤", value: "−11.93%" },
-                  { label: "Sharpe", value: "1.330" },
-                  { label: "日胜率", value: "54.7%" },
-                  { label: "日盈亏比", value: "1.054" },
+                  { label: "全期收益", value: "+90.01%" },
+                  { label: "年化收益", value: "9.84%" },
+                  { label: "最大回撤", value: "−10.19%" },
+                  { label: "Sharpe", value: "1.200" },
+                  { label: "日胜率", value: "54.66%" },
+                  { label: "日盈亏比", value: "1.030" },
                   { label: "交易胜率", value: "52.94%" },
-                  { label: "交易盈亏比", value: "1.801" },
+                  { label: "交易盈亏比", value: "1.892" },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border bg-muted/30 p-3">
                     <div className="text-xs text-muted-foreground">{item.label}</div>
@@ -485,8 +485,8 @@ export default function WorkflowPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t"><td className="px-2 py-1.5">回测区间</td><td className="px-2 py-1.5 text-right">2020-01-01 → 2026-10-30</td></tr>
-                    <tr className="border-t"><td className="px-2 py-1.5">平均暴露</td><td className="px-2 py-1.5 text-right">约 77%</td></tr>
+                    <tr className="border-t"><td className="px-2 py-1.5">回测区间</td><td className="px-2 py-1.5 text-right">2020-01-02 → 2026-11-03</td></tr>
+                    <tr className="border-t"><td className="px-2 py-1.5">平均暴露</td><td className="px-2 py-1.5 text-right">约 63%</td></tr>
                     <tr className="border-t"><td className="px-2 py-1.5">成本</td><td className="px-2 py-1.5 text-right">佣金 3bp + 滑点 5bp，ETF 无印花税</td></tr>
                     <tr className="border-t"><td className="px-2 py-1.5">执行</td><td className="px-2 py-1.5 text-right">周度最后交易日收盘判定，下一交易日开盘，先卖后买</td></tr>
                     <tr className="border-t"><td className="px-2 py-1.5">胜率/盈亏比口径</td><td className="px-2 py-1.5 text-right">日胜率按组合日收益；交易胜率按周度目标 0→正、正→0 的近似回合</td></tr>
@@ -499,19 +499,17 @@ export default function WorkflowPage() {
           <Card>
             <CardHeader>
               <CardTitle>2020–2026 累计净值</CardTitle>
-              <CardDescription>起点 = 100；数据截至 2026-10-30。</CardDescription>
+              <CardDescription>起点 = 100；数据截至 2026-11-03。</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Image
-                src="/etf-best-curve.svg"
-                alt="ETF 65/35 + 回填35 在 2020-2026 的累计净值曲线"
-                width={900}
-                height={320}
-                unoptimized
-                className="w-full rounded-lg border bg-white"
-              />
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                曲线是研究回测的组合净值，不是实盘账户收益。2020–2021、2024–2026 的上涨主要来自黄金/国债核心与行业 ETF 卫星；2021–2024 也存在明显的低回报期。
+            <CardContent className="flex flex-col gap-3 text-xs leading-5 text-muted-foreground">
+              <p>
+                静态曲线已于 2026-11-04 移除：它画的是已停用的 65/35 规则，与当前运行口径不一致。
+              </p>
+              <a href="/etf" className="inline-flex w-fit items-center gap-1 font-medium text-primary hover:underline">
+                查看实时净值曲线 <ArrowUpRight className="size-3.5" />
+              </a>
+              <p>
+                2020–2021、2024–2026 的上涨主要来自黄金/国债核心与行业 ETF 卫星；2021–2024 也存在明显的低回报期。
               </p>
             </CardContent>
           </Card>
@@ -523,7 +521,7 @@ export default function WorkflowPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-xs leading-5 text-muted-foreground">
               <div className="rounded-lg border p-3">
-                <div className="text-sm font-medium text-foreground">核心 65%</div>
+                <div className="text-sm font-medium text-foreground">核心 40%</div>
                 <p className="mt-1">黄金 518880 / 十年国债 511260 中，选 12−1 动量更强且绝对值 &gt; 0 的一只。核心只买一只，不是各买一半。</p>
               </div>
               <div className="rounded-lg border p-3">
@@ -533,11 +531,11 @@ export default function WorkflowPage() {
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-sm font-medium text-foreground">无卫星回填 35%</div>
-                <p className="mt-1">闸门关闭或没有卫星候选时，把 35% 按黄金 40% / 十年国债 60% 回填防守核心。当前信号下，核心国债 65% + 回填国债 21% + 回填黄金 14% = 国债 86% / 黄金 14%。</p>
+                <p className="mt-1">闸门关闭或没有卫星候选时，把 35% 按黄金 40% / 十年国债 60% 回填防守核心。2026-11-03 信号下，核心国债 40% + 回填国债 21% + 回填黄金 14% = 国债 61% / 黄金 14% / 现金 25%。</p>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-sm font-medium text-foreground">目标波动率 10%</div>
-                <p className="mt-1">用 60 日协方差计算组合波动；超过 10% 时按比例缩仓，低于 10% 不加杠杆。名义上限 100%，实际平均暴露约 77%。</p>
+                <p className="mt-1">用 60 日协方差计算组合波动；超过 10% 时按比例缩仓，低于 10% 不加杠杆。名义上限 75%，实际平均暴露约 63%。</p>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-sm font-medium text-foreground">闸门与执行</div>
@@ -548,7 +546,7 @@ export default function WorkflowPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>当前信号（2026-10-30）</CardTitle>
+              <CardTitle>当前信号（2026-11-03）</CardTitle>
               <CardDescription>仅记录研究口径，不构成实盘指令。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-xs leading-5 text-muted-foreground">
@@ -559,15 +557,15 @@ export default function WorkflowPage() {
                 <div className="rounded-lg border p-3"><span className="font-medium text-foreground">波动缩放：</span>1.0</div>
               </div>
               <div className="rounded-lg border bg-muted/30 p-3">
-                目标：<span className="font-mono text-foreground">511260 86% / 518880 14% / 现金 0%</span>
+                目标：<span className="font-mono text-foreground">511260 61% / 518880 14% / 现金 25%</span>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>与稳健版的差异</CardTitle>
-              <CardDescription>同样是核心—卫星，风险预算不同。</CardDescription>
+              <CardTitle>核心权重对照（研究）</CardTitle>
+              <CardDescription>40/35 是当前运行口径；其余两行是已停用的研究变体。</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-hidden rounded-lg border">
@@ -582,14 +580,14 @@ export default function WorkflowPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t"><td className="px-2 py-1.5">40/35 + 回填35（原 75% 上限）</td><td className="px-2 py-1.5 text-right">+90.10%</td><td className="px-2 py-1.5 text-right">9.87%</td><td className="px-2 py-1.5 text-right">−10.19%</td><td className="px-2 py-1.5 text-right">1.200</td></tr>
-                    <tr className="border-t bg-primary/5"><td className="px-2 py-1.5 font-medium">65/35 + 回填35（当前最佳）</td><td className="px-2 py-1.5 text-right font-medium">+123.63%</td><td className="px-2 py-1.5 text-right font-medium">12.51%</td><td className="px-2 py-1.5 text-right font-medium">−11.93%</td><td className="px-2 py-1.5 text-right font-medium">1.330</td></tr>
-                    <tr className="border-t"><td className="px-2 py-1.5">70/30 + 回填30（收益最高）</td><td className="px-2 py-1.5 text-right">+126.62%</td><td className="px-2 py-1.5 text-right">12.73%</td><td className="px-2 py-1.5 text-right">−12.21%</td><td className="px-2 py-1.5 text-right">1.340</td></tr>
+                    <tr className="border-t bg-primary/5"><td className="px-2 py-1.5 font-medium">40/35 + 回填35（当前运行口径）</td><td className="px-2 py-1.5 text-right font-medium">+90.01%</td><td className="px-2 py-1.5 text-right font-medium">9.84%</td><td className="px-2 py-1.5 text-right font-medium">−10.19%</td><td className="px-2 py-1.5 text-right font-medium">1.200</td></tr>
+                    <tr className="border-t"><td className="px-2 py-1.5">65/35 + 回填35（停用）</td><td className="px-2 py-1.5 text-right">+123.63%</td><td className="px-2 py-1.5 text-right">12.51%</td><td className="px-2 py-1.5 text-right">−11.93%</td><td className="px-2 py-1.5 text-right">1.330</td></tr>
+                    <tr className="border-t"><td className="px-2 py-1.5">70/30 + 回填30（停用）</td><td className="px-2 py-1.5 text-right">+126.62%</td><td className="px-2 py-1.5 text-right">12.73%</td><td className="px-2 py-1.5 text-right">−12.21%</td><td className="px-2 py-1.5 text-right">1.340</td></tr>
                   </tbody>
                 </table>
               </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                65/35 是 100% 名义仓位版本，没有现金缓冲；70/30 回撤超过 12%，因此当前把 65/35 作为收益/回撤折中。
+                65/35 与 70/30 的核心权重超出方案 §1 的“核心 20%–40%”约束，也没有独立冻结文件和 parity 闸门，2026-11-04 起不再作为运行口径；表中数字仅作研究留档。
               </p>
             </CardContent>
           </Card>
@@ -601,8 +599,8 @@ export default function WorkflowPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-xs leading-5 text-muted-foreground">
-              <p>1. 满仓版本没有现金缓冲，黄金、国债、行业 ETF 同时下跌时，回撤可能超过样本内 −11.93%。</p>
-              <p>2. 核心 65% 只买黄金或国债中的一只，存在单资产集中风险；当前 86% 是国债，久期风险集中。</p>
+              <p>1. 当前名义上限 75%，闸门关闭且无卫星时保留约 25% 现金；黄金、国债、行业 ETF 同时下跌时，回撤仍可能超过样本内 −10.19%。</p>
+              <p>2. 核心 40% 只买黄金或国债中的一只，存在单资产集中风险；当前国债合计 61%，久期风险集中。</p>
               <p>3. 卫星 top1 最高 35%，单一行业 ETF 波动很大；卫星候选不足时才会自动降低预算。</p>
               <p>4. 回测使用当前存续 ETF 池，存在生存偏差；2024–2026 已多次查看，不是严格盲测 OOS。</p>
               <p>5. 该版本是研究结论，未接入生产交易；实盘前必须做前向纸面验证和独立风险审批。</p>

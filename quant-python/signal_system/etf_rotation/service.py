@@ -114,6 +114,120 @@ def refresh_snapshot() -> dict[str, Any]:
     return snapshot
 
 
+METRIC_KEYS = (
+    "total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe",
+    "daily_win_rate_pct", "daily_payoff", "trade_win_rate_pct", "trade_payoff",
+    "avg_exposure", "trades", "closed_rounds",
+)
+CANONICAL = {
+    "strategy": "ETF v5.1 40/35 + 回填35",
+    "strategy_id": "etf_v5.1_backfill_40_35",
+    "config": {
+        "core_weight": 0.40,
+        "satellite_max_weight": 0.35,
+        "backfill_weight": 0.35,
+        "backfill_gold": 0.40,
+        "backfill_bond": 0.60,
+        "target_vol_pct": 10,
+        "max_picks": 1,
+        "breadth": "min(1, N_trend/2)",
+        "crash_overlay": "off",
+        "rebalance": "weekly last trading day, next open",
+        "commission_bps": 3,
+        "slippage_bps": 5,
+    },
+}
+
+
+def _week_end(index: Any, day: Any, trade_dates: Any = None) -> dict[str, Any]:
+    """Is `day` the last trading day of its ISO week?
+
+    Price data alone cannot answer this live: on Tuesday the cache ends on
+    Tuesday and still looks like the week's last session. Pass an exchange
+    calendar (`trade_dates`, a set of dates) to look at the next session; the
+    fallback is the conservative "Friday only" rule.
+    """
+    import pandas as pd
+
+    target = pd.Timestamp(day) if day is not None else index[-1]
+    if target not in index:
+        earlier = index[index <= target]
+        if len(earlier) == 0:
+            raise ValueError(f"没有不晚于 {target.date()} 的交易日")
+        target = earlier[-1]
+    iso = target.isocalendar()[:2]
+
+    if trade_dates:
+        calendar = sorted(item for item in trade_dates)
+        later = [item for item in calendar if item > target.date()]
+        next_session = later[0] if later else None
+        week_last = max((item for item in calendar if item.isocalendar()[:2] == iso), default=target.date())
+        return {
+            "is_week_end": bool(next_session is None or next_session.isocalendar()[:2] != iso),
+            "session": target.strftime("%Y-%m-%d"),
+            "week_last_session": week_last.strftime("%Y-%m-%d"),
+            "calendar": "exchange",
+        }
+
+    week = [item for item in index if item.isocalendar()[:2] == iso]
+    return {
+        "is_week_end": bool(target.weekday() == 4),
+        "session": target.strftime("%Y-%m-%d"),
+        "week_last_session": (max(week) if week else target).strftime("%Y-%m-%d"),
+        "calendar": "friday_fallback",
+    }
+
+
+def week_end_status(day: str | None = None, trade_dates: Any = None) -> dict[str, Any]:
+    """Is `day` (default: latest cached session) the week's last trading day?
+
+    The strategy rebalances weekly; running the paper cycle on any other day
+    would trade a different strategy than the one that was backtested.
+    """
+    from .engine import load_panel
+
+    close, _volume = load_panel()
+    return _week_end(close.index, day, trade_dates)
+
+
+def rebuild_snapshot(*, start: str | None = None,
+                     persist_committed: bool = False) -> dict[str, Any]:
+    """Recompute metrics/curve/yearly with the canonical rules.
+
+    `refresh_snapshot` only updates the current signal and target; the static
+    metrics and curve must come from the same rule set, otherwise the page
+    shows a strategy the runtime no longer implements.
+    """
+    from . import backtest
+
+    result = backtest.run(start=start or backtest.DEFAULT_START)
+    curve = result["curve"]
+    snapshot = load_snapshot()
+    snapshot.update({
+        "strategy": CANONICAL["strategy"],
+        "strategy_id": CANONICAL["strategy_id"],
+        "config": CANONICAL["config"],
+        "metrics": {key: result.get(key) for key in METRIC_KEYS},
+        "yearly": result["yearly"],
+        "curve": curve,
+        "backtest": {
+            key: result.get(key)
+            for key in ("start", "end", "initial", "trades", "turnover_x", "slippage_bp", "closed_rounds")
+        },
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    })
+    payload = json.dumps(snapshot, ensure_ascii=False, indent=1)
+    runtime = _runtime_path()
+    temporary = runtime.with_suffix(".tmp")
+    temporary.write_text(payload, encoding="utf-8")
+    temporary.replace(runtime)
+    if persist_committed:
+        committed_tmp = SNAPSHOT_PATH.with_suffix(".tmp")
+        committed_tmp.write_text(payload, encoding="utf-8")
+        committed_tmp.replace(SNAPSHOT_PATH)
+    return snapshot
+
+
 def _paper_default() -> dict[str, Any]:
     return {
         "initialized": False,
@@ -230,15 +344,14 @@ def _rebalance_paper(
         if position["shares"] <= 0:
             del positions[symbol]
 
-    equity_after_sells = cash + sum(
-        float(position.get("shares") or 0) * float(position.get("last_price") or 0)
-        for position in positions.values()
-    )
+    # Backtest parity: both sell and buy targets are sized on the same
+    # pre-trade equity (equity_before). Using post-sell equity would silently
+    # shrink every buy after a rebalance that also sells.
     for symbol, row in sorted(target.items()):
         price = float(row["price"])
         if price <= 0:
             continue
-        target_value = equity_after_sells * float(row["weight"])
+        target_value = equity_before * float(row["weight"])
         current = positions.get(symbol, {"shares": 0, "avg_cost": 0.0, "last_price": price})
         current_shares = int(current.get("shares") or 0)
         delta = target_value - current_shares * price
@@ -279,6 +392,7 @@ def _rebalance_paper(
             order["fill_date"] = fill_date
     ledger.update({
         "initialized": True,
+        "strategy_id": CANONICAL["strategy_id"],
         "cash": round(cash, 2),
         "positions": positions,
         "orders": (ledger.get("orders") or []) + orders,
@@ -300,6 +414,9 @@ def plan_paper() -> dict[str, Any]:
     target = _target_map(snapshot)
     if not target:
         raise EtfSnapshotError("ETF 目标为空，无法生成纸面计划")
+    last = ledger.get("last_plan")
+    if isinstance(last, dict) and last.get("status") == "filled" and last.get("as_of") == snapshot.get("as_of"):
+        raise ValueError(f"{snapshot.get('as_of')} 的计划已成交，等待下一个周度信号日")
     positions = ledger.get("positions") or {}
     equity = float(ledger.get("cash") or 0.0) + sum(
         int(position.get("shares") or 0) * float(position.get("last_price") or 0)
@@ -309,7 +426,9 @@ def plan_paper() -> dict[str, Any]:
         "as_of": snapshot.get("as_of"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "status": "planned",
+        "strategy_id": CANONICAL["strategy_id"],
         "equity_at_plan": round(equity, 2),
+        "equity_basis": "ledger_last_price",
         "target": [
             {
                 "symbol": symbol,
@@ -330,6 +449,13 @@ def fill_paper(as_of: str | None = None) -> dict[str, Any]:
     plan = ledger.get("pending_plan")
     if not isinstance(plan, dict) or plan.get("status") != "planned":
         raise ValueError("没有待成交的纸面计划")
+    if plan.get("strategy_id") != CANONICAL["strategy_id"]:
+        plan["status"] = "superseded"
+        plan["superseded_reason"] = "策略口径已更新，旧计划不执行"
+        ledger["pending_plan"] = plan
+        ledger["last_plan"] = plan
+        _save_paper(ledger)
+        raise ValueError("待成交计划来自旧规则版本，已作废；等待下一个周度信号日")
     from .engine import EtfDataError, load_open_panel
 
     plan_date = str(plan.get("as_of") or "")
