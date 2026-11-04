@@ -13,6 +13,8 @@ Pins the facts that broke on 2026-11-04:
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -28,7 +30,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import etf_extended_study as study
-from etf_rotation import backtest, engine, service
+from etf_rotation import backtest, bridge, engine, service
 
 
 def series(days: int, values: np.ndarray, index: pd.DatetimeIndex) -> pd.Series:
@@ -154,6 +156,32 @@ class SnapshotVersionTests(unittest.TestCase):
                     mock.patch.object(service, "RUNTIME_SNAPSHOT", runtime):
                 loaded = service.load_snapshot()
             self.assertEqual(loaded["metrics"]["total_return_pct"], 91.5)
+
+
+class RefreshBootstrapTests(unittest.TestCase):
+    def test_missing_cache_triggers_one_sync(self) -> None:
+        calls = {"refresh": 0, "sync": 0}
+
+        def fake_refresh() -> None:
+            calls["refresh"] += 1
+            if calls["refresh"] == 1:
+                raise engine.EtfDataError("缺少 ETF 行情缓存: /app/cache/159611_qfq.pkl")
+
+        def fake_sync(**kwargs) -> dict:
+            calls["sync"] += 1
+            return {"updated": 52, "total": 52}
+
+        buffer = io.StringIO()
+        with mock.patch.object(service, "refresh_snapshot", side_effect=fake_refresh), \
+                mock.patch.object(service, "get_overview", return_value={"strategy": "x"}), \
+                mock.patch("etf_rotation.data_sync.sync", side_effect=fake_sync), \
+                contextlib.redirect_stdout(buffer):
+            code = bridge._refresh("config/config.yaml")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, {"refresh": 2, "sync": 1})
+        payload = json.loads(buffer.getvalue())
+        self.assertTrue(payload["data"]["bootstrap_sync"])
 
 
 class PaperLedgerTests(unittest.TestCase):

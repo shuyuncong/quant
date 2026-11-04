@@ -38,18 +38,32 @@ def _overview() -> int:
     return _emit({"ok": True, "data": {"overview": get_overview()}})
 
 
-def _refresh() -> int:
+def _refresh(config_path: str) -> int:
     from time import monotonic
 
+    from etf_rotation.engine import EtfDataError
     from etf_rotation.service import get_overview, refresh_snapshot
 
     started = monotonic()
-    refresh_snapshot()
+    synced = None
+    try:
+        refresh_snapshot()
+    except EtfDataError as exc:
+        # A fresh deployment has no ETF cache yet; fetch it once instead of
+        # failing the only button that can bootstrap the page.
+        if "缺少 ETF 行情缓存" not in str(exc):
+            raise
+        from etf_rotation.data_sync import sync
+
+        synced = sync(config_path=config_path)
+        refresh_snapshot()
     return _emit({
         "ok": True,
         "data": {
             "overview": get_overview(),
             "elapsed_ms": int((monotonic() - started) * 1000),
+            "bootstrap_sync": bool(synced),
+            "sync": synced,
         },
     })
 
@@ -164,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "overview":
             return _overview()
         if args.command == "refresh":
-            return _refresh()
+            return _refresh(args.config)
         if args.command == "data-sync":
             return _data_sync(args.config, payload)
         if args.command == "cycle":

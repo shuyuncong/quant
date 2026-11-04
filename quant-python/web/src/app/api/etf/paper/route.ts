@@ -40,9 +40,11 @@ export async function POST(request: Request) {
     { timeoutMs: 30_000, script: etfBridgeScript }
   );
   if (!outcome.ok) {
+    // Same reasoning as refresh: report an application-state failure as 4xx so
+    // a proxy does not replace the reason with its own gateway page.
     return NextResponse.json(
       { error: outcome.error || "ETF 纸面账本操作失败", code: outcome.code },
-      { status: outcome.code === 2 ? 409 : 502 }
+      { status: outcome.code === 124 ? 504 : 409 }
     );
   }
   return NextResponse.json(outcome.data);
