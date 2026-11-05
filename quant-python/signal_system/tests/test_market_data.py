@@ -613,12 +613,13 @@ class MarketDataTests(unittest.TestCase):
             client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
             client._fetch_eastmoney = MagicMock(side_effect=ConnectionError("eastmoney down"))
             client._fetch_sina = MagicMock(side_effect=ConnectionError("sina down"))
+            client._fetch_akshare = MagicMock(side_effect=ConnectionError("akshare down"))
 
             with self.assertRaises(RuntimeError) as raised:
                 client.get_bars("000001.SZ", "1d", limit=30)
 
             message = str(raised.exception)
-            for source in ("tencent", "eastmoney", "sina"):
+            for source in ("tencent", "eastmoney", "sina", "akshare"):
                 self.assertIn(source, message)
 
     def test_bars_return_empty_frame_when_all_sources_report_no_data(self):
@@ -629,6 +630,7 @@ class MarketDataTests(unittest.TestCase):
             client._fetch_tencent = MagicMock(return_value=self._daily_frame(periods=0))
             client._fetch_eastmoney = MagicMock(return_value=self._daily_frame(periods=0))
             client._fetch_sina = MagicMock(return_value=self._daily_frame(periods=0))
+            client._fetch_akshare = MagicMock(return_value=self._daily_frame(periods=0))
 
             frame = client.get_bars("000001.SZ", "1d", limit=30)
 
@@ -683,6 +685,7 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual(3, len(tencent_calls))
 
             client._fetch_sina = MagicMock(side_effect=ConnectionError("sina down"))
+            client._fetch_akshare = MagicMock(side_effect=ConnectionError("akshare down"))
             with self.assertRaises(RuntimeError) as raised:
                 client._fetch_bars_with_fallback("600200.SH", "1d", 5)
 
@@ -773,6 +776,60 @@ class MarketDataTests(unittest.TestCase):
             self.assertEqual([50_000.0, 60_000.0, 70_000.0], list(frame["volume"]))
             self.assertEqual("sh600036", ak.stock_zh_a_daily.call_args.kwargs["symbol"])
 
+    def test_akshare_is_the_last_resort_in_every_default_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for provider, expected in (
+                ("tencent", ("tencent", "eastmoney", "sina", "akshare")),
+                ("eastmoney", ("eastmoney", "tencent", "sina", "akshare")),
+                ("sina", ("sina", "tencent", "eastmoney", "akshare")),
+            ):
+                client = MarketDataClient(
+                    {"market_data": {"cache_dir": directory, "provider": provider}}
+                )
+                self.assertEqual(expected, client.bar_providers)
+
+    def test_akshare_fallback_takes_over_when_every_direct_source_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory}})
+            client._throttle = lambda: None
+            client._fetch_tencent = MagicMock(side_effect=ConnectionError("tencent down"))
+            client._fetch_eastmoney = MagicMock(side_effect=ConnectionError("eastmoney down"))
+            client._fetch_sina = MagicMock(side_effect=ConnectionError("sina down"))
+            client._fetch_akshare = MagicMock(return_value=self._daily_frame(source="akshare"))
+
+            frame = client.get_bars("000001.SZ", "1d", limit=30)
+
+            self.assertEqual("akshare", frame.attrs["source"])
+            self.assertEqual(1, client._fetch_akshare.call_count)
+
+    def test_akshare_etf_daily_uses_the_fund_endpoint(self):
+        """基金代码喂给 stock_zh_a_hist 会返回空，ETF 必须走 fund_etf_hist_em。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient({"market_data": {"cache_dir": directory, "adjust": "qfq"}})
+            client._throttle = lambda: None
+            ak = MagicMock()
+            ak.fund_etf_hist_em.return_value = pd.DataFrame(
+                {
+                    "日期": pd.bdate_range("2025-01-02", periods=3),
+                    "开盘": [7.90, 7.95, 8.00],
+                    "收盘": [7.95, 8.00, 8.05],
+                    "最高": [8.00, 8.05, 8.10],
+                    "最低": [7.85, 7.90, 7.95],
+                    "成交量": [4_000_000, 4_100_000, 4_200_000],
+                    "成交额": [3.1e9, 3.2e9, 3.3e9],
+                }
+            )
+            ak.stock_zh_a_hist = MagicMock(side_effect=AssertionError("股票接口不应用于 ETF"))
+            client._get_akshare = lambda: ak
+
+            frame = client._fetch_akshare("518880", "1d", limit=3)
+
+            self.assertEqual("akshare", frame.attrs["source"])
+            self.assertEqual("518880", ak.fund_etf_hist_em.call_args.kwargs["symbol"])
+            self.assertEqual("qfq", ak.fund_etf_hist_em.call_args.kwargs["adjust"])
+            # 基金接口成交量同样以“手”计，与腾讯/东财口径一致，不能再除 100。
+            self.assertEqual([4_000_000, 4_100_000, 4_200_000], list(frame["volume"]))
+
     def test_bar_fallback_providers_config_replaces_default_chain(self):
         with tempfile.TemporaryDirectory() as directory:
             client = MarketDataClient(
@@ -807,7 +864,21 @@ class MarketDataTests(unittest.TestCase):
                         }
                     }
                 )
-            self.assertEqual(("tencent", "sina"), client.bar_providers)
+            self.assertEqual(("tencent", "sina", "akshare"), client.bar_providers)
+
+    def test_empty_fallback_list_still_disables_every_fallback(self):
+        """显式空列表是“彻底关闭降级”，不能被 AkShare 兜底悄悄复活。"""
+        with tempfile.TemporaryDirectory() as directory:
+            client = MarketDataClient(
+                {
+                    "market_data": {
+                        "cache_dir": directory,
+                        "provider": "auto",
+                        "fallback_providers": [],
+                    }
+                }
+            )
+            self.assertEqual(("tencent",), client.bar_providers)
 
     def test_provider_env_override_makes_sina_primary(self):
         """海外云 IP 被腾讯/东财同时拦截时，MARKET_DATA_PROVIDER=sina 无需改 config.yaml。"""
@@ -820,7 +891,7 @@ class MarketDataTests(unittest.TestCase):
                     {"market_data": {"cache_dir": directory, "provider": "auto"}}
                 )
             self.assertEqual("sina", client.provider)
-            self.assertEqual(("sina", "tencent", "eastmoney"), client.bar_providers)
+            self.assertEqual(("sina", "tencent", "eastmoney", "akshare"), client.bar_providers)
             self.assertEqual(("sina", "tencent"), client.calendar_providers)
 
     def test_unknown_provider_env_override_is_ignored(self):
@@ -830,7 +901,7 @@ class MarketDataTests(unittest.TestCase):
                     {"market_data": {"cache_dir": directory, "provider": "auto"}}
                 )
             self.assertEqual("auto", client.provider)
-            self.assertEqual(("tencent", "eastmoney", "sina"), client.bar_providers)
+            self.assertEqual(("tencent", "eastmoney", "sina", "akshare"), client.bar_providers)
 
     def test_sina_provider_reads_stock_list_from_sina_directly(self):
         """provider=sina 时不再先打被拦截的东财列表端点。"""

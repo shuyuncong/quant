@@ -184,6 +184,81 @@ class RefreshBootstrapTests(unittest.TestCase):
         self.assertTrue(payload["data"]["bootstrap_sync"])
 
 
+class SyncBudgetTests(unittest.TestCase):
+    """补缓存必须在 HTTP 超时前退出，否则前端只能看到网关错误页。"""
+
+    @staticmethod
+    def _frame() -> pd.DataFrame:
+        frame = pd.DataFrame(
+            {
+                "datetime": pd.to_datetime(["2026-11-02", "2026-11-03", "2026-11-04"]),
+                "open": [1.0, 1.0, 1.0],
+                "high": [1.0, 1.0, 1.0],
+                "low": [1.0, 1.0, 1.0],
+                "close": [1.0, 1.0, 1.0],
+                "volume": [1_000_000.0, 1_000_000.0, 1_000_000.0],
+            }
+        )
+        frame.attrs["source"] = "tencent"
+        return frame
+
+    def test_budget_exhaustion_reports_partial_progress(self) -> None:
+        from etf_rotation import data_sync
+
+        client = mock.MagicMock()
+        client.get_bars.return_value = self._frame()
+        client.latest_expected_trade_date.return_value = pd.Timestamp("2026-11-04").date()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            data_sync, "MarketDataClient", return_value=client
+        ):
+            with self.assertRaises(data_sync.EtfSyncError) as raised:
+                data_sync.sync(data_dir=Path(directory), time_budget_s=0)
+
+        message = str(raised.exception)
+        self.assertIn("etf-cycle", message)
+        self.assertIn("已完成 0/", message)
+
+    def test_sync_reports_the_source_that_served_each_symbol(self) -> None:
+        from etf_rotation import data_sync
+
+        client = mock.MagicMock()
+        client.get_bars.return_value = self._frame()
+        client.latest_expected_trade_date.return_value = pd.Timestamp("2026-11-04").date()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            data_sync, "MarketDataClient", return_value=client
+        ):
+            result = data_sync.sync(data_dir=Path(directory))
+
+        self.assertEqual(len(data_sync.SYMBOLS), result["updated"])
+        self.assertEqual({"tencent": len(data_sync.SYMBOLS)}, result["sources"])
+        self.assertEqual({}, result["errors"])
+
+    def test_refresh_bootstrap_passes_a_bounded_budget(self) -> None:
+        """兜底同步必须有预算：AkShare 约 4 秒/只，47 只足以撞穿 45s 路由超时。"""
+        from etf_rotation import bridge, engine, service
+
+        calls = {"refresh": 0}
+
+        def fake_refresh() -> None:
+            calls["refresh"] += 1
+            if calls["refresh"] == 1:
+                raise engine.EtfDataError("缺少 ETF 行情缓存: /app/cache/159611_qfq.pkl")
+
+        seen: dict = {}
+
+        def fake_sync(**kwargs) -> dict:
+            seen.update(kwargs)
+            return {"updated": 47, "total": 47}
+
+        with mock.patch.object(service, "refresh_snapshot", side_effect=fake_refresh), \
+                mock.patch.object(service, "get_overview", return_value={}), \
+                mock.patch("etf_rotation.data_sync.sync", side_effect=fake_sync), \
+                contextlib.redirect_stdout(io.StringIO()):
+            bridge._refresh("config/config.yaml")
+
+        self.assertEqual(bridge.BOOTSTRAP_SYNC_BUDGET_S, seen["time_budget_s"])
+
+
 class PaperLedgerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()

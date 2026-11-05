@@ -36,12 +36,13 @@ STANDARD_COLUMNS = [
 
 # 单源故障不能让整轮扫描缺数据：主源不可用时按此顺序尝试备用源。
 # market_data.fallback_providers 可覆盖；显式空列表表示关闭降级。
+# AkShare 排在每条链最后：它单只约 4 秒且必须限速，只在其它源都不可用时兜底。
 BAR_SOURCE_FALLBACKS: dict[str, tuple[str, ...]] = {
-    "tencent": ("eastmoney", "sina"),
-    "eastmoney": ("tencent", "sina"),
-    "sina": ("tencent", "eastmoney"),
+    "tencent": ("eastmoney", "sina", "akshare"),
+    "eastmoney": ("tencent", "sina", "akshare"),
+    "sina": ("tencent", "eastmoney", "akshare"),
     "akshare": ("sina", "tencent", "eastmoney"),
-    "tushare": ("tencent", "eastmoney", "sina"),
+    "tushare": ("tencent", "eastmoney", "sina", "akshare"),
 }
 CALENDAR_SOURCES = ("tencent", "sina")
 
@@ -76,6 +77,15 @@ def eastmoney_secid(symbol: str) -> str:
     code = normalize_symbol(symbol)
     market = "1" if code.startswith(("5", "6", "9")) else "0"
     return f"{market}.{code}"
+
+
+# 沪深 ETF 代码段：沪市 51x/56x/58x（含国债 511、黄金 518、科创 588），深市 159x。
+# LOF（16x）与分级基金不在其中，AkShare 对它们仍按股票接口取数。
+ETF_CODE_PREFIXES = ("51", "56", "58", "159")
+
+
+def is_etf_symbol(symbol: str) -> bool:
+    return normalize_symbol(symbol).startswith(ETF_CODE_PREFIXES)
 
 
 def eastmoney_index_secid(symbol: str) -> str:
@@ -336,6 +346,10 @@ class MarketDataClient:
                 else:
                     logger.warning("忽略未知备用行情源: %s", name)
         chain = tuple(dict.fromkeys([primary, *fallbacks]))
+        # 显式配置的备用链同样以 AkShare 收尾：它的定位就是“其它源都不可用”的最后兜底。
+        # 但显式空列表仍表示彻底关闭降级，此时 chain 只有主源，不追加。
+        if fallbacks and primary != "akshare" and "akshare" not in chain:
+            chain = (*chain, "akshare")
         logger.info("行情源链: %s", " → ".join(chain))
         return chain
 
@@ -1385,6 +1399,24 @@ class MarketDataClient:
         # AkShare 用空字符串表示不复权，直接传 "none" 会被它拒绝。
         adjust = "" if self.adjust in ("", "none") else self.adjust
         self._throttle()
+        if is_etf_symbol(code) and timeframe == "1d":
+            # 基金代码喂给 stock_zh_a_hist 会返回空，必须走基金接口。
+            # 该接口成交量同样以“手”计，与内部标准一致，不做单位换算。
+            start = (end - timedelta(days=max(limit * 2, 400))).strftime("%Y%m%d")
+            raw = ak.fund_etf_hist_em(
+                symbol=code,
+                period="daily",
+                start_date=start,
+                end_date=end.strftime("%Y%m%d"),
+                adjust=adjust,
+            )
+            return standardize_bars(
+                raw,
+                timeframe=timeframe,
+                source="akshare",
+                adjust=self.adjust,
+                minute_timestamp=self.minute_timestamp,
+            )
         if timeframe == "1d":
             start = (end - timedelta(days=max(limit * 2, 400))).strftime("%Y%m%d")
             raw = ak.stock_zh_a_hist(

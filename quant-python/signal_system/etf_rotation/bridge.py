@@ -38,6 +38,11 @@ def _overview() -> int:
     return _emit({"ok": True, "data": {"overview": get_overview()}})
 
 
+# 缺缓存时 refresh 会现场补数据。路由超时 45s、nginx 60s，必须提前退出，
+# 否则请求被掐断后前端只能看到网关错误页；AkShare 兜底约 4 秒/只更要留余量。
+BOOTSTRAP_SYNC_BUDGET_S = 30.0
+
+
 def _refresh(config_path: str) -> int:
     from time import monotonic
 
@@ -55,7 +60,7 @@ def _refresh(config_path: str) -> int:
             raise
         from etf_rotation.data_sync import sync
 
-        synced = sync(config_path=config_path)
+        synced = sync(config_path=config_path, time_budget_s=BOOTSTRAP_SYNC_BUDGET_S)
         refresh_snapshot()
     return _emit({
         "ok": True,

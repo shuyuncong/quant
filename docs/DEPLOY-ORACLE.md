@@ -753,7 +753,7 @@ crontab -e
 ## 注意事项
 
 - **页面暂无登录密码**：公网使用前建议在 Nginx 加 Basic Auth（`sudo apt install -y apache2-utils && sudo htpasswd -c /etc/nginx/.htpasswd admin`，并在 server 块加 `auth_basic "Restricted";` 与 `auth_basic_user_file /etc/nginx/.htpasswd;`）或限制来源 IP。
-- **行情源**：默认 `provider: auto`（腾讯/新浪/东财），无需额外数据源；如需 akshare/tushare，见 [DEPLOY.md](DEPLOY.md)。
+- **行情源**：默认 `provider: auto`，降级链固定为 腾讯 → 东财 → 新浪 → AkShare（镜像已安装 `requirements-akshare.txt`，无需额外操作）。AkShare 只做最后兜底：单只约 4 秒且必须限速，47 只 ETF 全量同步约 3 分钟，所以「刷新信号」缺缓存时的现场补数据只给 30 秒预算，超时会提示改跑后台 `etf-cycle` 任务（任务无 HTTP 超时）。显式 `fallback_providers: []` 才彻底关闭降级；`MARKET_DATA_FALLBACKS` 为空串不会覆盖默认链，非空则替换整条链且仍以 AkShare 收尾。
 - **海外服务器行情（501 / 连接被重置）**：先把两类失败分开，它们的处理方式不同：
   1. **`HTTP Error 501: Not Implemented`（腾讯）**：2026-10-30 日志里的 501 来自 `web.ifzq.gtimg.cn/appstock/app/fqkline/get`（复权日线/指数/日历）。该主机对这条路径返回 501 WAF 挑战页，**与出口 IP 无关**（本机直连同样复现）；同一路径换 `ifzq.gtimg.cn` 立即 200。代码已把日线/复权/日历统一切到 `ifzq.gtimg.cn`，部署本提交后 `yearline_pullback` / 底背离（qfq）扫描不会再有这个 501。
   2. **东财 `Remote end closed connection without response`**：这是出口 IP 被东财反爬拦截（Oracle 大阪 `64.110.106.x` 实测持续复现），只能换出口或走新浪。

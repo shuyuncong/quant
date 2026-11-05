@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import pandas as pd
@@ -47,17 +48,29 @@ def _merge(path: Path, frame: pd.DataFrame) -> pd.DataFrame:
     return frame.reset_index(drop=True)
 
 
-def sync(data_dir: Path | None = None, config_path: str | None = None) -> dict[str, Any]:
+def sync(
+    data_dir: Path | None = None,
+    config_path: str | None = None,
+    time_budget_s: float | None = None,
+) -> dict[str, Any]:
     cache_dir = _cache_dir(data_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     config = load_config(config_path) if config_path else load_config()
     config.setdefault("market_data", {})["adjust"] = "qfq"
     client = MarketDataClient(config)
     expected = client.latest_expected_trade_date()
+    started = monotonic()
     updated: list[str] = []
     errors: dict[str, str] = {}
     latest_dates: dict[str, str] = {}
-    for symbol in SYMBOLS:
+    sources: dict[str, int] = {}
+    skipped: list[str] = []
+    for index, symbol in enumerate(SYMBOLS):
+        # 缺缓存时刷新会现场补数据：AkShare 兜底约 4 秒/只，必须留退出预算，
+        # 否则请求先被 nginx 的 60s 掐断，前端只能看到网关错误页。
+        if time_budget_s is not None and monotonic() - started >= time_budget_s:
+            skipped = list(SYMBOLS[index:])
+            break
         try:
             frame = client.get_bars(symbol, "1d", limit=1200)
             if frame.empty:
@@ -67,13 +80,22 @@ def sync(data_dir: Path | None = None, config_path: str | None = None) -> dict[s
             if missing:
                 errors[symbol] = f"missing columns: {sorted(missing)}"
                 continue
+            source = str(frame.attrs.get("source") or "unknown")
             merged = _merge(cache_dir / f"{symbol}_qfq.pkl", frame)
             merged.to_pickle(cache_dir / f"{symbol}_qfq.pkl")
             latest = pd.Timestamp(merged["datetime"].iloc[-1]).date()
             latest_dates[symbol] = latest.isoformat()
             updated.append(symbol)
+            sources[source] = sources.get(source, 0) + 1
         except Exception as exc:  # noqa: BLE001 - report per-symbol and continue
             errors[symbol] = f"{type(exc).__name__}: {exc}"
+    elapsed = monotonic() - started
+    if skipped:
+        raise EtfSyncError(
+            f"ETF 行情同步超出 {float(time_budget_s):.0f}s 预算：已完成 {len(updated)}/{len(SYMBOLS)}，"
+            f"剩余 {len(skipped)} 只。请在后台提交 etf-cycle 任务补全（任务无 HTTP 超时），"
+            f"完成后再次刷新即可"
+        )
     if not updated:
         raise EtfSyncError(f"ETF 行情同步全部失败: {errors}")
     critical_errors = {symbol: errors[symbol] for symbol in (MARKET, *CORE) if symbol in errors}
@@ -90,5 +112,7 @@ def sync(data_dir: Path | None = None, config_path: str | None = None) -> dict[s
         "updated": len(updated),
         "total": len(SYMBOLS),
         "errors": errors,
+        "sources": sources,
+        "elapsed_s": round(elapsed, 1),
         "cache_dir": str(cache_dir),
     }

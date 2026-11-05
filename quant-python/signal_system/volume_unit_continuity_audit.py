@@ -98,8 +98,12 @@ EXPECTED_CONFIG_SHA256 = (
 # 2026-10-31 重新登记：腾讯日线/复权/日历改用 ifzq.gtimg.cn（web. 主机对
 # fqkline 返回 501 WAF）；新增 MARKET_DATA_PROVIDER 部署级主源、Sina 指数兜底。
 # 均为取数路由/可用性改动，不涉及成交量单位、复权口径或因子计算，旧值 3feef1e0…
+# 2026-11-05 重新登记：新增 AkShare 兜底——默认链改为 腾讯→东财→新浪→AkShare
+# （显式备用链也以 AkShare 收尾，空列表仍彻底关闭），并让 ETF 日线走
+# fund_etf_hist_em。已用 1592 个重叠交易日对拍：close 一致、volume 比值恒为 1.0
+# （AkShare 基金接口同样以“手”计），故成交量单位口径未变，旧值 62da8239…
 EXPECTED_MARKET_DATA_SHA256 = (
-    "62da82396e32dbef5a80ca0ce7f31f88eab8bc3f201396ce38bedd7bfd83a8e4"
+    "4a58d2e2da2d7a0d8611560e151fd59c18d8e19623f875cc55c1f2181f9c5f14"
 )
 EXPECTED_INTEGRITY_MANIFEST_SHA256 = (
     "4e12f3d53851e0cc7f49a3c67f4fcdf84d3b2584630e166c0a0cf9a997e01753"

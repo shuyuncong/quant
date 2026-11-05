@@ -25,7 +25,7 @@ cd D:\development\github\quant\quant-python\signal_system
 python -m pip install -r requirements.txt
 ```
 
-核心算法不再依赖 TA-Lib 和 SciPy。默认 `provider: auto` 使用腾讯公开 K 线接口，主源故障时按 `market_data.fallback_providers`（缺省 东方财富→新浪）自动切换，显式空列表可关闭降级；股票列表/快照在东方财富不可用时自动降级新浪财经，K 线末级新浪源需要 `requirements-akshare.txt`。如果要改用 AkShare 或 Tushare，再安装对应可选依赖：
+核心算法不再依赖 TA-Lib 和 SciPy。默认 `provider: auto` 使用腾讯公开 K 线接口，主源故障时按 `market_data.fallback_providers`（缺省 东方财富→新浪→AkShare）自动切换，显式空列表可关闭降级；AkShare 固定排在链尾兜底（单只约 4 秒且需限速，只在前三个源都不可用时触发，ETF 走基金接口），股票列表/快照在东方财富不可用时自动降级新浪财经，K 线末级新浪源需要 `requirements-akshare.txt`。如果要改用 AkShare 或 Tushare，再安装对应可选依赖：
 
 ```powershell
 python -m pip install -r requirements-akshare.txt
