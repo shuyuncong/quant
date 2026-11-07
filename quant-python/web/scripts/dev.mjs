@@ -21,9 +21,11 @@ loadEnvConfig(root, true);
 
 function spawnNext() {
   const nextBin = join(root, "node_modules", "next", "dist", "bin", "next");
+  // 默认 3111 与生产容器一致；同机已有生产实例时用 DEV_PORT 换端口。
+  const port = process.env.DEV_PORT?.trim() || "3111";
   const child = spawn(
     process.execPath,
-    [nextBin, "dev", "-H", "0.0.0.0", "-p", "3111"],
+    [nextBin, "dev", "-H", "0.0.0.0", "-p", port],
     { stdio: "inherit" },
   );
   child.on("exit", (code, signal) => {
