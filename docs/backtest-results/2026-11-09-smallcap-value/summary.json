@@ -1,0 +1,3429 @@
+{
+  "design": {
+    "start": "2020-01-02",
+    "end": "2026-10-30",
+    "initial": 250000.0,
+    "slippage": 0.001,
+    "stress_slippage": 0.002,
+    "ep_screen": 0.5,
+    "rank_pct": [
+      0.3,
+      0.5
+    ],
+    "max_names": 50,
+    "sector_cap": 0.25,
+    "costs": "10bp base, 20bp stress; 3bp commission; 10bp sell stamp tax",
+    "acceptance": {
+      "sharpe_min": 0.8,
+      "max_drawdown_pct_max": 25.0,
+      "stress_cagr_min_pct": 0.0,
+      "participation": 0.005
+    }
+  },
+  "data": {
+    "symbols": 5059,
+    "signals": 82,
+    "value": {
+      "rows": 44254,
+      "symbols": 5059,
+      "current_symbols": 4815,
+      "delisted_symbols": 244,
+      "min_available_date": "1991-06-10",
+      "max_available_date": "2026-10-13"
+    }
+  },
+  "variants": {
+    "shellfree_me": {
+      "mode": "shellfree_me",
+      "config": {
+        "start": "2020-01-02",
+        "end": "2026-10-30",
+        "initial": 250000.0,
+        "rank_low": 1,
+        "rank_high": 999999,
+        "rank_pct_low": 0.3,
+        "rank_pct_high": 0.5,
+        "max_names": 50,
+        "min_price": 2.0,
+        "min_adv": 50000000.0,
+        "max_sector_weight": 0.25,
+        "band": 0.05,
+        "commission_rate": 0.0003,
+        "min_commission": 5.0,
+        "stamp_tax": 0.001,
+        "slippage": 0.001,
+        "lot": 100,
+        "target_vol": 0.1,
+        "dd_derisk_1": -0.15,
+        "dd_derisk_2": -0.25,
+        "participation": 0.01
+      },
+      "metrics": {
+        "final_equity": 343095.04,
+        "total_return_pct": 35.06,
+        "cagr_pct": 4.5,
+        "sharpe": 0.386,
+        "max_drawdown_pct": -24.74,
+        "max_drawdown_start": "2023-02-13",
+        "max_drawdown_end": "2024-09-18",
+        "daily_win_rate_pct": 54.14,
+        "closed_trades": 3268,
+        "trade_win_rate_pct": 46.02,
+        "payoff": 1.376,
+        "avg_exposure_pct": 56.8,
+        "avg_positions": 47.96,
+        "turnover_x": 77.03,
+        "turnover_annual_x": 11.29,
+        "trades": 6696,
+        "yearly_returns_pct": {
+          "2020": 19.39,
+          "2021": 14.85,
+          "2022": -3.95,
+          "2023": 7.22,
+          "2024": -9.69,
+          "2025": 15.6,
+          "2026": -8.38
+        }
+      },
+      "periods": {
+        "train_2020_2024": {
+          "cagr_pct": 4.99,
+          "sharpe": 0.399,
+          "max_drawdown_pct": -24.74
+        },
+        "holdout_2025_2026": {
+          "cagr_pct": 3.17,
+          "sharpe": 0.29,
+          "max_drawdown_pct": -18.74
+        }
+      },
+      "stress_20bp": {
+        "metrics": {
+          "final_equity": 312003.94,
+          "total_return_pct": 22.93,
+          "cagr_pct": 3.07,
+          "sharpe": 0.296,
+          "max_drawdown_pct": -25.88,
+          "max_drawdown_start": "2023-02-13",
+          "max_drawdown_end": "2024-09-18",
+          "daily_win_rate_pct": 54.14,
+          "closed_trades": 3247,
+          "trade_win_rate_pct": 45.0,
+          "payoff": 1.382,
+          "avg_exposure_pct": 55.9,
+          "avg_positions": 47.67,
+          "turnover_x": 76.1,
+          "turnover_annual_x": 11.15,
+          "trades": 6651,
+          "yearly_returns_pct": {
+            "2020": 18.31,
+            "2021": 11.3,
+            "2022": -5.5,
+            "2023": 5.56,
+            "2024": -9.5,
+            "2025": 13.18,
+            "2026": -8.63
+          }
+        },
+        "periods": {
+          "train_2020_2024": {
+            "cagr_pct": 3.52,
+            "sharpe": 0.309,
+            "max_drawdown_pct": -25.88
+          },
+          "holdout_2025_2026": {
+            "cagr_pct": 1.91,
+            "sharpe": 0.207,
+            "max_drawdown_pct": -18.38
+          }
+        }
+      },
+      "selections": [
+        {
+          "signal": "2019-12-31",
+          "mode": "shellfree_me",
+          "pool": 255,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2625839296.9098067
+        },
+        {
+          "signal": "2020-01-23",
+          "mode": "shellfree_me",
+          "pool": 366,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2600656949.5238457
+        },
+        {
+          "signal": "2020-02-28",
+          "mode": "shellfree_me",
+          "pool": 441,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2615909970.722902
+        },
+        {
+          "signal": "2020-03-31",
+          "mode": "shellfree_me",
+          "pool": 468,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2494060189.766335
+        },
+        {
+          "signal": "2020-04-30",
+          "mode": "shellfree_me",
+          "pool": 366,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2527228692.21807
+        },
+        {
+          "signal": "2020-05-29",
+          "mode": "shellfree_me",
+          "pool": 329,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2612361184.1166687
+        },
+        {
+          "signal": "2020-06-30",
+          "mode": "shellfree_me",
+          "pool": 360,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2805572996.7123003
+        },
+        {
+          "signal": "2020-07-31",
+          "mode": "shellfree_me",
+          "pool": 593,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3054932037.690118
+        },
+        {
+          "signal": "2020-08-31",
+          "mode": "shellfree_me",
+          "pool": 546,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3286562927.487276
+        },
+        {
+          "signal": "2020-09-30",
+          "mode": "shellfree_me",
+          "pool": 398,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3071774478.6626215
+        },
+        {
+          "signal": "2020-10-30",
+          "mode": "shellfree_me",
+          "pool": 341,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3156892349.8656135
+        },
+        {
+          "signal": "2020-11-30",
+          "mode": "shellfree_me",
+          "pool": 385,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3236162133.154608
+        },
+        {
+          "signal": "2020-12-31",
+          "mode": "shellfree_me",
+          "pool": 344,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3060637895.333902
+        },
+        {
+          "signal": "2021-01-29",
+          "mode": "shellfree_me",
+          "pool": 344,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2712157149.475321
+        },
+        {
+          "signal": "2021-02-26",
+          "mode": "shellfree_me",
+          "pool": 300,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2888797553.4539013
+        },
+        {
+          "signal": "2021-03-31",
+          "mode": "shellfree_me",
+          "pool": 337,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2899942727.470758
+        },
+        {
+          "signal": "2021-04-30",
+          "mode": "shellfree_me",
+          "pool": 330,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2883343071.1607714
+        },
+        {
+          "signal": "2021-05-31",
+          "mode": "shellfree_me",
+          "pool": 338,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2981431642.308957
+        },
+        {
+          "signal": "2021-06-30",
+          "mode": "shellfree_me",
+          "pool": 418,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3026984313.887041
+        },
+        {
+          "signal": "2021-07-30",
+          "mode": "shellfree_me",
+          "pool": 425,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3003013628.5453215
+        },
+        {
+          "signal": "2021-08-31",
+          "mode": "shellfree_me",
+          "pool": 477,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3143041961.88225
+        },
+        {
+          "signal": "2021-09-30",
+          "mode": "shellfree_me",
+          "pool": 521,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3035497255.9747047
+        },
+        {
+          "signal": "2021-10-29",
+          "mode": "shellfree_me",
+          "pool": 402,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2926425595.882555
+        },
+        {
+          "signal": "2021-11-30",
+          "mode": "shellfree_me",
+          "pool": 490,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3238488506.6766024
+        },
+        {
+          "signal": "2021-12-31",
+          "mode": "shellfree_me",
+          "pool": 582,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3321711202.8839493
+        },
+        {
+          "signal": "2022-01-28",
+          "mode": "shellfree_me",
+          "pool": 599,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3001925074.901144
+        },
+        {
+          "signal": "2022-02-28",
+          "mode": "shellfree_me",
+          "pool": 501,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3091621290.382127
+        },
+        {
+          "signal": "2022-03-31",
+          "mode": "shellfree_me",
+          "pool": 518,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2990541964.027149
+        },
+        {
+          "signal": "2022-04-29",
+          "mode": "shellfree_me",
+          "pool": 483,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2417096363.459894
+        },
+        {
+          "signal": "2022-05-31",
+          "mode": "shellfree_me",
+          "pool": 457,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2670074333.464181
+        },
+        {
+          "signal": "2022-06-30",
+          "mode": "shellfree_me",
+          "pool": 575,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2884495663.667606
+        },
+        {
+          "signal": "2022-07-29",
+          "mode": "shellfree_me",
+          "pool": 557,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3016597000.5807467
+        },
+        {
+          "signal": "2022-08-31",
+          "mode": "shellfree_me",
+          "pool": 601,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2895106039.473326
+        },
+        {
+          "signal": "2022-09-30",
+          "mode": "shellfree_me",
+          "pool": 464,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2619257328.231354
+        },
+        {
+          "signal": "2022-10-31",
+          "mode": "shellfree_me",
+          "pool": 479,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2724748003.211939
+        },
+        {
+          "signal": "2022-11-30",
+          "mode": "shellfree_me",
+          "pool": 569,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2888294770.728068
+        },
+        {
+          "signal": "2022-12-30",
+          "mode": "shellfree_me",
+          "pool": 480,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2756096522.2525754
+        },
+        {
+          "signal": "2023-01-31",
+          "mode": "shellfree_me",
+          "pool": 445,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3018349479.927059
+        },
+        {
+          "signal": "2023-02-28",
+          "mode": "shellfree_me",
+          "pool": 587,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3069080421.4578457
+        },
+        {
+          "signal": "2023-03-31",
+          "mode": "shellfree_me",
+          "pool": 523,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2996804808.0482674
+        },
+        {
+          "signal": "2023-04-28",
+          "mode": "shellfree_me",
+          "pool": 533,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2917658813.8106713
+        },
+        {
+          "signal": "2023-05-31",
+          "mode": "shellfree_me",
+          "pool": 452,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2977494397.926139
+        },
+        {
+          "signal": "2023-06-30",
+          "mode": "shellfree_me",
+          "pool": 505,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3057427687.1665053
+        },
+        {
+          "signal": "2023-07-31",
+          "mode": "shellfree_me",
+          "pool": 491,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3064508875.7165155
+        },
+        {
+          "signal": "2023-08-31",
+          "mode": "shellfree_me",
+          "pool": 431,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2926809736.8262253
+        },
+        {
+          "signal": "2023-09-28",
+          "mode": "shellfree_me",
+          "pool": 414,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2966111857.91442
+        },
+        {
+          "signal": "2023-10-31",
+          "mode": "shellfree_me",
+          "pool": 463,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2958607592.4167542
+        },
+        {
+          "signal": "2023-11-30",
+          "mode": "shellfree_me",
+          "pool": 582,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3081947225.899582
+        },
+        {
+          "signal": "2023-12-29",
+          "mode": "shellfree_me",
+          "pool": 539,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3055972568.2833185
+        },
+        {
+          "signal": "2024-01-31",
+          "mode": "shellfree_me",
+          "pool": 535,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2498679933.9786873
+        },
+        {
+          "signal": "2024-02-29",
+          "mode": "shellfree_me",
+          "pool": 703,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2432559331.0995917
+        },
+        {
+          "signal": "2024-03-29",
+          "mode": "shellfree_me",
+          "pool": 607,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2631522492.4491425
+        },
+        {
+          "signal": "2024-04-30",
+          "mode": "shellfree_me",
+          "pool": 614,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2594372453.6260448
+        },
+        {
+          "signal": "2024-05-31",
+          "mode": "shellfree_me",
+          "pool": 551,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2521160791.219952
+        },
+        {
+          "signal": "2024-06-28",
+          "mode": "shellfree_me",
+          "pool": 390,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2330336565.6224256
+        },
+        {
+          "signal": "2024-07-31",
+          "mode": "shellfree_me",
+          "pool": 339,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2306282220.977256
+        },
+        {
+          "signal": "2024-08-30",
+          "mode": "shellfree_me",
+          "pool": 358,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2284382710.893942
+        },
+        {
+          "signal": "2024-09-30",
+          "mode": "shellfree_me",
+          "pool": 482,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2693359667.5307074
+        },
+        {
+          "signal": "2024-10-31",
+          "mode": "shellfree_me",
+          "pool": 880,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2889881955.5550547
+        },
+        {
+          "signal": "2024-11-29",
+          "mode": "shellfree_me",
+          "pool": 873,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3061314042.1789827
+        },
+        {
+          "signal": "2024-12-31",
+          "mode": "shellfree_me",
+          "pool": 848,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2954307161.701408
+        },
+        {
+          "signal": "2025-01-27",
+          "mode": "shellfree_me",
+          "pool": 680,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 2927365185.704115
+        },
+        {
+          "signal": "2025-02-28",
+          "mode": "shellfree_me",
+          "pool": 781,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3137374727.1918592
+        },
+        {
+          "signal": "2025-03-31",
+          "mode": "shellfree_me",
+          "pool": 814,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3104512476.3489714
+        },
+        {
+          "signal": "2025-04-30",
+          "mode": "shellfree_me",
+          "pool": 755,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3060407752.289038
+        },
+        {
+          "signal": "2025-05-30",
+          "mode": "shellfree_me",
+          "pool": 775,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3260759662.6207485
+        },
+        {
+          "signal": "2025-06-30",
+          "mode": "shellfree_me",
+          "pool": 795,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3458314125.201887
+        },
+        {
+          "signal": "2025-07-31",
+          "mode": "shellfree_me",
+          "pool": 871,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3615535527.681552
+        },
+        {
+          "signal": "2025-08-29",
+          "mode": "shellfree_me",
+          "pool": 926,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3844343969.60917
+        },
+        {
+          "signal": "2025-09-30",
+          "mode": "shellfree_me",
+          "pool": 884,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3821528538.3917336
+        },
+        {
+          "signal": "2025-10-31",
+          "mode": "shellfree_me",
+          "pool": 867,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3918692164.8070974
+        },
+        {
+          "signal": "2025-11-28",
+          "mode": "shellfree_me",
+          "pool": 873,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3904158759.659769
+        },
+        {
+          "signal": "2025-12-31",
+          "mode": "shellfree_me",
+          "pool": 812,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3960680375.120989
+        },
+        {
+          "signal": "2026-01-30",
+          "mode": "shellfree_me",
+          "pool": 918,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 4224677477.662676
+        },
+        {
+          "signal": "2026-02-27",
+          "mode": "shellfree_me",
+          "pool": 900,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 4368620803.036245
+        },
+        {
+          "signal": "2026-03-31",
+          "mode": "shellfree_me",
+          "pool": 867,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 4030152725.5818224
+        },
+        {
+          "signal": "2026-04-30",
+          "mode": "shellfree_me",
+          "pool": 840,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 4225236248.774706
+        },
+        {
+          "signal": "2026-05-29",
+          "mode": "shellfree_me",
+          "pool": 874,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 4034994252.1680307
+        },
+        {
+          "signal": "2026-06-30",
+          "mode": "shellfree_me",
+          "pool": 823,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3634028379.8907967
+        },
+        {
+          "signal": "2026-07-31",
+          "mode": "shellfree_me",
+          "pool": 775,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3439849180.4581213
+        },
+        {
+          "signal": "2026-08-31",
+          "mode": "shellfree_me",
+          "pool": 787,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3786666497.9764338
+        },
+        {
+          "signal": "2026-09-30",
+          "mode": "shellfree_me",
+          "pool": 764,
+          "ep_available": 0,
+          "target": 50,
+          "median_ep": null,
+          "median_mv": 3776222596.8786845
+        }
+      ]
+    },
+    "ep_top": {
+      "mode": "ep_top",
+      "config": {
+        "start": "2020-01-02",
+        "end": "2026-10-30",
+        "initial": 250000.0,
+        "rank_low": 1,
+        "rank_high": 999999,
+        "rank_pct_low": 0.3,
+        "rank_pct_high": 0.5,
+        "max_names": 50,
+        "min_price": 2.0,
+        "min_adv": 50000000.0,
+        "max_sector_weight": 0.25,
+        "band": 0.05,
+        "commission_rate": 0.0003,
+        "min_commission": 5.0,
+        "stamp_tax": 0.001,
+        "slippage": 0.001,
+        "lot": 100,
+        "target_vol": 0.1,
+        "dd_derisk_1": -0.15,
+        "dd_derisk_2": -0.25,
+        "participation": 0.01
+      },
+      "metrics": {
+        "final_equity": 258173.5,
+        "total_return_pct": 1.68,
+        "cagr_pct": 0.24,
+        "sharpe": 0.106,
+        "max_drawdown_pct": -25.25,
+        "max_drawdown_start": "2022-01-10",
+        "max_drawdown_end": "2024-02-05",
+        "daily_win_rate_pct": 53.36,
+        "closed_trades": 1952,
+        "trade_win_rate_pct": 42.67,
+        "payoff": 1.416,
+        "avg_exposure_pct": 55.72,
+        "avg_positions": 46.14,
+        "turnover_x": 44.58,
+        "turnover_annual_x": 6.53,
+        "trades": 4155,
+        "yearly_returns_pct": {
+          "2020": 13.68,
+          "2021": 11.15,
+          "2022": -11.68,
+          "2023": -2.32,
+          "2024": 0.5,
+          "2025": 0.75,
+          "2026": -7.88
+        }
+      },
+      "periods": {
+        "train_2020_2024": {
+          "cagr_pct": 1.84,
+          "sharpe": 0.204,
+          "max_drawdown_pct": -25.25
+        },
+        "holdout_2025_2026": {
+          "cagr_pct": -3.95,
+          "sharpe": -0.289,
+          "max_drawdown_pct": -14.22
+        }
+      },
+      "stress_20bp": {
+        "metrics": {
+          "final_equity": 251568.07,
+          "total_return_pct": -0.83,
+          "cagr_pct": -0.12,
+          "sharpe": 0.074,
+          "max_drawdown_pct": -26.34,
+          "max_drawdown_start": "2022-01-10",
+          "max_drawdown_end": "2024-02-05",
+          "daily_win_rate_pct": 52.99,
+          "closed_trades": 1933,
+          "trade_win_rate_pct": 41.75,
+          "payoff": 1.448,
+          "avg_exposure_pct": 53.12,
+          "avg_positions": 45.8,
+          "turnover_x": 41.72,
+          "turnover_annual_x": 6.11,
+          "trades": 4072,
+          "yearly_returns_pct": {
+            "2020": 12.61,
+            "2021": 10.46,
+            "2022": -15.07,
+            "2023": -0.81,
+            "2024": 0.69,
+            "2025": 3.92,
+            "2026": -9.55
+          }
+        },
+        "periods": {
+          "train_2020_2024": {
+            "cagr_pct": 1.08,
+            "sharpe": 0.15,
+            "max_drawdown_pct": -26.34
+          },
+          "holdout_2025_2026": {
+            "cagr_pct": -3.29,
+            "sharpe": -0.296,
+            "max_drawdown_pct": -14.71
+          }
+        }
+      },
+      "selections": [
+        {
+          "signal": "2019-12-31",
+          "mode": "ep_top",
+          "pool": 255,
+          "ep_available": 218,
+          "target": 50,
+          "median_ep": 0.09591941044842638,
+          "median_mv": 3394870445.796198
+        },
+        {
+          "signal": "2020-01-23",
+          "mode": "ep_top",
+          "pool": 366,
+          "ep_available": 319,
+          "target": 50,
+          "median_ep": 0.1123317180448036,
+          "median_mv": 3363619765.757866
+        },
+        {
+          "signal": "2020-02-28",
+          "mode": "ep_top",
+          "pool": 441,
+          "ep_available": 371,
+          "target": 50,
+          "median_ep": 0.12186054764919507,
+          "median_mv": 3265668635.2133904
+        },
+        {
+          "signal": "2020-03-31",
+          "mode": "ep_top",
+          "pool": 468,
+          "ep_available": 407,
+          "target": 50,
+          "median_ep": 0.13708689189645634,
+          "median_mv": 3175843705.678803
+        },
+        {
+          "signal": "2020-04-30",
+          "mode": "ep_top",
+          "pool": 366,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.10389619579629336,
+          "median_mv": 3227911239.6078544
+        },
+        {
+          "signal": "2020-05-29",
+          "mode": "ep_top",
+          "pool": 329,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.10440463677166058,
+          "median_mv": 3317147794.5519385
+        },
+        {
+          "signal": "2020-06-30",
+          "mode": "ep_top",
+          "pool": 360,
+          "ep_available": 317,
+          "target": 50,
+          "median_ep": 0.10740149029584078,
+          "median_mv": 3315511576.194298
+        },
+        {
+          "signal": "2020-07-31",
+          "mode": "ep_top",
+          "pool": 593,
+          "ep_available": 526,
+          "target": 50,
+          "median_ep": 0.13212324453178628,
+          "median_mv": 4014631733.1705737
+        },
+        {
+          "signal": "2020-08-31",
+          "mode": "ep_top",
+          "pool": 546,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.10028824912795771,
+          "median_mv": 4225919360.065613
+        },
+        {
+          "signal": "2020-09-30",
+          "mode": "ep_top",
+          "pool": 398,
+          "ep_available": 355,
+          "target": 50,
+          "median_ep": 0.09137748729634146,
+          "median_mv": 3779719348.488874
+        },
+        {
+          "signal": "2020-10-30",
+          "mode": "ep_top",
+          "pool": 341,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.08503447188329423,
+          "median_mv": 4066319046.7561293
+        },
+        {
+          "signal": "2020-11-30",
+          "mode": "ep_top",
+          "pool": 385,
+          "ep_available": 342,
+          "target": 50,
+          "median_ep": 0.1008147189927992,
+          "median_mv": 3950085973.462908
+        },
+        {
+          "signal": "2020-12-31",
+          "mode": "ep_top",
+          "pool": 344,
+          "ep_available": 302,
+          "target": 50,
+          "median_ep": 0.08630112033239984,
+          "median_mv": 3772180827.8748484
+        },
+        {
+          "signal": "2021-01-29",
+          "mode": "ep_top",
+          "pool": 344,
+          "ep_available": 293,
+          "target": 50,
+          "median_ep": 0.09581133430865087,
+          "median_mv": 3543150839.7504144
+        },
+        {
+          "signal": "2021-02-26",
+          "mode": "ep_top",
+          "pool": 300,
+          "ep_available": 256,
+          "target": 50,
+          "median_ep": 0.07685382696161908,
+          "median_mv": 3680852052.528737
+        },
+        {
+          "signal": "2021-03-31",
+          "mode": "ep_top",
+          "pool": 337,
+          "ep_available": 295,
+          "target": 50,
+          "median_ep": 0.09920047081220242,
+          "median_mv": 3778323225.9032454
+        },
+        {
+          "signal": "2021-04-30",
+          "mode": "ep_top",
+          "pool": 330,
+          "ep_available": 274,
+          "target": 50,
+          "median_ep": 0.10872317330540933,
+          "median_mv": 3794898094.736941
+        },
+        {
+          "signal": "2021-05-31",
+          "mode": "ep_top",
+          "pool": 338,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.09361663680136453,
+          "median_mv": 3880523461.6917853
+        },
+        {
+          "signal": "2021-06-30",
+          "mode": "ep_top",
+          "pool": 418,
+          "ep_available": 350,
+          "target": 50,
+          "median_ep": 0.10385131468495676,
+          "median_mv": 3965041109.081421
+        },
+        {
+          "signal": "2021-07-30",
+          "mode": "ep_top",
+          "pool": 425,
+          "ep_available": 360,
+          "target": 50,
+          "median_ep": 0.10252224525545128,
+          "median_mv": 3921971910.701505
+        },
+        {
+          "signal": "2021-08-31",
+          "mode": "ep_top",
+          "pool": 477,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.10517335213514775,
+          "median_mv": 4068687061.4509077
+        },
+        {
+          "signal": "2021-09-30",
+          "mode": "ep_top",
+          "pool": 521,
+          "ep_available": 433,
+          "target": 50,
+          "median_ep": 0.12177265277900719,
+          "median_mv": 3903105071.989362
+        },
+        {
+          "signal": "2021-10-29",
+          "mode": "ep_top",
+          "pool": 402,
+          "ep_available": 324,
+          "target": 50,
+          "median_ep": 0.10563867060929799,
+          "median_mv": 3823301826.099032
+        },
+        {
+          "signal": "2021-11-30",
+          "mode": "ep_top",
+          "pool": 490,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.11383466246727103,
+          "median_mv": 4205729569.2188253
+        },
+        {
+          "signal": "2021-12-31",
+          "mode": "ep_top",
+          "pool": 582,
+          "ep_available": 496,
+          "target": 50,
+          "median_ep": 0.11072713098765566,
+          "median_mv": 4323010764.914537
+        },
+        {
+          "signal": "2022-01-28",
+          "mode": "ep_top",
+          "pool": 599,
+          "ep_available": 512,
+          "target": 50,
+          "median_ep": 0.129412143970354,
+          "median_mv": 3817012439.70891
+        },
+        {
+          "signal": "2022-02-28",
+          "mode": "ep_top",
+          "pool": 501,
+          "ep_available": 413,
+          "target": 50,
+          "median_ep": 0.1117701243450967,
+          "median_mv": 4061947256.0541544
+        },
+        {
+          "signal": "2022-03-31",
+          "mode": "ep_top",
+          "pool": 518,
+          "ep_available": 430,
+          "target": 50,
+          "median_ep": 0.09933842781041191,
+          "median_mv": 3847777364.2428513
+        },
+        {
+          "signal": "2022-04-29",
+          "mode": "ep_top",
+          "pool": 483,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.11961114637024586,
+          "median_mv": 3132442121.8382444
+        },
+        {
+          "signal": "2022-05-31",
+          "mode": "ep_top",
+          "pool": 457,
+          "ep_available": 373,
+          "target": 50,
+          "median_ep": 0.11832357203145213,
+          "median_mv": 3378679719.2739487
+        },
+        {
+          "signal": "2022-06-30",
+          "mode": "ep_top",
+          "pool": 575,
+          "ep_available": 480,
+          "target": 50,
+          "median_ep": 0.12676840769772285,
+          "median_mv": 3587271820.433979
+        },
+        {
+          "signal": "2022-07-29",
+          "mode": "ep_top",
+          "pool": 557,
+          "ep_available": 444,
+          "target": 50,
+          "median_ep": 0.11637026508775739,
+          "median_mv": 3855943920.03249
+        },
+        {
+          "signal": "2022-08-31",
+          "mode": "ep_top",
+          "pool": 601,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.11474500426477827,
+          "median_mv": 3709071211.517919
+        },
+        {
+          "signal": "2022-09-30",
+          "mode": "ep_top",
+          "pool": 464,
+          "ep_available": 372,
+          "target": 50,
+          "median_ep": 0.125064250721982,
+          "median_mv": 3346622669.5265427
+        },
+        {
+          "signal": "2022-10-31",
+          "mode": "ep_top",
+          "pool": 479,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.12001714978257043,
+          "median_mv": 3376007159.064542
+        },
+        {
+          "signal": "2022-11-30",
+          "mode": "ep_top",
+          "pool": 569,
+          "ep_available": 456,
+          "target": 50,
+          "median_ep": 0.12224334772470921,
+          "median_mv": 3481064385.335703
+        },
+        {
+          "signal": "2022-12-30",
+          "mode": "ep_top",
+          "pool": 480,
+          "ep_available": 377,
+          "target": 50,
+          "median_ep": 0.12079807830253131,
+          "median_mv": 3501626737.68725
+        },
+        {
+          "signal": "2023-01-31",
+          "mode": "ep_top",
+          "pool": 445,
+          "ep_available": 354,
+          "target": 50,
+          "median_ep": 0.11056173843206232,
+          "median_mv": 3837535561.7255144
+        },
+        {
+          "signal": "2023-02-28",
+          "mode": "ep_top",
+          "pool": 587,
+          "ep_available": 481,
+          "target": 50,
+          "median_ep": 0.11576772494044404,
+          "median_mv": 4013219022.102746
+        },
+        {
+          "signal": "2023-03-31",
+          "mode": "ep_top",
+          "pool": 523,
+          "ep_available": 417,
+          "target": 50,
+          "median_ep": 0.11532161322150697,
+          "median_mv": 3732377312.9130325
+        },
+        {
+          "signal": "2023-04-28",
+          "mode": "ep_top",
+          "pool": 533,
+          "ep_available": 399,
+          "target": 50,
+          "median_ep": 0.12532695136009575,
+          "median_mv": 3782283649.1595206
+        },
+        {
+          "signal": "2023-05-31",
+          "mode": "ep_top",
+          "pool": 452,
+          "ep_available": 338,
+          "target": 50,
+          "median_ep": 0.09404957828910747,
+          "median_mv": 3815648261.4965963
+        },
+        {
+          "signal": "2023-06-30",
+          "mode": "ep_top",
+          "pool": 505,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.08797919967944887,
+          "median_mv": 3807261763.7701817
+        },
+        {
+          "signal": "2023-07-31",
+          "mode": "ep_top",
+          "pool": 491,
+          "ep_available": 353,
+          "target": 50,
+          "median_ep": 0.09582172863732893,
+          "median_mv": 3702278323.2467813
+        },
+        {
+          "signal": "2023-08-31",
+          "mode": "ep_top",
+          "pool": 431,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.09200390108762355,
+          "median_mv": 3763427652.323438
+        },
+        {
+          "signal": "2023-09-28",
+          "mode": "ep_top",
+          "pool": 414,
+          "ep_available": 300,
+          "target": 50,
+          "median_ep": 0.06748592464960801,
+          "median_mv": 3602992663.0051403
+        },
+        {
+          "signal": "2023-10-31",
+          "mode": "ep_top",
+          "pool": 463,
+          "ep_available": 333,
+          "target": 50,
+          "median_ep": 0.0739189179867818,
+          "median_mv": 3687620126.8726797
+        },
+        {
+          "signal": "2023-11-30",
+          "mode": "ep_top",
+          "pool": 582,
+          "ep_available": 421,
+          "target": 50,
+          "median_ep": 0.08706531419353797,
+          "median_mv": 3924484795.504199
+        },
+        {
+          "signal": "2023-12-29",
+          "mode": "ep_top",
+          "pool": 539,
+          "ep_available": 387,
+          "target": 50,
+          "median_ep": 0.09171386158040806,
+          "median_mv": 3837234689.2849774
+        },
+        {
+          "signal": "2024-01-31",
+          "mode": "ep_top",
+          "pool": 535,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.10025157319786103,
+          "median_mv": 3129972529.3659377
+        },
+        {
+          "signal": "2024-02-29",
+          "mode": "ep_top",
+          "pool": 703,
+          "ep_available": 520,
+          "target": 50,
+          "median_ep": 0.12293095425695802,
+          "median_mv": 3141117670.1781783
+        },
+        {
+          "signal": "2024-03-29",
+          "mode": "ep_top",
+          "pool": 607,
+          "ep_available": 448,
+          "target": 50,
+          "median_ep": 0.10484586349223948,
+          "median_mv": 3474429816.8779936
+        },
+        {
+          "signal": "2024-04-30",
+          "mode": "ep_top",
+          "pool": 614,
+          "ep_available": 467,
+          "target": 50,
+          "median_ep": 0.10735093593433898,
+          "median_mv": 3377472198.5627365
+        },
+        {
+          "signal": "2024-05-31",
+          "mode": "ep_top",
+          "pool": 551,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.11066542651622605,
+          "median_mv": 3204068008.271142
+        },
+        {
+          "signal": "2024-06-28",
+          "mode": "ep_top",
+          "pool": 390,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.09806068720927882,
+          "median_mv": 2800534554.687112
+        },
+        {
+          "signal": "2024-07-31",
+          "mode": "ep_top",
+          "pool": 339,
+          "ep_available": 234,
+          "target": 50,
+          "median_ep": 0.07148494040424527,
+          "median_mv": 2710673472.396796
+        },
+        {
+          "signal": "2024-08-30",
+          "mode": "ep_top",
+          "pool": 358,
+          "ep_available": 252,
+          "target": 50,
+          "median_ep": 0.08577003767719091,
+          "median_mv": 2742258441.413431
+        },
+        {
+          "signal": "2024-09-30",
+          "mode": "ep_top",
+          "pool": 482,
+          "ep_available": 328,
+          "target": 50,
+          "median_ep": 0.08466427492355086,
+          "median_mv": 3302400401.487669
+        },
+        {
+          "signal": "2024-10-31",
+          "mode": "ep_top",
+          "pool": 880,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.12534024696032153,
+          "median_mv": 3552670215.3465967
+        },
+        {
+          "signal": "2024-11-29",
+          "mode": "ep_top",
+          "pool": 873,
+          "ep_available": 662,
+          "target": 50,
+          "median_ep": 0.11680269475353496,
+          "median_mv": 3747815230.430914
+        },
+        {
+          "signal": "2024-12-31",
+          "mode": "ep_top",
+          "pool": 848,
+          "ep_available": 650,
+          "target": 50,
+          "median_ep": 0.11162858614757717,
+          "median_mv": 3642594894.3983097
+        },
+        {
+          "signal": "2025-01-27",
+          "mode": "ep_top",
+          "pool": 680,
+          "ep_available": 504,
+          "target": 50,
+          "median_ep": 0.09968577479436952,
+          "median_mv": 3767985446.2857046
+        },
+        {
+          "signal": "2025-02-28",
+          "mode": "ep_top",
+          "pool": 781,
+          "ep_available": 592,
+          "target": 50,
+          "median_ep": 0.09185896931131497,
+          "median_mv": 3912209124.1943994
+        },
+        {
+          "signal": "2025-03-31",
+          "mode": "ep_top",
+          "pool": 814,
+          "ep_available": 629,
+          "target": 50,
+          "median_ep": 0.09603170281098364,
+          "median_mv": 3771891159.8266745
+        },
+        {
+          "signal": "2025-04-30",
+          "mode": "ep_top",
+          "pool": 755,
+          "ep_available": 543,
+          "target": 50,
+          "median_ep": 0.08750000352246637,
+          "median_mv": 3963762074.9606204
+        },
+        {
+          "signal": "2025-05-30",
+          "mode": "ep_top",
+          "pool": 775,
+          "ep_available": 541,
+          "target": 50,
+          "median_ep": 0.08635315438331895,
+          "median_mv": 4033739944.590004
+        },
+        {
+          "signal": "2025-06-30",
+          "mode": "ep_top",
+          "pool": 795,
+          "ep_available": 558,
+          "target": 50,
+          "median_ep": 0.07713657591910421,
+          "median_mv": 4192287962.5663633
+        },
+        {
+          "signal": "2025-07-31",
+          "mode": "ep_top",
+          "pool": 871,
+          "ep_available": 613,
+          "target": 50,
+          "median_ep": 0.08217696556134294,
+          "median_mv": 4474800030.229916
+        },
+        {
+          "signal": "2025-08-29",
+          "mode": "ep_top",
+          "pool": 926,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.0873561555758315,
+          "median_mv": 4878729344.138987
+        },
+        {
+          "signal": "2025-09-30",
+          "mode": "ep_top",
+          "pool": 884,
+          "ep_available": 628,
+          "target": 50,
+          "median_ep": 0.08972187738872982,
+          "median_mv": 4858671704.902003
+        },
+        {
+          "signal": "2025-10-31",
+          "mode": "ep_top",
+          "pool": 867,
+          "ep_available": 624,
+          "target": 50,
+          "median_ep": 0.08140104031715309,
+          "median_mv": 4906462951.350801
+        },
+        {
+          "signal": "2025-11-28",
+          "mode": "ep_top",
+          "pool": 873,
+          "ep_available": 614,
+          "target": 50,
+          "median_ep": 0.08666420907198617,
+          "median_mv": 5074609013.3781
+        },
+        {
+          "signal": "2025-12-31",
+          "mode": "ep_top",
+          "pool": 812,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.0740697264364539,
+          "median_mv": 5413216723.875023
+        },
+        {
+          "signal": "2026-01-30",
+          "mode": "ep_top",
+          "pool": 918,
+          "ep_available": 677,
+          "target": 50,
+          "median_ep": 0.08995895259684286,
+          "median_mv": 5571028372.646388
+        },
+        {
+          "signal": "2026-02-27",
+          "mode": "ep_top",
+          "pool": 900,
+          "ep_available": 658,
+          "target": 50,
+          "median_ep": 0.08897510623432969,
+          "median_mv": 5736823138.882683
+        },
+        {
+          "signal": "2026-03-31",
+          "mode": "ep_top",
+          "pool": 867,
+          "ep_available": 618,
+          "target": 50,
+          "median_ep": 0.08708100621586726,
+          "median_mv": 5223390370.876386
+        },
+        {
+          "signal": "2026-04-30",
+          "mode": "ep_top",
+          "pool": 840,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.07926928229897633,
+          "median_mv": 5528227717.643988
+        },
+        {
+          "signal": "2026-05-29",
+          "mode": "ep_top",
+          "pool": 874,
+          "ep_available": 598,
+          "target": 50,
+          "median_ep": 0.08835618300249973,
+          "median_mv": 5526718985.376081
+        },
+        {
+          "signal": "2026-06-30",
+          "mode": "ep_top",
+          "pool": 823,
+          "ep_available": 567,
+          "target": 50,
+          "median_ep": 0.09849907389406921,
+          "median_mv": 4945806337.82229
+        },
+        {
+          "signal": "2026-07-31",
+          "mode": "ep_top",
+          "pool": 775,
+          "ep_available": 518,
+          "target": 50,
+          "median_ep": 0.08836910225124739,
+          "median_mv": 4356630235.713684
+        },
+        {
+          "signal": "2026-08-31",
+          "mode": "ep_top",
+          "pool": 787,
+          "ep_available": 544,
+          "target": 50,
+          "median_ep": 0.0810072229914534,
+          "median_mv": 4921167569.772338
+        },
+        {
+          "signal": "2026-09-30",
+          "mode": "ep_top",
+          "pool": 764,
+          "ep_available": 511,
+          "target": 50,
+          "median_ep": 0.07833750846388204,
+          "median_mv": 5044085790.894295
+        }
+      ]
+    },
+    "ep_me": {
+      "mode": "ep_me",
+      "config": {
+        "start": "2020-01-02",
+        "end": "2026-10-30",
+        "initial": 250000.0,
+        "rank_low": 1,
+        "rank_high": 999999,
+        "rank_pct_low": 0.3,
+        "rank_pct_high": 0.5,
+        "max_names": 50,
+        "min_price": 2.0,
+        "min_adv": 50000000.0,
+        "max_sector_weight": 0.25,
+        "band": 0.05,
+        "commission_rate": 0.0003,
+        "min_commission": 5.0,
+        "stamp_tax": 0.001,
+        "slippage": 0.001,
+        "lot": 100,
+        "target_vol": 0.1,
+        "dd_derisk_1": -0.15,
+        "dd_derisk_2": -0.25,
+        "participation": 0.01
+      },
+      "metrics": {
+        "final_equity": 335734.95,
+        "total_return_pct": 31.96,
+        "cagr_pct": 4.15,
+        "sharpe": 0.371,
+        "max_drawdown_pct": -22.81,
+        "max_drawdown_start": "2023-07-04",
+        "max_drawdown_end": "2024-09-18",
+        "daily_win_rate_pct": 53.96,
+        "closed_trades": 2622,
+        "trade_win_rate_pct": 44.24,
+        "payoff": 1.49,
+        "avg_exposure_pct": 57.66,
+        "avg_positions": 46.64,
+        "turnover_x": 63.02,
+        "turnover_annual_x": 9.23,
+        "trades": 5489,
+        "yearly_returns_pct": {
+          "2020": 18.19,
+          "2021": 6.29,
+          "2022": -6.4,
+          "2023": 11.05,
+          "2024": -10.34,
+          "2025": 15.02,
+          "2026": -2.01
+        }
+      },
+      "periods": {
+        "train_2020_2024": {
+          "cagr_pct": 3.21,
+          "sharpe": 0.289,
+          "max_drawdown_pct": -22.81
+        },
+        "holdout_2025_2026": {
+          "cagr_pct": 6.91,
+          "sharpe": 0.548,
+          "max_drawdown_pct": -16.24
+        }
+      },
+      "stress_20bp": {
+        "metrics": {
+          "final_equity": 298041.49,
+          "total_return_pct": 17.25,
+          "cagr_pct": 2.36,
+          "sharpe": 0.255,
+          "max_drawdown_pct": -24.32,
+          "max_drawdown_start": "2020-09-02",
+          "max_drawdown_end": "2024-09-18",
+          "daily_win_rate_pct": 54.14,
+          "closed_trades": 2584,
+          "trade_win_rate_pct": 43.27,
+          "payoff": 1.465,
+          "avg_exposure_pct": 55.0,
+          "avg_positions": 45.42,
+          "turnover_x": 60.71,
+          "turnover_annual_x": 8.89,
+          "trades": 5411,
+          "yearly_returns_pct": {
+            "2020": 17.04,
+            "2021": 0.44,
+            "2022": -2.78,
+            "2023": 10.14,
+            "2024": -12.11,
+            "2025": 9.43,
+            "2026": -3.15
+          }
+        },
+        "periods": {
+          "train_2020_2024": {
+            "cagr_pct": 2.04,
+            "sharpe": 0.216,
+            "max_drawdown_pct": -24.32
+          },
+          "holdout_2025_2026": {
+            "cagr_pct": 3.35,
+            "sharpe": 0.309,
+            "max_drawdown_pct": -16.5
+          }
+        }
+      },
+      "selections": [
+        {
+          "signal": "2019-12-31",
+          "mode": "ep_me",
+          "pool": 255,
+          "ep_available": 218,
+          "target": 50,
+          "median_ep": 0.049691197030680416,
+          "median_mv": 2735599485.5042143
+        },
+        {
+          "signal": "2020-01-23",
+          "mode": "ep_me",
+          "pool": 366,
+          "ep_available": 319,
+          "target": 50,
+          "median_ep": 0.05192827405007887,
+          "median_mv": 2755371301.9076967
+        },
+        {
+          "signal": "2020-02-28",
+          "mode": "ep_me",
+          "pool": 441,
+          "ep_available": 371,
+          "target": 50,
+          "median_ep": 0.05471755091154249,
+          "median_mv": 2739015178.6739054
+        },
+        {
+          "signal": "2020-03-31",
+          "mode": "ep_me",
+          "pool": 468,
+          "ep_available": 407,
+          "target": 50,
+          "median_ep": 0.0638139554619811,
+          "median_mv": 2592755392.3002167
+        },
+        {
+          "signal": "2020-04-30",
+          "mode": "ep_me",
+          "pool": 366,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.060197904254617504,
+          "median_mv": 2709896891.1181617
+        },
+        {
+          "signal": "2020-05-29",
+          "mode": "ep_me",
+          "pool": 329,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.06167046559553868,
+          "median_mv": 2826887869.664894
+        },
+        {
+          "signal": "2020-06-30",
+          "mode": "ep_me",
+          "pool": 360,
+          "ep_available": 317,
+          "target": 50,
+          "median_ep": 0.06621830998257258,
+          "median_mv": 2967049966.326105
+        },
+        {
+          "signal": "2020-07-31",
+          "mode": "ep_me",
+          "pool": 593,
+          "ep_available": 526,
+          "target": 50,
+          "median_ep": 0.050856820432132493,
+          "median_mv": 3192813950.0350327
+        },
+        {
+          "signal": "2020-08-31",
+          "mode": "ep_me",
+          "pool": 546,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.04457491081526192,
+          "median_mv": 3405718827.3206983
+        },
+        {
+          "signal": "2020-09-30",
+          "mode": "ep_me",
+          "pool": 398,
+          "ep_available": 355,
+          "target": 50,
+          "median_ep": 0.049352561625906094,
+          "median_mv": 3265636387.41606
+        },
+        {
+          "signal": "2020-10-30",
+          "mode": "ep_me",
+          "pool": 341,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.04556327578178494,
+          "median_mv": 3337937500.268331
+        },
+        {
+          "signal": "2020-11-30",
+          "mode": "ep_me",
+          "pool": 385,
+          "ep_available": 342,
+          "target": 50,
+          "median_ep": 0.04731527269715416,
+          "median_mv": 3351497944.482961
+        },
+        {
+          "signal": "2020-12-31",
+          "mode": "ep_me",
+          "pool": 344,
+          "ep_available": 302,
+          "target": 50,
+          "median_ep": 0.04095217287974477,
+          "median_mv": 3227149899.565345
+        },
+        {
+          "signal": "2021-01-29",
+          "mode": "ep_me",
+          "pool": 344,
+          "ep_available": 293,
+          "target": 50,
+          "median_ep": 0.04917860657986149,
+          "median_mv": 2929960109.618396
+        },
+        {
+          "signal": "2021-02-26",
+          "mode": "ep_me",
+          "pool": 300,
+          "ep_available": 256,
+          "target": 50,
+          "median_ep": 0.047653922360483464,
+          "median_mv": 3124600462.4507895
+        },
+        {
+          "signal": "2021-03-31",
+          "mode": "ep_me",
+          "pool": 337,
+          "ep_available": 295,
+          "target": 50,
+          "median_ep": 0.05335056617128851,
+          "median_mv": 3113729867.070203
+        },
+        {
+          "signal": "2021-04-30",
+          "mode": "ep_me",
+          "pool": 330,
+          "ep_available": 274,
+          "target": 50,
+          "median_ep": 0.05664411184432416,
+          "median_mv": 3062672973.961106
+        },
+        {
+          "signal": "2021-05-31",
+          "mode": "ep_me",
+          "pool": 338,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.05238512966049766,
+          "median_mv": 3260555782.290722
+        },
+        {
+          "signal": "2021-06-30",
+          "mode": "ep_me",
+          "pool": 418,
+          "ep_available": 350,
+          "target": 50,
+          "median_ep": 0.0476680384306218,
+          "median_mv": 3233156521.0081835
+        },
+        {
+          "signal": "2021-07-30",
+          "mode": "ep_me",
+          "pool": 425,
+          "ep_available": 360,
+          "target": 50,
+          "median_ep": 0.05432907798979512,
+          "median_mv": 3142234019.746216
+        },
+        {
+          "signal": "2021-08-31",
+          "mode": "ep_me",
+          "pool": 477,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.04969241910734336,
+          "median_mv": 3258322136.2474527
+        },
+        {
+          "signal": "2021-09-30",
+          "mode": "ep_me",
+          "pool": 521,
+          "ep_available": 433,
+          "target": 50,
+          "median_ep": 0.057604920577728674,
+          "median_mv": 3164351497.599551
+        },
+        {
+          "signal": "2021-10-29",
+          "mode": "ep_me",
+          "pool": 402,
+          "ep_available": 324,
+          "target": 50,
+          "median_ep": 0.04892405194444653,
+          "median_mv": 3110149787.7395577
+        },
+        {
+          "signal": "2021-11-30",
+          "mode": "ep_me",
+          "pool": 490,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.04634059963227238,
+          "median_mv": 3415829298.661424
+        },
+        {
+          "signal": "2021-12-31",
+          "mode": "ep_me",
+          "pool": 582,
+          "ep_available": 496,
+          "target": 50,
+          "median_ep": 0.045536902980740285,
+          "median_mv": 3438449785.110657
+        },
+        {
+          "signal": "2022-01-28",
+          "mode": "ep_me",
+          "pool": 599,
+          "ep_available": 512,
+          "target": 50,
+          "median_ep": 0.04902181541425662,
+          "median_mv": 3072770475.8183155
+        },
+        {
+          "signal": "2022-02-28",
+          "mode": "ep_me",
+          "pool": 501,
+          "ep_available": 413,
+          "target": 50,
+          "median_ep": 0.04899296113029729,
+          "median_mv": 3308314023.0910964
+        },
+        {
+          "signal": "2022-03-31",
+          "mode": "ep_me",
+          "pool": 518,
+          "ep_available": 430,
+          "target": 50,
+          "median_ep": 0.04917330008136761,
+          "median_mv": 3154326091.1803346
+        },
+        {
+          "signal": "2022-04-29",
+          "mode": "ep_me",
+          "pool": 483,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.06879287571376672,
+          "median_mv": 2540882110.619537
+        },
+        {
+          "signal": "2022-05-31",
+          "mode": "ep_me",
+          "pool": 457,
+          "ep_available": 373,
+          "target": 50,
+          "median_ep": 0.06891132593137794,
+          "median_mv": 2860802439.338116
+        },
+        {
+          "signal": "2022-06-30",
+          "mode": "ep_me",
+          "pool": 575,
+          "ep_available": 480,
+          "target": 50,
+          "median_ep": 0.05370284050060206,
+          "median_mv": 2967001074.1183887
+        },
+        {
+          "signal": "2022-07-29",
+          "mode": "ep_me",
+          "pool": 557,
+          "ep_available": 444,
+          "target": 50,
+          "median_ep": 0.04781118459021634,
+          "median_mv": 3198901970.551921
+        },
+        {
+          "signal": "2022-08-31",
+          "mode": "ep_me",
+          "pool": 601,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.04946367102519426,
+          "median_mv": 3076182586.225279
+        },
+        {
+          "signal": "2022-09-30",
+          "mode": "ep_me",
+          "pool": 464,
+          "ep_available": 372,
+          "target": 50,
+          "median_ep": 0.05882117331086367,
+          "median_mv": 2745919457.3331604
+        },
+        {
+          "signal": "2022-10-31",
+          "mode": "ep_me",
+          "pool": 479,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.05615035733157078,
+          "median_mv": 2825477085.1148024
+        },
+        {
+          "signal": "2022-11-30",
+          "mode": "ep_me",
+          "pool": 569,
+          "ep_available": 456,
+          "target": 50,
+          "median_ep": 0.06890714634326997,
+          "median_mv": 3042155029.0549364
+        },
+        {
+          "signal": "2022-12-30",
+          "mode": "ep_me",
+          "pool": 480,
+          "ep_available": 377,
+          "target": 50,
+          "median_ep": 0.055033697867616874,
+          "median_mv": 2858171335.3261657
+        },
+        {
+          "signal": "2023-01-31",
+          "mode": "ep_me",
+          "pool": 445,
+          "ep_available": 354,
+          "target": 50,
+          "median_ep": 0.046141135754381904,
+          "median_mv": 3156547067.1100125
+        },
+        {
+          "signal": "2023-02-28",
+          "mode": "ep_me",
+          "pool": 587,
+          "ep_available": 481,
+          "target": 50,
+          "median_ep": 0.04399354329992956,
+          "median_mv": 3225250512.0614195
+        },
+        {
+          "signal": "2023-03-31",
+          "mode": "ep_me",
+          "pool": 523,
+          "ep_available": 417,
+          "target": 50,
+          "median_ep": 0.0480053754863634,
+          "median_mv": 3166660647.4059944
+        },
+        {
+          "signal": "2023-04-28",
+          "mode": "ep_me",
+          "pool": 533,
+          "ep_available": 399,
+          "target": 50,
+          "median_ep": 0.049143079146330246,
+          "median_mv": 3104577230.4075346
+        },
+        {
+          "signal": "2023-05-31",
+          "mode": "ep_me",
+          "pool": 452,
+          "ep_available": 338,
+          "target": 50,
+          "median_ep": 0.05194040411199527,
+          "median_mv": 3109423895.284726
+        },
+        {
+          "signal": "2023-06-30",
+          "mode": "ep_me",
+          "pool": 505,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.043380078350640686,
+          "median_mv": 3194085399.8139925
+        },
+        {
+          "signal": "2023-07-31",
+          "mode": "ep_me",
+          "pool": 491,
+          "ep_available": 353,
+          "target": 50,
+          "median_ep": 0.054894626401383526,
+          "median_mv": 3198861807.757125
+        },
+        {
+          "signal": "2023-08-31",
+          "mode": "ep_me",
+          "pool": 431,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.05312501163748258,
+          "median_mv": 3279689258.2295113
+        },
+        {
+          "signal": "2023-09-28",
+          "mode": "ep_me",
+          "pool": 414,
+          "ep_available": 300,
+          "target": 50,
+          "median_ep": 0.04887925946833541,
+          "median_mv": 3263713461.171134
+        },
+        {
+          "signal": "2023-10-31",
+          "mode": "ep_me",
+          "pool": 463,
+          "ep_available": 333,
+          "target": 50,
+          "median_ep": 0.04855684411028154,
+          "median_mv": 3176787981.096095
+        },
+        {
+          "signal": "2023-11-30",
+          "mode": "ep_me",
+          "pool": 582,
+          "ep_available": 421,
+          "target": 50,
+          "median_ep": 0.047004363888762626,
+          "median_mv": 3249257340.93659
+        },
+        {
+          "signal": "2023-12-29",
+          "mode": "ep_me",
+          "pool": 539,
+          "ep_available": 387,
+          "target": 50,
+          "median_ep": 0.04751886249300836,
+          "median_mv": 3184581308.183752
+        },
+        {
+          "signal": "2024-01-31",
+          "mode": "ep_me",
+          "pool": 535,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.05518194572496961,
+          "median_mv": 2634434053.4416413
+        },
+        {
+          "signal": "2024-02-29",
+          "mode": "ep_me",
+          "pool": 703,
+          "ep_available": 520,
+          "target": 50,
+          "median_ep": 0.061493829119862425,
+          "median_mv": 2550453023.73965
+        },
+        {
+          "signal": "2024-03-29",
+          "mode": "ep_me",
+          "pool": 607,
+          "ep_available": 448,
+          "target": 50,
+          "median_ep": 0.05132003461610425,
+          "median_mv": 2788119087.9782934
+        },
+        {
+          "signal": "2024-04-30",
+          "mode": "ep_me",
+          "pool": 614,
+          "ep_available": 467,
+          "target": 50,
+          "median_ep": 0.05728513234553092,
+          "median_mv": 2735391022.2144423
+        },
+        {
+          "signal": "2024-05-31",
+          "mode": "ep_me",
+          "pool": 551,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.0572268247431654,
+          "median_mv": 2642878590.682428
+        },
+        {
+          "signal": "2024-06-28",
+          "mode": "ep_me",
+          "pool": 390,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.048533827216729275,
+          "median_mv": 2454753221.2060146
+        },
+        {
+          "signal": "2024-07-31",
+          "mode": "ep_me",
+          "pool": 339,
+          "ep_available": 234,
+          "target": 50,
+          "median_ep": 0.04917915806623945,
+          "median_mv": 2456350639.5329456
+        },
+        {
+          "signal": "2024-08-30",
+          "mode": "ep_me",
+          "pool": 358,
+          "ep_available": 252,
+          "target": 50,
+          "median_ep": 0.05355275508031647,
+          "median_mv": 2404469074.9453344
+        },
+        {
+          "signal": "2024-09-30",
+          "mode": "ep_me",
+          "pool": 482,
+          "ep_available": 328,
+          "target": 50,
+          "median_ep": 0.044965819212199526,
+          "median_mv": 2758139642.7891293
+        },
+        {
+          "signal": "2024-10-31",
+          "mode": "ep_me",
+          "pool": 880,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.048629189907508995,
+          "median_mv": 2967765693.0872035
+        },
+        {
+          "signal": "2024-11-29",
+          "mode": "ep_me",
+          "pool": 873,
+          "ep_available": 662,
+          "target": 50,
+          "median_ep": 0.044685159127562935,
+          "median_mv": 3171067412.149659
+        },
+        {
+          "signal": "2024-12-31",
+          "mode": "ep_me",
+          "pool": 848,
+          "ep_available": 650,
+          "target": 50,
+          "median_ep": 0.05024198068568034,
+          "median_mv": 3026682590.0066433
+        },
+        {
+          "signal": "2025-01-27",
+          "mode": "ep_me",
+          "pool": 680,
+          "ep_available": 504,
+          "target": 50,
+          "median_ep": 0.049371885194574194,
+          "median_mv": 3082046221.4881945
+        },
+        {
+          "signal": "2025-02-28",
+          "mode": "ep_me",
+          "pool": 781,
+          "ep_available": 592,
+          "target": 50,
+          "median_ep": 0.04579683879634635,
+          "median_mv": 3222500094.0106115
+        },
+        {
+          "signal": "2025-03-31",
+          "mode": "ep_me",
+          "pool": 814,
+          "ep_available": 629,
+          "target": 50,
+          "median_ep": 0.042434106006623215,
+          "median_mv": 3178373791.126192
+        },
+        {
+          "signal": "2025-04-30",
+          "mode": "ep_me",
+          "pool": 755,
+          "ep_available": 543,
+          "target": 50,
+          "median_ep": 0.04375386311358061,
+          "median_mv": 3209775656.9147806
+        },
+        {
+          "signal": "2025-05-30",
+          "mode": "ep_me",
+          "pool": 775,
+          "ep_available": 541,
+          "target": 50,
+          "median_ep": 0.03731810263898598,
+          "median_mv": 3400868764.722746
+        },
+        {
+          "signal": "2025-06-30",
+          "mode": "ep_me",
+          "pool": 795,
+          "ep_available": 558,
+          "target": 50,
+          "median_ep": 0.03454820530451993,
+          "median_mv": 3564519499.985963
+        },
+        {
+          "signal": "2025-07-31",
+          "mode": "ep_me",
+          "pool": 871,
+          "ep_available": 613,
+          "target": 50,
+          "median_ep": 0.04509700461370297,
+          "median_mv": 3748794547.510876
+        },
+        {
+          "signal": "2025-08-29",
+          "mode": "ep_me",
+          "pool": 926,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.044517617308003174,
+          "median_mv": 3925778430.1145306
+        },
+        {
+          "signal": "2025-09-30",
+          "mode": "ep_me",
+          "pool": 884,
+          "ep_available": 628,
+          "target": 50,
+          "median_ep": 0.04255974567687966,
+          "median_mv": 3904398318.8595705
+        },
+        {
+          "signal": "2025-10-31",
+          "mode": "ep_me",
+          "pool": 867,
+          "ep_available": 624,
+          "target": 50,
+          "median_ep": 0.04155055821681161,
+          "median_mv": 4005230729.8670244
+        },
+        {
+          "signal": "2025-11-28",
+          "mode": "ep_me",
+          "pool": 873,
+          "ep_available": 614,
+          "target": 50,
+          "median_ep": 0.03618086945686258,
+          "median_mv": 4071829206.5004764
+        },
+        {
+          "signal": "2025-12-31",
+          "mode": "ep_me",
+          "pool": 812,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.03071588991041697,
+          "median_mv": 4104954308.2387543
+        },
+        {
+          "signal": "2026-01-30",
+          "mode": "ep_me",
+          "pool": 918,
+          "ep_available": 677,
+          "target": 50,
+          "median_ep": 0.03648301924205914,
+          "median_mv": 4366583565.133247
+        },
+        {
+          "signal": "2026-02-27",
+          "mode": "ep_me",
+          "pool": 900,
+          "ep_available": 658,
+          "target": 50,
+          "median_ep": 0.03760941287737186,
+          "median_mv": 4514693944.764212
+        },
+        {
+          "signal": "2026-03-31",
+          "mode": "ep_me",
+          "pool": 867,
+          "ep_available": 618,
+          "target": 50,
+          "median_ep": 0.03578091271464477,
+          "median_mv": 4174688810.4691277
+        },
+        {
+          "signal": "2026-04-30",
+          "mode": "ep_me",
+          "pool": 840,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.04119577922710268,
+          "median_mv": 4363628054.149377
+        },
+        {
+          "signal": "2026-05-29",
+          "mode": "ep_me",
+          "pool": 874,
+          "ep_available": 598,
+          "target": 50,
+          "median_ep": 0.04882852807828822,
+          "median_mv": 4181661090.412072
+        },
+        {
+          "signal": "2026-06-30",
+          "mode": "ep_me",
+          "pool": 823,
+          "ep_available": 567,
+          "target": 50,
+          "median_ep": 0.044827897677440505,
+          "median_mv": 3762269328.9147234
+        },
+        {
+          "signal": "2026-07-31",
+          "mode": "ep_me",
+          "pool": 775,
+          "ep_available": 518,
+          "target": 50,
+          "median_ep": 0.040001243615359075,
+          "median_mv": 3591837725.013007
+        },
+        {
+          "signal": "2026-08-31",
+          "mode": "ep_me",
+          "pool": 787,
+          "ep_available": 544,
+          "target": 50,
+          "median_ep": 0.03834613226163324,
+          "median_mv": 3921747554.337472
+        },
+        {
+          "signal": "2026-09-30",
+          "mode": "ep_me",
+          "pool": 764,
+          "ep_available": 511,
+          "target": 50,
+          "median_ep": 0.03534607850748704,
+          "median_mv": 3909591994.7760687
+        }
+      ]
+    },
+    "ep_top_small100": {
+      "mode": "ep_top_small100",
+      "config": {
+        "start": "2020-01-02",
+        "end": "2026-10-30",
+        "initial": 250000.0,
+        "rank_low": 1,
+        "rank_high": 999999,
+        "rank_pct_low": 0.3,
+        "rank_pct_high": 0.5,
+        "max_names": 50,
+        "min_price": 2.0,
+        "min_adv": 50000000.0,
+        "max_sector_weight": 0.25,
+        "band": 0.05,
+        "commission_rate": 0.0003,
+        "min_commission": 5.0,
+        "stamp_tax": 0.001,
+        "slippage": 0.001,
+        "lot": 100,
+        "target_vol": 0.1,
+        "dd_derisk_1": -0.15,
+        "dd_derisk_2": -0.25,
+        "participation": 0.01
+      },
+      "metrics": {
+        "final_equity": 318274.48,
+        "total_return_pct": 25.15,
+        "cagr_pct": 3.34,
+        "sharpe": 0.317,
+        "max_drawdown_pct": -24.45,
+        "max_drawdown_start": "2023-06-19",
+        "max_drawdown_end": "2024-09-18",
+        "daily_win_rate_pct": 53.78,
+        "closed_trades": 2840,
+        "trade_win_rate_pct": 45.21,
+        "payoff": 1.394,
+        "avg_exposure_pct": 56.31,
+        "avg_positions": 47.04,
+        "turnover_x": 67.1,
+        "turnover_annual_x": 9.83,
+        "trades": 5902,
+        "yearly_returns_pct": {
+          "2020": 16.91,
+          "2021": 12.84,
+          "2022": -10.36,
+          "2023": 9.94,
+          "2024": -8.2,
+          "2025": 13.68,
+          "2026": -7.74
+        }
+      },
+      "periods": {
+        "train_2020_2024": {
+          "cagr_pct": 3.6,
+          "sharpe": 0.316,
+          "max_drawdown_pct": -24.45
+        },
+        "holdout_2025_2026": {
+          "cagr_pct": 2.79,
+          "sharpe": 0.266,
+          "max_drawdown_pct": -19.28
+        }
+      },
+      "stress_20bp": {
+        "metrics": {
+          "final_equity": 252694.21,
+          "total_return_pct": -0.55,
+          "cagr_pct": -0.08,
+          "sharpe": 0.078,
+          "max_drawdown_pct": -28.02,
+          "max_drawdown_start": "2020-11-09",
+          "max_drawdown_end": "2024-02-07",
+          "daily_win_rate_pct": 53.72,
+          "closed_trades": 2678,
+          "trade_win_rate_pct": 43.69,
+          "payoff": 1.333,
+          "avg_exposure_pct": 46.05,
+          "avg_positions": 44.24,
+          "turnover_x": 54.48,
+          "turnover_annual_x": 7.98,
+          "trades": 5491,
+          "yearly_returns_pct": {
+            "2020": 15.75,
+            "2021": 9.35,
+            "2022": -14.17,
+            "2023": 1.78,
+            "2024": -7.58,
+            "2025": 5.15,
+            "2026": -7.46
+          }
+        },
+        "periods": {
+          "train_2020_2024": {
+            "cagr_pct": 0.44,
+            "sharpe": 0.104,
+            "max_drawdown_pct": -28.02
+          },
+          "holdout_2025_2026": {
+            "cagr_pct": -1.41,
+            "sharpe": -0.143,
+            "max_drawdown_pct": -10.76
+          }
+        }
+      },
+      "selections": [
+        {
+          "signal": "2019-12-31",
+          "mode": "ep_top_small100",
+          "pool": 255,
+          "ep_available": 218,
+          "target": 50,
+          "median_ep": 0.048495588934792486,
+          "median_mv": 2728727714.787413
+        },
+        {
+          "signal": "2020-01-23",
+          "mode": "ep_top_small100",
+          "pool": 366,
+          "ep_available": 319,
+          "target": 50,
+          "median_ep": 0.04841133190751058,
+          "median_mv": 2717764178.7604246
+        },
+        {
+          "signal": "2020-02-28",
+          "mode": "ep_top_small100",
+          "pool": 441,
+          "ep_available": 371,
+          "target": 50,
+          "median_ep": 0.05146620928782129,
+          "median_mv": 2699006219.1467667
+        },
+        {
+          "signal": "2020-03-31",
+          "mode": "ep_top_small100",
+          "pool": 468,
+          "ep_available": 407,
+          "target": 50,
+          "median_ep": 0.06063376102529979,
+          "median_mv": 2569386768.1274843
+        },
+        {
+          "signal": "2020-04-30",
+          "mode": "ep_top_small100",
+          "pool": 366,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.05557858415945641,
+          "median_mv": 2619291344.848856
+        },
+        {
+          "signal": "2020-05-29",
+          "mode": "ep_top_small100",
+          "pool": 329,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.05708136924075837,
+          "median_mv": 2757259614.2113357
+        },
+        {
+          "signal": "2020-06-30",
+          "mode": "ep_top_small100",
+          "pool": 360,
+          "ep_available": 317,
+          "target": 50,
+          "median_ep": 0.05341046246226909,
+          "median_mv": 2931061479.6058817
+        },
+        {
+          "signal": "2020-07-31",
+          "mode": "ep_top_small100",
+          "pool": 593,
+          "ep_available": 526,
+          "target": 50,
+          "median_ep": 0.041521564130144455,
+          "median_mv": 3119465696.110835
+        },
+        {
+          "signal": "2020-08-31",
+          "mode": "ep_top_small100",
+          "pool": 546,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.03791996750820438,
+          "median_mv": 3339646758.3093767
+        },
+        {
+          "signal": "2020-09-30",
+          "mode": "ep_top_small100",
+          "pool": 398,
+          "ep_available": 355,
+          "target": 50,
+          "median_ep": 0.044068260765473044,
+          "median_mv": 3183232320.4822264
+        },
+        {
+          "signal": "2020-10-30",
+          "mode": "ep_top_small100",
+          "pool": 341,
+          "ep_available": 294,
+          "target": 50,
+          "median_ep": 0.037619934509963884,
+          "median_mv": 3262978683.3863
+        },
+        {
+          "signal": "2020-11-30",
+          "mode": "ep_top_small100",
+          "pool": 385,
+          "ep_available": 342,
+          "target": 50,
+          "median_ep": 0.042371380758720045,
+          "median_mv": 3319581716.0345507
+        },
+        {
+          "signal": "2020-12-31",
+          "mode": "ep_top_small100",
+          "pool": 344,
+          "ep_available": 302,
+          "target": 50,
+          "median_ep": 0.038072081273189354,
+          "median_mv": 3204043583.694875
+        },
+        {
+          "signal": "2021-01-29",
+          "mode": "ep_top_small100",
+          "pool": 344,
+          "ep_available": 293,
+          "target": 50,
+          "median_ep": 0.04577545235290807,
+          "median_mv": 2838918995.3879156
+        },
+        {
+          "signal": "2021-02-26",
+          "mode": "ep_top_small100",
+          "pool": 300,
+          "ep_available": 256,
+          "target": 50,
+          "median_ep": 0.04620068500831232,
+          "median_mv": 3064274552.6650524
+        },
+        {
+          "signal": "2021-03-31",
+          "mode": "ep_top_small100",
+          "pool": 337,
+          "ep_available": 295,
+          "target": 50,
+          "median_ep": 0.04619532144777935,
+          "median_mv": 3082626853.8071494
+        },
+        {
+          "signal": "2021-04-30",
+          "mode": "ep_top_small100",
+          "pool": 330,
+          "ep_available": 274,
+          "target": 50,
+          "median_ep": 0.05185196488974918,
+          "median_mv": 3054920179.0545588
+        },
+        {
+          "signal": "2021-05-31",
+          "mode": "ep_top_small100",
+          "pool": 338,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.046051598546062014,
+          "median_mv": 3202449024.459691
+        },
+        {
+          "signal": "2021-06-30",
+          "mode": "ep_top_small100",
+          "pool": 418,
+          "ep_available": 350,
+          "target": 50,
+          "median_ep": 0.03421874056061613,
+          "median_mv": 3130926248.0128508
+        },
+        {
+          "signal": "2021-07-30",
+          "mode": "ep_top_small100",
+          "pool": 425,
+          "ep_available": 360,
+          "target": 50,
+          "median_ep": 0.04922663767210142,
+          "median_mv": 3062263451.447173
+        },
+        {
+          "signal": "2021-08-31",
+          "mode": "ep_top_small100",
+          "pool": 477,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.04689043088476357,
+          "median_mv": 3230608317.4241424
+        },
+        {
+          "signal": "2021-09-30",
+          "mode": "ep_top_small100",
+          "pool": 521,
+          "ep_available": 433,
+          "target": 50,
+          "median_ep": 0.0487430432605656,
+          "median_mv": 3101657789.5084324
+        },
+        {
+          "signal": "2021-10-29",
+          "mode": "ep_top_small100",
+          "pool": 402,
+          "ep_available": 324,
+          "target": 50,
+          "median_ep": 0.03959609520548395,
+          "median_mv": 3018244359.447755
+        },
+        {
+          "signal": "2021-11-30",
+          "mode": "ep_top_small100",
+          "pool": 490,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.03762380929387242,
+          "median_mv": 3317480221.173196
+        },
+        {
+          "signal": "2021-12-31",
+          "mode": "ep_top_small100",
+          "pool": 582,
+          "ep_available": 496,
+          "target": 50,
+          "median_ep": 0.03670801796118808,
+          "median_mv": 3387254581.506171
+        },
+        {
+          "signal": "2022-01-28",
+          "mode": "ep_top_small100",
+          "pool": 599,
+          "ep_available": 512,
+          "target": 50,
+          "median_ep": 0.03856282301115485,
+          "median_mv": 3045775213.879842
+        },
+        {
+          "signal": "2022-02-28",
+          "mode": "ep_top_small100",
+          "pool": 501,
+          "ep_available": 413,
+          "target": 50,
+          "median_ep": 0.03513373827462048,
+          "median_mv": 3205871844.820107
+        },
+        {
+          "signal": "2022-03-31",
+          "mode": "ep_top_small100",
+          "pool": 518,
+          "ep_available": 430,
+          "target": 50,
+          "median_ep": 0.0346990686222251,
+          "median_mv": 3052516200.5276427
+        },
+        {
+          "signal": "2022-04-29",
+          "mode": "ep_top_small100",
+          "pool": 483,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.05647116845069325,
+          "median_mv": 2505656212.104476
+        },
+        {
+          "signal": "2022-05-31",
+          "mode": "ep_top_small100",
+          "pool": 457,
+          "ep_available": 373,
+          "target": 50,
+          "median_ep": 0.048030705305525986,
+          "median_mv": 2777799650.363742
+        },
+        {
+          "signal": "2022-06-30",
+          "mode": "ep_top_small100",
+          "pool": 575,
+          "ep_available": 480,
+          "target": 50,
+          "median_ep": 0.04809085738721104,
+          "median_mv": 2954297773.1279335
+        },
+        {
+          "signal": "2022-07-29",
+          "mode": "ep_top_small100",
+          "pool": 557,
+          "ep_available": 444,
+          "target": 50,
+          "median_ep": 0.03832216800535248,
+          "median_mv": 3105034659.6645103
+        },
+        {
+          "signal": "2022-08-31",
+          "mode": "ep_top_small100",
+          "pool": 601,
+          "ep_available": 482,
+          "target": 50,
+          "median_ep": 0.03723899702802495,
+          "median_mv": 2996407325.419768
+        },
+        {
+          "signal": "2022-09-30",
+          "mode": "ep_top_small100",
+          "pool": 464,
+          "ep_available": 372,
+          "target": 50,
+          "median_ep": 0.054079915119776265,
+          "median_mv": 2741186998.0003347
+        },
+        {
+          "signal": "2022-10-31",
+          "mode": "ep_top_small100",
+          "pool": 479,
+          "ep_available": 397,
+          "target": 50,
+          "median_ep": 0.048080430942325336,
+          "median_mv": 2802978034.1025515
+        },
+        {
+          "signal": "2022-11-30",
+          "mode": "ep_top_small100",
+          "pool": 569,
+          "ep_available": 456,
+          "target": 50,
+          "median_ep": 0.04401178016296155,
+          "median_mv": 2961762476.046644
+        },
+        {
+          "signal": "2022-12-30",
+          "mode": "ep_top_small100",
+          "pool": 480,
+          "ep_available": 377,
+          "target": 50,
+          "median_ep": 0.04950347901774399,
+          "median_mv": 2830141534.329632
+        },
+        {
+          "signal": "2023-01-31",
+          "mode": "ep_top_small100",
+          "pool": 445,
+          "ep_available": 354,
+          "target": 50,
+          "median_ep": 0.043544401461990775,
+          "median_mv": 3119221046.7556343
+        },
+        {
+          "signal": "2023-02-28",
+          "mode": "ep_top_small100",
+          "pool": 587,
+          "ep_available": 481,
+          "target": 50,
+          "median_ep": 0.03583649131382988,
+          "median_mv": 3142149328.3208685
+        },
+        {
+          "signal": "2023-03-31",
+          "mode": "ep_top_small100",
+          "pool": 523,
+          "ep_available": 417,
+          "target": 50,
+          "median_ep": 0.03910783235635905,
+          "median_mv": 3099339442.3984585
+        },
+        {
+          "signal": "2023-04-28",
+          "mode": "ep_top_small100",
+          "pool": 533,
+          "ep_available": 399,
+          "target": 50,
+          "median_ep": 0.033573408183312614,
+          "median_mv": 2982784060.0081005
+        },
+        {
+          "signal": "2023-05-31",
+          "mode": "ep_top_small100",
+          "pool": 452,
+          "ep_available": 338,
+          "target": 50,
+          "median_ep": 0.045798145780835485,
+          "median_mv": 3074709939.649287
+        },
+        {
+          "signal": "2023-06-30",
+          "mode": "ep_top_small100",
+          "pool": 505,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.03554126971757508,
+          "median_mv": 3133767461.7907934
+        },
+        {
+          "signal": "2023-07-31",
+          "mode": "ep_top_small100",
+          "pool": 491,
+          "ep_available": 353,
+          "target": 50,
+          "median_ep": 0.03467971672968445,
+          "median_mv": 3137661051.2774386
+        },
+        {
+          "signal": "2023-08-31",
+          "mode": "ep_top_small100",
+          "pool": 431,
+          "ep_available": 311,
+          "target": 50,
+          "median_ep": 0.02851144730695112,
+          "median_mv": 3021459230.4407053
+        },
+        {
+          "signal": "2023-09-28",
+          "mode": "ep_top_small100",
+          "pool": 414,
+          "ep_available": 300,
+          "target": 50,
+          "median_ep": 0.02116567489427357,
+          "median_mv": 3088594170.209298
+        },
+        {
+          "signal": "2023-10-31",
+          "mode": "ep_top_small100",
+          "pool": 463,
+          "ep_available": 333,
+          "target": 50,
+          "median_ep": 0.03570233567697133,
+          "median_mv": 3042382656.766488
+        },
+        {
+          "signal": "2023-11-30",
+          "mode": "ep_top_small100",
+          "pool": 582,
+          "ep_available": 421,
+          "target": 50,
+          "median_ep": 0.029493761300356365,
+          "median_mv": 3175523347.391429
+        },
+        {
+          "signal": "2023-12-29",
+          "mode": "ep_top_small100",
+          "pool": 539,
+          "ep_available": 387,
+          "target": 50,
+          "median_ep": 0.039552356656494814,
+          "median_mv": 3130022509.1916647
+        },
+        {
+          "signal": "2024-01-31",
+          "mode": "ep_top_small100",
+          "pool": 535,
+          "ep_available": 381,
+          "target": 50,
+          "median_ep": 0.04104398688025458,
+          "median_mv": 2551721478.22484
+        },
+        {
+          "signal": "2024-02-29",
+          "mode": "ep_top_small100",
+          "pool": 703,
+          "ep_available": 520,
+          "target": 50,
+          "median_ep": 0.03757838805438765,
+          "median_mv": 2483484601.3385115
+        },
+        {
+          "signal": "2024-03-29",
+          "mode": "ep_top_small100",
+          "pool": 607,
+          "ep_available": 448,
+          "target": 50,
+          "median_ep": 0.040091700768926375,
+          "median_mv": 2710430337.3737707
+        },
+        {
+          "signal": "2024-04-30",
+          "mode": "ep_top_small100",
+          "pool": 614,
+          "ep_available": 467,
+          "target": 50,
+          "median_ep": 0.0466620046970716,
+          "median_mv": 2654930183.7072706
+        },
+        {
+          "signal": "2024-05-31",
+          "mode": "ep_top_small100",
+          "pool": 551,
+          "ep_available": 405,
+          "target": 50,
+          "median_ep": 0.041167465083981385,
+          "median_mv": 2603594406.8704834
+        },
+        {
+          "signal": "2024-06-28",
+          "mode": "ep_top_small100",
+          "pool": 390,
+          "ep_available": 277,
+          "target": 50,
+          "median_ep": 0.04478143266805042,
+          "median_mv": 2402786613.060334
+        },
+        {
+          "signal": "2024-07-31",
+          "mode": "ep_top_small100",
+          "pool": 339,
+          "ep_available": 234,
+          "target": 50,
+          "median_ep": 0.041114309509136124,
+          "median_mv": 2382520983.059186
+        },
+        {
+          "signal": "2024-08-30",
+          "mode": "ep_top_small100",
+          "pool": 358,
+          "ep_available": 252,
+          "target": 50,
+          "median_ep": 0.03859491213053733,
+          "median_mv": 2338532747.429171
+        },
+        {
+          "signal": "2024-09-30",
+          "mode": "ep_top_small100",
+          "pool": 482,
+          "ep_available": 328,
+          "target": 50,
+          "median_ep": 0.038478674893425574,
+          "median_mv": 2738349395.669934
+        },
+        {
+          "signal": "2024-10-31",
+          "mode": "ep_top_small100",
+          "pool": 880,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.04508945342794156,
+          "median_mv": 2938841012.558878
+        },
+        {
+          "signal": "2024-11-29",
+          "mode": "ep_top_small100",
+          "pool": 873,
+          "ep_available": 662,
+          "target": 50,
+          "median_ep": 0.0405093835337048,
+          "median_mv": 3147423479.246545
+        },
+        {
+          "signal": "2024-12-31",
+          "mode": "ep_top_small100",
+          "pool": 848,
+          "ep_available": 650,
+          "target": 50,
+          "median_ep": 0.040696197077300156,
+          "median_mv": 2979734866.5974054
+        },
+        {
+          "signal": "2025-01-27",
+          "mode": "ep_top_small100",
+          "pool": 680,
+          "ep_available": 504,
+          "target": 50,
+          "median_ep": 0.032581520497970834,
+          "median_mv": 2967618368.5287614
+        },
+        {
+          "signal": "2025-02-28",
+          "mode": "ep_top_small100",
+          "pool": 781,
+          "ep_available": 592,
+          "target": 50,
+          "median_ep": 0.03644442638973554,
+          "median_mv": 3181925983.2557764
+        },
+        {
+          "signal": "2025-03-31",
+          "mode": "ep_top_small100",
+          "pool": 814,
+          "ep_available": 629,
+          "target": 50,
+          "median_ep": 0.029963323019045633,
+          "median_mv": 3136535991.188017
+        },
+        {
+          "signal": "2025-04-30",
+          "mode": "ep_top_small100",
+          "pool": 755,
+          "ep_available": 543,
+          "target": 50,
+          "median_ep": 0.02938236551592418,
+          "median_mv": 3149558022.7348404
+        },
+        {
+          "signal": "2025-05-30",
+          "mode": "ep_top_small100",
+          "pool": 775,
+          "ep_available": 541,
+          "target": 50,
+          "median_ep": 0.027183744322095034,
+          "median_mv": 3296987730.923354
+        },
+        {
+          "signal": "2025-06-30",
+          "mode": "ep_top_small100",
+          "pool": 795,
+          "ep_available": 558,
+          "target": 50,
+          "median_ep": 0.0259910613426645,
+          "median_mv": 3511887740.7946568
+        },
+        {
+          "signal": "2025-07-31",
+          "mode": "ep_top_small100",
+          "pool": 871,
+          "ep_available": 613,
+          "target": 50,
+          "median_ep": 0.02904687396078235,
+          "median_mv": 3680707732.734369
+        },
+        {
+          "signal": "2025-08-29",
+          "mode": "ep_top_small100",
+          "pool": 926,
+          "ep_available": 666,
+          "target": 50,
+          "median_ep": 0.03056550302954785,
+          "median_mv": 3900980726.104644
+        },
+        {
+          "signal": "2025-09-30",
+          "mode": "ep_top_small100",
+          "pool": 884,
+          "ep_available": 628,
+          "target": 50,
+          "median_ep": 0.03137914690601882,
+          "median_mv": 3874574665.0188236
+        },
+        {
+          "signal": "2025-10-31",
+          "mode": "ep_top_small100",
+          "pool": 867,
+          "ep_available": 624,
+          "target": 50,
+          "median_ep": 0.02718123035022867,
+          "median_mv": 3952238494.7474985
+        },
+        {
+          "signal": "2025-11-28",
+          "mode": "ep_top_small100",
+          "pool": 873,
+          "ep_available": 614,
+          "target": 50,
+          "median_ep": 0.02075786726000208,
+          "median_mv": 3943952608.746997
+        },
+        {
+          "signal": "2025-12-31",
+          "mode": "ep_top_small100",
+          "pool": 812,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.022142547704689937,
+          "median_mv": 4040872850.816021
+        },
+        {
+          "signal": "2026-01-30",
+          "mode": "ep_top_small100",
+          "pool": 918,
+          "ep_available": 677,
+          "target": 50,
+          "median_ep": 0.027141484415907358,
+          "median_mv": 4285326704.0539956
+        },
+        {
+          "signal": "2026-02-27",
+          "mode": "ep_top_small100",
+          "pool": 900,
+          "ep_available": 658,
+          "target": 50,
+          "median_ep": 0.020463541871888938,
+          "median_mv": 4418967801.313803
+        },
+        {
+          "signal": "2026-03-31",
+          "mode": "ep_top_small100",
+          "pool": 867,
+          "ep_available": 618,
+          "target": 50,
+          "median_ep": 0.020017389904204055,
+          "median_mv": 4060213059.95816
+        },
+        {
+          "signal": "2026-04-30",
+          "mode": "ep_top_small100",
+          "pool": 840,
+          "ep_available": 586,
+          "target": 50,
+          "median_ep": 0.022882991506658745,
+          "median_mv": 4305317477.065168
+        },
+        {
+          "signal": "2026-05-29",
+          "mode": "ep_top_small100",
+          "pool": 874,
+          "ep_available": 598,
+          "target": 50,
+          "median_ep": 0.025672733313041776,
+          "median_mv": 4085645851.739966
+        },
+        {
+          "signal": "2026-06-30",
+          "mode": "ep_top_small100",
+          "pool": 823,
+          "ep_available": 567,
+          "target": 50,
+          "median_ep": 0.031127125213378057,
+          "median_mv": 3675816890.6449947
+        },
+        {
+          "signal": "2026-07-31",
+          "mode": "ep_top_small100",
+          "pool": 775,
+          "ep_available": 518,
+          "target": 50,
+          "median_ep": 0.02650791804846774,
+          "median_mv": 3495626113.9873285
+        },
+        {
+          "signal": "2026-08-31",
+          "mode": "ep_top_small100",
+          "pool": 787,
+          "ep_available": 544,
+          "target": 50,
+          "median_ep": 0.023478907045142675,
+          "median_mv": 3846268218.630997
+        },
+        {
+          "signal": "2026-09-30",
+          "mode": "ep_top_small100",
+          "pool": 764,
+          "ep_available": 511,
+          "target": 50,
+          "median_ep": 0.022950227274706574,
+          "median_mv": 3819477602.670699
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Historical PIT CSI 1000 membership is still unavailable; this uses PIT all-A rank percentile 30%-50%.",
+    "EP uses the supplied value panel: value_annual.csv is the latest annual report; value_ttm.csv is trailing twelve months.",
+    "ST history is unavailable; price/ADV/history filters are the proxy.",
+    "Only delisted names with a local price file can trade; others are absent.",
+    "2025-2026 was observed earlier, so it is a time holdout, not pristine OOS."
+  ],
+  "best_variant": "shellfree_me"
+}
