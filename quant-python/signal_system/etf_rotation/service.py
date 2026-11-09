@@ -312,6 +312,8 @@ def _rebalance_paper(
     snapshot: dict[str, Any],
     prices_override: dict[str, float] | None = None,
     fill_date: str | None = None,
+    *,
+    persist: bool = True,
 ) -> dict[str, Any]:
     target = _target_map(snapshot)
     prices = prices_override or {symbol: row["price"] for symbol, row in target.items() if row["price"] > 0}
@@ -414,24 +416,16 @@ def _rebalance_paper(
         "as_of": fill_date or snapshot.get("as_of"),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
-    _save_paper(ledger)
+    if persist:
+        _save_paper(ledger)
     return ledger
 
 
-def plan_paper() -> dict[str, Any]:
-    ledger = _load_paper()
-    if not ledger.get("initialized"):
-        raise ValueError("纸面账本尚未初始化")
-    pending = ledger.get("pending_plan")
-    if isinstance(pending, dict) and pending.get("status") == "planned":
-        raise ValueError("已有待成交的纸面计划，请先按开盘价成交")
-    snapshot = load_snapshot()
+def _build_pending_plan(ledger: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Build a pending plan in memory; the caller decides whether to persist."""
     target = _target_map(snapshot)
     if not target:
         raise EtfSnapshotError("ETF 目标为空，无法生成纸面计划")
-    last = ledger.get("last_plan")
-    if isinstance(last, dict) and last.get("status") == "filled" and last.get("as_of") == snapshot.get("as_of"):
-        raise ValueError(f"{snapshot.get('as_of')} 的计划已成交，等待下一个周度信号日")
     positions = ledger.get("positions") or {}
     equity = float(ledger.get("cash") or 0.0) + sum(
         int(position.get("shares") or 0) * float(position.get("last_price") or 0)
@@ -455,6 +449,56 @@ def plan_paper() -> dict[str, Any]:
         ],
         "fill_note": "下一交易日开盘价成交",
     }
+    return ledger
+
+
+def _apply_pending_plan(
+    ledger: dict[str, Any],
+    plan: dict[str, Any],
+    *,
+    prices: dict[str, float],
+    day: str,
+    persist: bool = False,
+) -> dict[str, Any]:
+    """Apply a pending plan at supplied open prices without touching the live ledger."""
+    target: list[dict[str, Any]] = []
+    for row in plan.get("target", []):
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "")
+        price = float(prices.get(symbol, float("nan")))
+        if not symbol or not math.isfinite(price) or price <= 0:
+            continue
+        target.append({
+            "symbol": symbol,
+            "name": str(row.get("name") or symbol),
+            "weight": float(row.get("weight") or 0.0),
+            "price": price,
+        })
+    snapshot = {"as_of": plan.get("as_of"), "target": target}
+    ledger = _rebalance_paper(
+        ledger, snapshot, prices_override=prices, fill_date=day, persist=persist,
+    )
+    filled = {**plan, "status": "filled", "fill_date": day}
+    ledger["pending_plan"] = filled
+    ledger["last_plan"] = filled
+    if persist:
+        _save_paper(ledger)
+    return ledger
+
+
+def plan_paper() -> dict[str, Any]:
+    ledger = _load_paper()
+    if not ledger.get("initialized"):
+        raise ValueError("纸面账本尚未初始化")
+    pending = ledger.get("pending_plan")
+    if isinstance(pending, dict) and pending.get("status") == "planned":
+        raise ValueError("已有待成交的纸面计划，请先按开盘价成交")
+    snapshot = load_snapshot()
+    last = ledger.get("last_plan")
+    if isinstance(last, dict) and last.get("status") == "filled" and last.get("as_of") == snapshot.get("as_of"):
+        raise ValueError(f"{snapshot.get('as_of')} 的计划已成交，等待下一个周度信号日")
+    ledger = _build_pending_plan(ledger, snapshot)
     _save_paper(ledger)
     return ledger
 
@@ -514,7 +558,7 @@ def fill_paper(as_of: str | None = None) -> dict[str, Any]:
     return ledger
 
 
-def initialize_paper(capital: float = 250_000.0) -> dict[str, Any]:
+def initialize_paper(capital: float = 250_000.0, *, plan: bool = True) -> dict[str, Any]:
     if not math.isfinite(capital) or capital <= 0:
         raise ValueError("纸面账本初始资金必须大于 0")
     ledger = _paper_default()
@@ -522,7 +566,7 @@ def initialize_paper(capital: float = 250_000.0) -> dict[str, Any]:
     ledger["capital"] = round(capital, 2)
     ledger["cash"] = round(capital, 2)
     _save_paper(ledger)
-    return plan_paper()
+    return plan_paper() if plan else ledger
 
 
 def rebalance_paper() -> dict[str, Any]:

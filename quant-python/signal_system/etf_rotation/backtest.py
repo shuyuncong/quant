@@ -30,9 +30,16 @@ def fee_for(notional: float, slippage: float) -> float:
 
 
 def rebalance_marks(index: pd.Index, rebalance: str = "W") -> set[pd.Timestamp]:
-    """Last actual trading day of each week/month, never an assumed Friday."""
-    period = "W" if rebalance == "W" else "M"
-    marks = pd.Series(index, index=index).groupby(index.to_period(period)).max()
+    """Last actual trading day of each day/week/month.
+
+    ``D`` is used by daily-mark tests and diagnostics.  Unknown frequencies
+    fail closed instead of silently falling back to monthly.
+    """
+    if rebalance == "D":
+        return set(index)
+    if rebalance not in {"W", "M"}:
+        raise ValueError(f"不支持的调仓频率: {rebalance}")
+    marks = pd.Series(index, index=index).groupby(index.to_period(rebalance)).max()
     return set(marks.tolist())
 
 
@@ -40,15 +47,90 @@ def run_panels(close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame, *
                start: str = DEFAULT_START,
                end: str | None = None, initial: float = INITIAL,
                slippage: float = SLIPPAGE, rebalance: str = "W",
-               signal_fn: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Backtest the canonical rules on pre-loaded close/open/volume panels."""
+               signal_fn: Callable[..., dict[str, Any]] | None = None,
+               max_participation: float | None = None,
+               fill_ratio: float = 1.0,
+               extra_slippage_bps: float = 0.0,
+               buy_premium_bps: float = 0.0,
+               sell_discount_bps: float = 0.0,
+               spread_panel: pd.DataFrame | None = None) -> dict[str, Any]:
+    """Backtest the canonical rules on pre-loaded close/open/volume panels.
+
+    Execution stress knobs are opt-in.  With defaults, the canonical result is
+    unchanged; ``max_participation`` caps each order at a fraction of 20-day
+    ADV, ``fill_ratio`` models partial fills, and premium/discount/spread
+    adjust the execution price rather than the signal.
+    """
     if signal_fn is None:
         signal_fn = compute_signal
+    if not 0.0 < float(fill_ratio) <= 1.0:
+        raise ValueError("fill_ratio 必须在 (0, 1]")
+    if max_participation is not None and (
+        not math.isfinite(float(max_participation)) or float(max_participation) <= 0
+    ):
+        raise ValueError("max_participation 必须为正数")
+    if buy_premium_bps < 0 or sell_discount_bps < 0:
+        raise ValueError("premium/discount bps 不能为负")
+    if extra_slippage_bps < 0:
+        raise ValueError("extra_slippage_bps 不能为负")
+    effective_slippage = float(slippage) + float(extra_slippage_bps) / 10000.0
     stop = pd.Timestamp(end) if end else close.index[-1]
     dates = close.loc[pd.Timestamp(start):stop].index
     if len(dates) < 30:
         raise ValueError(f"回测样本过短: {len(dates)} 个交易日")
     marks = rebalance_marks(dates, rebalance)
+    adv20 = volume.rolling(20, min_periods=1).mean() * 100.0
+    execution: dict[str, Any] = {
+        "capped_orders": 0,
+        "partial_fills": 0,
+        "unfilled_notional": 0.0,
+        "spread_panel": spread_panel is not None,
+        "max_participation": max_participation,
+        "fill_ratio": round(float(fill_ratio), 6),
+        "extra_slippage_bps": round(float(extra_slippage_bps), 6),
+        "effective_slippage_bp": int(round(effective_slippage * 10000)),
+        "buy_premium_bps": round(float(buy_premium_bps), 6),
+        "sell_discount_bps": round(float(sell_discount_bps), 6),
+    }
+
+    def _spread(symbol: str, day: pd.Timestamp) -> float:
+        if spread_panel is None:
+            return 0.0
+        try:
+            value = float(spread_panel.loc[day, symbol])
+        except (KeyError, TypeError, ValueError):
+            return 0.0
+        return value if math.isfinite(value) and value > 0 else 0.0
+
+    def exec_price(symbol: str, day: pd.Timestamp, side: str) -> float:
+        base = float(open_[symbol].loc[day])
+        if not math.isfinite(base) or base <= 0:
+            return base
+        spread = _spread(symbol, day)
+        if side == "buy":
+            return base * (1.0 + float(buy_premium_bps) / 10_000.0 + spread)
+        return base * (1.0 - float(sell_discount_bps) / 10_000.0 - spread)
+
+    def apply_execution_limits(symbol: str, day: pd.Timestamp, qty: int, side: str) -> int:
+        requested = int(qty)
+        if requested <= 0:
+            return 0
+        if max_participation is not None:
+            average = float(adv20[symbol].loc[day]) if symbol in adv20.columns else float("nan")
+            if math.isfinite(average) and average > 0:
+                cap = int(float(max_participation) * average / LOT) * LOT
+                if cap < requested:
+                    qty = cap
+                    execution["capped_orders"] += 1
+        if fill_ratio < 1.0:
+            qty = int(qty * float(fill_ratio) / LOT) * LOT
+        qty = max(int(qty), 0)
+        if qty < requested:
+            execution["partial_fills"] += 1
+            price = exec_price(symbol, day, side)
+            if math.isfinite(price) and price > 0:
+                execution["unfilled_notional"] += (requested - qty) * price
+        return qty
 
     positions: dict[str, dict[str, Any]] = {}
     cash = float(initial)
@@ -68,21 +150,25 @@ def run_panels(close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame, *
             equity_open = cash + sum(p["qty"] * float(open_[s].loc[day]) for s, p in positions.items())
             targets = {s: equity_open * w for s, w in pending.items()}
             for symbol in sorted(list(positions)):
-                price = float(open_[symbol].loc[day])
+                base_price = float(open_[symbol].loc[day])
+                price = exec_price(symbol, day, "sell")
+                if not np.isfinite(base_price) or base_price <= 0:
+                    continue
                 if not np.isfinite(price) or price <= 0:
                     continue
                 current = positions[symbol]["qty"]
                 target_value = targets.get(symbol, 0.0)
-                if current * price <= target_value:
+                if current * base_price <= target_value:
                     continue
-                qty = int((current * price - target_value) / price / LOT) * LOT
+                qty = int((current * base_price - target_value) / base_price / LOT) * LOT
                 if target_value <= 0:
                     qty = current
                 qty = min(qty, current)
+                qty = apply_execution_limits(symbol, day, qty, "sell")
                 if qty <= 0:
                     continue
                 notional = qty * price
-                fee = fee_for(notional, slippage)
+                fee = fee_for(notional, effective_slippage)
                 cash += notional - fee
                 held = positions[symbol]["qty"]
                 cost_part = positions[symbol].get("cost_basis", 0.0) * (qty / held) if held > 0 else 0.0
@@ -95,23 +181,27 @@ def run_panels(close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame, *
                     rounds.append(float(positions[symbol].get("realized", 0.0)))
                     del positions[symbol]
             for symbol, target_value in sorted(targets.items()):
-                price = float(open_[symbol].loc[day])
+                base_price = float(open_[symbol].loc[day])
+                price = exec_price(symbol, day, "buy")
+                if not np.isfinite(base_price) or base_price <= 0:
+                    continue
                 if not np.isfinite(price) or price <= 0:
                     continue
                 current = positions.get(symbol, {}).get("qty", 0)
-                delta = target_value - current * price
-                if delta <= price * LOT * 0.5:
+                delta = target_value - current * base_price
+                if delta <= base_price * LOT * 0.5:
                     continue
-                qty = int(delta / price / LOT) * LOT
+                qty = int(delta / base_price / LOT) * LOT
                 if qty <= 0:
                     continue
+                qty = apply_execution_limits(symbol, day, qty, "buy")
                 qty = min(qty, int(cash / price / LOT) * LOT)
-                while qty > 0 and qty * price + fee_for(qty * price, slippage) > cash:
+                while qty > 0 and qty * price + fee_for(qty * price, effective_slippage) > cash:
                     qty -= LOT
                 if qty <= 0:
                     continue
                 notional = qty * price
-                fee = fee_for(notional, slippage)
+                fee = fee_for(notional, effective_slippage)
                 old = positions.get(symbol)
                 if old:
                     old["entry_price"] = (old["entry_price"] * old["qty"] + price * qty) / (old["qty"] + qty)
@@ -172,6 +262,10 @@ def run_panels(close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame, *
         "trades": trades,
         "turnover_x": round(turnover, 2),
         "slippage_bp": int(round(slippage * 10000)),
+        "execution": {
+            **execution,
+            "unfilled_notional": round(float(execution["unfilled_notional"]), 2),
+        },
         "yearly": {str(int(getattr(k, "year", k))): round(v * 100, 2) for k, v in yearly.items()},
         "curve": [
             {"date": day.strftime("%Y-%m-%d"), "equity": round(float(value), 5)}
