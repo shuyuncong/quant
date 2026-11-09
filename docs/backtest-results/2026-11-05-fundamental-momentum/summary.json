@@ -1,0 +1,541 @@
+{
+  "meta": {
+    "version": "fundamental_momentum_study.v1",
+    "sample_start": "2018-01-31",
+    "sample_end": "2026-08-31",
+    "price_end": "2026-10-30",
+    "universe_symbols": 300,
+    "requested_symbols": 300,
+    "signal_dates": 104,
+    "rows": 31200,
+    "eligible_rows": 20562,
+    "data_files": {
+      "financial": {
+        "path": "D:\\tmp\\fund300\\financial_real.jsonl",
+        "sha256": "9bd241149abf6248bb344b9d546a9f393ba3a2e0c556c9f96516c5cc35a847cf"
+      },
+      "market": {
+        "path": "D:\\tmp\\fund300\\market.jsonl",
+        "sha256": "96c239c8a080d8d9139695b187eaa6b2a9634cb9c195e6e3b53cc03898ad9373"
+      },
+      "symbols": {
+        "path": "D:\\tmp\\fund300_symbols.json",
+        "sha256": "177cac2978c0a06d9d3e1db75cc26d0d9cb59347de47a63520b846777296451a"
+      },
+      "prices": {
+        "files": 300,
+        "missing": [],
+        "total_bytes": 35236000,
+        "manifest_sha256": "9b76800f6c7a68eb000cde8fd4d7f3c99972393dd82b31f27b2930415990f77c"
+      }
+    },
+    "pit_rule": "exact announcement date when available; otherwise statutory deadline; report must be available strictly before the signal date",
+    "target": {
+      "sharpe": 1.5,
+      "trade_win_rate_pct": 60.0
+    },
+    "costs": {
+      "commission_pct": 0.0003,
+      "minimum_commission": 5.0,
+      "stamp_tax_pct": 0.001,
+      "slippage_pct": 0.0005,
+      "lot_size": 100,
+      "initial_cash": 250000.0
+    }
+  },
+  "factor_ic": {
+    "mom_12_1": {
+      "days": 101,
+      "ic_1m_mean": -0.0032,
+      "ic_1m_median": -0.0072,
+      "ic_1m_positive_pct": 48.5,
+      "ic_1m_icir": -0.018,
+      "ic_3m_mean": -0.018,
+      "ic_3m_positive_pct": 44.6
+    },
+    "mom_6_1": {
+      "days": 101,
+      "ic_1m_mean": -0.0247,
+      "ic_1m_median": -0.0253,
+      "ic_1m_positive_pct": 46.5,
+      "ic_1m_icir": -0.14,
+      "ic_3m_mean": -0.0156,
+      "ic_3m_positive_pct": 45.5
+    },
+    "mom_3_1": {
+      "days": 101,
+      "ic_1m_mean": -0.023,
+      "ic_1m_median": -0.0245,
+      "ic_1m_positive_pct": 40.6,
+      "ic_1m_icir": -0.137,
+      "ic_3m_mean": -0.0105,
+      "ic_3m_positive_pct": 50.5
+    },
+    "mom_1": {
+      "days": 101,
+      "ic_1m_mean": -0.0462,
+      "ic_1m_median": -0.035,
+      "ic_1m_positive_pct": 37.6,
+      "ic_1m_icir": -0.343,
+      "ic_3m_mean": -0.0423,
+      "ic_3m_positive_pct": 42.6
+    },
+    "vol_60": {
+      "days": 101,
+      "ic_1m_mean": -0.0655,
+      "ic_1m_median": -0.0576,
+      "ic_1m_positive_pct": 35.6,
+      "ic_1m_icir": -0.315,
+      "ic_3m_mean": -0.0967,
+      "ic_3m_positive_pct": 27.7
+    },
+    "earnings_yield": {
+      "days": 101,
+      "ic_1m_mean": 0.0182,
+      "ic_1m_median": 0.0268,
+      "ic_1m_positive_pct": 53.5,
+      "ic_1m_icir": 0.1,
+      "ic_3m_mean": 0.0154,
+      "ic_3m_positive_pct": 50.5
+    },
+    "roe": {
+      "days": 101,
+      "ic_1m_mean": 0.0246,
+      "ic_1m_median": 0.0233,
+      "ic_1m_positive_pct": 55.4,
+      "ic_1m_icir": 0.138,
+      "ic_3m_mean": 0.0108,
+      "ic_3m_positive_pct": 51.5
+    },
+    "debt_ratio": {
+      "days": 101,
+      "ic_1m_mean": -0.011,
+      "ic_1m_median": -0.0092,
+      "ic_1m_positive_pct": 46.5,
+      "ic_1m_icir": -0.102,
+      "ic_3m_mean": -0.0099,
+      "ic_3m_positive_pct": 48.5
+    },
+    "roe_yoy": {
+      "days": 101,
+      "ic_1m_mean": 0.0169,
+      "ic_1m_median": 0.0358,
+      "ic_1m_positive_pct": 59.4,
+      "ic_1m_icir": 0.136,
+      "ic_3m_mean": 0.0093,
+      "ic_3m_positive_pct": 53.5
+    },
+    "earnings_surprise_75": {
+      "days": 49,
+      "ic_1m_mean": 0.0516,
+      "ic_1m_median": 0.0675,
+      "ic_1m_positive_pct": 69.4,
+      "ic_1m_icir": 0.381,
+      "ic_3m_mean": 0.0414,
+      "ic_3m_positive_pct": 59.2
+    },
+    "earnings_surprise_90": {
+      "days": 54,
+      "ic_1m_mean": 0.0456,
+      "ic_1m_median": 0.069,
+      "ic_1m_positive_pct": 66.7,
+      "ic_1m_icir": 0.326,
+      "ic_3m_mean": 0.0368,
+      "ic_3m_positive_pct": 57.4
+    },
+    "earnings_surprise_120": {
+      "days": 74,
+      "ic_1m_mean": 0.0279,
+      "ic_1m_median": 0.0429,
+      "ic_1m_positive_pct": 62.2,
+      "ic_1m_icir": 0.204,
+      "ic_3m_mean": 0.0145,
+      "ic_3m_positive_pct": 52.7
+    },
+    "quality": {
+      "days": 101,
+      "ic_1m_mean": 0.0268,
+      "ic_1m_median": 0.0298,
+      "ic_1m_positive_pct": 55.4,
+      "ic_1m_icir": 0.219,
+      "ic_3m_mean": 0.0172,
+      "ic_3m_positive_pct": 57.4
+    },
+    "value": {
+      "days": 101,
+      "ic_1m_mean": 0.0182,
+      "ic_1m_median": 0.0268,
+      "ic_1m_positive_pct": 53.5,
+      "ic_1m_icir": 0.1,
+      "ic_3m_mean": 0.0154,
+      "ic_3m_positive_pct": 50.5
+    },
+    "momentum": {
+      "days": 101,
+      "ic_1m_mean": -0.0032,
+      "ic_1m_median": -0.0072,
+      "ic_1m_positive_pct": 48.5,
+      "ic_1m_icir": -0.018,
+      "ic_3m_mean": -0.018,
+      "ic_3m_positive_pct": 44.6
+    },
+    "qvm_lv": {
+      "days": 101,
+      "ic_1m_mean": 0.0363,
+      "ic_1m_median": 0.0419,
+      "ic_1m_positive_pct": 60.4,
+      "ic_1m_icir": 0.201,
+      "ic_3m_mean": 0.037,
+      "ic_3m_positive_pct": 62.4
+    }
+  },
+  "long_only": {
+    "qvm_lv_top20": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 165.11,
+        "cagr_pct": 11.79,
+        "sharpe": 0.625,
+        "max_drawdown_pct": -33.51,
+        "monthly_win_rate_pct": 57.1,
+        "trade_win_rate_pct": 51.1,
+        "trades": 595,
+        "avg_holding_days": 66.8,
+        "avg_exposure_pct": 97.1,
+        "score": "qvm_lv",
+        "top_n": 20,
+        "market_ma": null,
+        "turnover_x": 7.2,
+        "min_cash": 11.82
+      },
+      "equity_last": 662770.14,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top30": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 209.87,
+        "cagr_pct": 13.81,
+        "sharpe": 0.714,
+        "max_drawdown_pct": -32.54,
+        "monthly_win_rate_pct": 55.2,
+        "trade_win_rate_pct": 50.3,
+        "trades": 763,
+        "avg_holding_days": 77.0,
+        "avg_exposure_pct": 97.0,
+        "score": "qvm_lv",
+        "top_n": 30,
+        "market_ma": null,
+        "turnover_x": 6.21,
+        "min_cash": 6.34
+      },
+      "equity_last": 774677.0,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top50": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 196.06,
+        "cagr_pct": 13.21,
+        "sharpe": 0.692,
+        "max_drawdown_pct": -32.04,
+        "monthly_win_rate_pct": 56.2,
+        "trade_win_rate_pct": 51.6,
+        "trades": 1062,
+        "avg_holding_days": 91.5,
+        "avg_exposure_pct": 95.6,
+        "score": "qvm_lv",
+        "top_n": 50,
+        "market_ma": null,
+        "turnover_x": 5.21,
+        "min_cash": 24.12
+      },
+      "equity_last": 740139.71,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "quality_top20": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 77.14,
+        "cagr_pct": 6.76,
+        "sharpe": 0.405,
+        "max_drawdown_pct": -34.02,
+        "monthly_win_rate_pct": 49.5,
+        "trade_win_rate_pct": 47.1,
+        "trades": 223,
+        "avg_holding_days": 164.4,
+        "avg_exposure_pct": 96.2,
+        "score": "quality",
+        "top_n": 20,
+        "market_ma": null,
+        "turnover_x": 3.08,
+        "min_cash": 17.77
+      },
+      "equity_last": 442839.54,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "value_top20": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 77.81,
+        "cagr_pct": 6.8,
+        "sharpe": 0.42,
+        "max_drawdown_pct": -35.21,
+        "monthly_win_rate_pct": 47.6,
+        "trade_win_rate_pct": 54.2,
+        "trades": 253,
+        "avg_holding_days": 140.6,
+        "avg_exposure_pct": 98.4,
+        "score": "value",
+        "top_n": 20,
+        "market_ma": null,
+        "turnover_x": 3.34,
+        "min_cash": 31.65
+      },
+      "equity_last": 444523.73,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "earnings_surprise_75_top20": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 61.35,
+        "cagr_pct": 5.62,
+        "sharpe": 0.394,
+        "max_drawdown_pct": -41.49,
+        "monthly_win_rate_pct": 36.2,
+        "trade_win_rate_pct": 49.2,
+        "trades": 484,
+        "avg_holding_days": 42.7,
+        "avg_exposure_pct": 51.8,
+        "score": "earnings_surprise_75_r",
+        "top_n": 20,
+        "market_ma": null,
+        "turnover_x": 6.77,
+        "min_cash": 5.85
+      },
+      "equity_last": 403367.25,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "earnings_surprise_90_top20": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 94.21,
+        "cagr_pct": 7.89,
+        "sharpe": 0.501,
+        "max_drawdown_pct": -43.43,
+        "monthly_win_rate_pct": 38.1,
+        "trade_win_rate_pct": 50.5,
+        "trades": 493,
+        "avg_holding_days": 45.1,
+        "avg_exposure_pct": 55.1,
+        "score": "earnings_surprise_90_r",
+        "top_n": 20,
+        "market_ma": null,
+        "turnover_x": 6.92,
+        "min_cash": 7.09
+      },
+      "equity_last": 485518.23,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top20_ma200": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 208.4,
+        "cagr_pct": 13.75,
+        "sharpe": 0.861,
+        "max_drawdown_pct": -29.19,
+        "monthly_win_rate_pct": 41.9,
+        "trade_win_rate_pct": 55.2,
+        "trades": 431,
+        "avg_holding_days": 55.8,
+        "avg_exposure_pct": 55.7,
+        "score": "qvm_lv",
+        "top_n": 20,
+        "market_ma": "ma200",
+        "turnover_x": 5.28,
+        "min_cash": 89.32
+      },
+      "equity_last": 771006.76,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top30_ma200": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 227.58,
+        "cagr_pct": 14.53,
+        "sharpe": 0.924,
+        "max_drawdown_pct": -20.71,
+        "monthly_win_rate_pct": 39.0,
+        "trade_win_rate_pct": 53.6,
+        "trades": 560,
+        "avg_holding_days": 64.6,
+        "avg_exposure_pct": 55.3,
+        "score": "qvm_lv",
+        "top_n": 30,
+        "market_ma": "ma200",
+        "turnover_x": 4.61,
+        "min_cash": 360.36
+      },
+      "equity_last": 818948.55,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top50_ma200": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 228.1,
+        "cagr_pct": 14.55,
+        "sharpe": 0.94,
+        "max_drawdown_pct": -17.74,
+        "monthly_win_rate_pct": 39.0,
+        "trade_win_rate_pct": 54.2,
+        "trades": 825,
+        "avg_holding_days": 72.5,
+        "avg_exposure_pct": 54.7,
+        "score": "qvm_lv",
+        "top_n": 50,
+        "market_ma": "ma200",
+        "turnover_x": 4.09,
+        "min_cash": 125.96
+      },
+      "equity_last": 820257.4,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    },
+    "qvm_lv_top30_ma60": {
+      "metrics": {
+        "start": "2018-01-31",
+        "end": "2026-10-30",
+        "total_return_pct": 71.43,
+        "cagr_pct": 6.36,
+        "sharpe": 0.498,
+        "max_drawdown_pct": -21.06,
+        "monthly_win_rate_pct": 39.0,
+        "trade_win_rate_pct": 46.6,
+        "trades": 760,
+        "avg_holding_days": 40.4,
+        "avg_exposure_pct": 45.6,
+        "score": "qvm_lv",
+        "top_n": 30,
+        "market_ma": "ma60",
+        "turnover_x": 5.69,
+        "min_cash": 188.38
+      },
+      "equity_last": 428574.6,
+      "equity_dates": [
+        "2018-01-31",
+        "2026-10-30"
+      ]
+    }
+  },
+  "long_short": {
+    "earnings_surprise_75_q5": {
+      "column": "earnings_surprise_75_r",
+      "quantiles": 5,
+      "months": 104,
+      "active_months": 49,
+      "gross_annualized_pct": 8.72,
+      "gross_sharpe_full": 0.955,
+      "gross_win_rate_full_pct": 28.8,
+      "gross_sharpe_active": 1.447,
+      "gross_win_rate_active_pct": 61.2,
+      "net_annualized_pct": 7.87,
+      "net_sharpe_full": 0.869,
+      "net_win_rate_full_pct": 28.8
+    },
+    "earnings_surprise_75_q10": {
+      "column": "earnings_surprise_75_r",
+      "quantiles": 10,
+      "months": 104,
+      "active_months": 49,
+      "gross_annualized_pct": 10.64,
+      "gross_sharpe_full": 0.915,
+      "gross_win_rate_full_pct": 32.7,
+      "gross_sharpe_active": 1.381,
+      "gross_win_rate_active_pct": 69.4,
+      "net_annualized_pct": 9.79,
+      "net_sharpe_full": 0.847,
+      "net_win_rate_full_pct": 32.7
+    },
+    "earnings_surprise_90_q5": {
+      "column": "earnings_surprise_90_r",
+      "quantiles": 5,
+      "months": 104,
+      "active_months": 54,
+      "gross_annualized_pct": 8.36,
+      "gross_sharpe_full": 0.836,
+      "gross_win_rate_full_pct": 31.7,
+      "gross_sharpe_active": 1.187,
+      "gross_win_rate_active_pct": 61.1,
+      "net_annualized_pct": 7.43,
+      "net_sharpe_full": 0.746,
+      "net_win_rate_full_pct": 30.8
+    },
+    "earnings_surprise_90_q10": {
+      "column": "earnings_surprise_90_r",
+      "quantiles": 10,
+      "months": 104,
+      "active_months": 54,
+      "gross_annualized_pct": 12.2,
+      "gross_sharpe_full": 0.999,
+      "gross_win_rate_full_pct": 35.6,
+      "gross_sharpe_active": 1.437,
+      "gross_win_rate_active_pct": 68.5,
+      "net_annualized_pct": 11.26,
+      "net_sharpe_full": 0.928,
+      "net_win_rate_full_pct": 35.6
+    },
+    "earnings_surprise_120_q10": {
+      "column": "earnings_surprise_120_r",
+      "quantiles": 10,
+      "months": 104,
+      "active_months": 75,
+      "gross_annualized_pct": 11.43,
+      "gross_sharpe_full": 0.777,
+      "gross_win_rate_full_pct": 44.2,
+      "gross_sharpe_active": 0.922,
+      "gross_win_rate_active_pct": 61.3,
+      "net_annualized_pct": 10.14,
+      "net_sharpe_full": 0.69,
+      "net_win_rate_full_pct": 44.2
+    }
+  }
+}

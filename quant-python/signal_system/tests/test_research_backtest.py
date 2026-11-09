@@ -119,6 +119,52 @@ class ResearchBacktestReplayTests(unittest.TestCase):
             for result in evaluate_strategies(frame.iloc[:index + 1], config):
                 self.assertEqual(index in signals[result["strategy_id"]], result["buy"], (index, result))
 
+    def test_future_bars_never_change_prefix_signals_or_replay(self):
+        import numpy as np
+        days = pd.bdate_range("2024-01-01", periods=290)
+        prices = np.linspace(10, 20, 290) + np.sin(np.arange(290) / 5)
+        frame = pd.DataFrame({
+            "datetime": days,
+            "open": prices,
+            "high": prices + .2,
+            "low": prices - .2,
+            "close": prices + .1,
+            "volume": 10000.,
+            "is_closed": True,
+        })
+        cutoff = 240
+        config = {"macd_divergence": {"enabled": True}}
+        base_signals = entry_indices(frame, config)
+
+        mutated = frame.copy()
+        mutated.loc[cutoff + 1:, ["open", "high", "low", "close"]] *= 1.7
+        mutated.loc[cutoff + 1:, "volume"] *= 3
+        future_signals = entry_indices(mutated, config)
+
+        for strategy in STRATEGIES:
+            self.assertEqual(
+                {index for index in base_signals[strategy] if index <= cutoff},
+                {index for index in future_signals[strategy] if index <= cutoff},
+                strategy,
+            )
+        self.assertTrue(any(index <= cutoff for index in base_signals["macd_zero_axis"]))
+
+        symbol = "600000.SH"
+        signals = {symbol: base_signals}
+        calendar = [str(day.date()) for day in days[:cutoff + 1]]
+        options = {
+            "start": calendar[0],
+            "end": calendar[-1],
+            "initial_cash": 100000,
+            "max_positions": 1,
+            "position_size_pct": 1.0,
+        }
+        context = {"backtest": {"price_limit_model": "none"}}
+        base = replay({symbol: frame}, signals, calendar, context, options, "macd_zero_axis")
+        future = replay({symbol: mutated}, signals, calendar, context, options, "macd_zero_axis")
+        self.assertEqual(base["equity_curve"], future["equity_curve"])
+        self.assertEqual(base["trades"], future["trades"])
+
     def test_entry_indices_surfaces_strategy_errors(self):
         # Uptrending prices give the MACD pre-filter real confirmation days to verify.
         import numpy as np

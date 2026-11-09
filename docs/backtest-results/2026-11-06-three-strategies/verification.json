@@ -1,0 +1,16 @@
+{
+  "verified_at": "2026-11-06",
+  "period": "2020-01-02 → 2026-10-30",
+  "checks": {
+    "quality": {
+      "curve_equal": true,
+      "rows": 1653,
+      "metric_diffs": []
+    },
+    "smallcap": {
+      "curve_equal": true,
+      "rows": 1653,
+      "metric_diffs": []
+    }
+  }
+}

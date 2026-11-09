@@ -1,0 +1,57 @@
+{
+  "period": {
+    "start": "2011-12-09",
+    "end": "2026-11-04"
+  },
+  "symbols_requested": 47,
+  "raw_symbols": 47,
+  "nav_symbols": 47,
+  "errors": {},
+  "premium_discount": {
+    "count": 75915,
+    "mean": 0.000133,
+    "std": 0.002222,
+    "p01": -0.003866,
+    "p05": -0.002389,
+    "p50": 0.0,
+    "p95": 0.00284,
+    "p99": 0.005423,
+    "share_abs_gt_1pct": 0.0037,
+    "share_abs_gt_2pct": 0.0011
+  },
+  "spread_proxy_round_trip": {
+    "count": 86016,
+    "mean": 0.004862,
+    "std": 0.006948,
+    "p01": 0.0,
+    "p05": 0.0,
+    "p50": 0.001137,
+    "p95": 0.018595,
+    "p99": 0.029631,
+    "share_abs_gt_1pct": 0.1895,
+    "share_abs_gt_2pct": 0.0401
+  },
+  "spread_proxy_half": {
+    "count": 86016,
+    "mean": 0.002431,
+    "std": 0.003474,
+    "p01": 0.0,
+    "p05": 0.0,
+    "p50": 0.000569,
+    "p95": 0.009297,
+    "p99": 0.014815,
+    "share_abs_gt_1pct": 0.0401,
+    "share_abs_gt_2pct": 0.0031
+  },
+  "data_status": {
+    "premium_discount": "historical NAV + raw close; usable as diagnostic, not a transaction cost",
+    "bid_ask": "high-low Corwin-Schultz proxy; not a quote",
+    "partial_fill": "unavailable; no queue/order-book data",
+    "pit_delisted_universe": "SSE historical scale is available; SZSE historical list is not; current 47 are current-listed"
+  },
+  "notes": [
+    "Premium/discount uses raw close and unit NAV; distributions can create artefacts and are clipped to +/-20%.",
+    "The spread proxy is an estimator from daily high/low; it is not a quoted bid-ask spread.",
+    "Use premium/discount to diagnose entry valuation, not as an extra constant cost on top of market prices."
+  ]
+}

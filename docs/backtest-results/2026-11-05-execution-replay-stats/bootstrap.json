@@ -1,0 +1,93 @@
+{
+  "period": {
+    "start": "2020-01-03",
+    "end": "2026-10-30"
+  },
+  "n_days": 1652,
+  "n_variants": 20,
+  "bootstrap": {
+    "method": "stationary block bootstrap",
+    "n_boot": 10000,
+    "block": 20,
+    "seed": 20261105
+  },
+  "sharpe": {
+    "benchmark": {
+      "sharpe": 1.1979,
+      "ci95_low": 0.5051,
+      "ci95_high": 1.9028,
+      "bootstrap_mean": 1.1994,
+      "bootstrap_std": 0.3574,
+      "n_boot": 10000,
+      "block": 20
+    },
+    "tsmom": {
+      "sharpe": 1.1363,
+      "ci95_low": 0.4689,
+      "ci95_high": 1.8716,
+      "bootstrap_mean": 1.1478,
+      "bootstrap_std": 0.361,
+      "n_boot": 10000,
+      "block": 20
+    }
+  },
+  "paired_diff_benchmark_minus_tsmom": {
+    "sharpe_diff": 0.0616,
+    "ci95_low": -0.4256,
+    "ci95_high": 0.501,
+    "p_value_two_sided": 0.8066,
+    "prob_diff_gt_zero": 0.5967,
+    "n_boot": 10000,
+    "block": 20
+  },
+  "deflated_sharpe": {
+    "benchmark_etf_v5.1_40_35_10": {
+      "deflated_sharpe": 0.86,
+      "observed_daily_sharpe": 0.075458,
+      "expected_max_daily_sharpe": 0.048389,
+      "n_trials": 20,
+      "skew": -0.3679,
+      "kurtosis": 7.1152,
+      "sample_days": 1652
+    },
+    "tsmom_12_1_3asset_vt10": {
+      "deflated_sharpe": 0.82,
+      "observed_daily_sharpe": 0.071579,
+      "expected_max_daily_sharpe": 0.048389,
+      "n_trials": 20,
+      "skew": -0.685,
+      "kurtosis": 9.5766,
+      "sample_days": 1652
+    }
+  },
+  "reality_check": {
+    "best_variant": "tsmom_12_1_3asset",
+    "best_mean_daily_return": 0.000426,
+    "p_value": 0.1771,
+    "n_variants": 20,
+    "n_boot": 10000,
+    "block": 20
+  },
+  "trial_sharpes": {
+    "benchmark_etf_v5.1_40_35_10": 1.1979,
+    "benchmark_etf_v5.1_40_35_10_M": 0.9148,
+    "benchmark_etf_v5.1_40_35_10_D": 0.8918,
+    "tsmom_12_1_3asset": 1.0562,
+    "tsmom_12_1_3asset_W": 0.8699,
+    "tsmom_12_1_3asset_D": 0.7656,
+    "tsmom_12_1_3asset_vt10": 1.1363,
+    "tsmom_12_1_3asset_vt10_W": 0.9833,
+    "tsmom_12_1_3asset_vt10_D": 0.8948,
+    "tsmom_12_1_all": 0.0816,
+    "tsmom_12_1_all_vt10": 0.1542,
+    "tsmom_ma200_3asset": 0.6614,
+    "tsmom_ma200_all": 0.2116,
+    "dual_momentum_gem_vt10": 0.7135,
+    "dual_momentum_top3_vt10": 0.2899,
+    "reversal_5d_top10": 0.0063,
+    "reversal_5d_top20": 0.1136,
+    "reversal_5d_top10_no_filter": 0.0315,
+    "lowvol_60d_top10": 0.447,
+    "lowvol_60d_top20": 0.3396
+  }
+}

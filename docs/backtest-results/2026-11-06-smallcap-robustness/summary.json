@@ -1,0 +1,337 @@
+{
+  "config": {
+    "initial": 250000.0,
+    "start": "2020-01-02",
+    "end": "2026-10-30",
+    "commission_rate": 0.0003,
+    "min_commission": 5.0,
+    "stamp_tax": 0.001,
+    "slippage": 0.0005,
+    "lot": 100,
+    "min_history": 250,
+    "rank_low": 801,
+    "rank_high": 1800,
+    "max_names": 30,
+    "stop_loss": 0.09,
+    "atr_window": 14,
+    "atr_mult": 2.0,
+    "take_profit": 1.0,
+    "protect_1": 0.15,
+    "protect_2": 0.3,
+    "protect_2_stop": 0.1,
+    "pause_days": 10,
+    "cooldown_days": 2,
+    "macd_lookback": 60,
+    "macd_recent": 5,
+    "micro_pct": 0.05,
+    "micro_lookback": 120,
+    "volume_turnover": 10.0,
+    "volume_mult": 2.0
+  },
+  "cases": [
+    {
+      "case": {
+        "name": "base_5bp",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.0005,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 217294.0,
+        "total_return_pct": -13.08,
+        "cagr_pct": -2.03,
+        "sharpe": -0.014,
+        "max_drawdown_pct": -45.45,
+        "daily_win_rate_pct": 52.51,
+        "closed_trades": 5884,
+        "trade_win_rate_pct": 45.82,
+        "payoff": 1.164,
+        "avg_exposure_pct": 73.73,
+        "turnover_x": 366.66,
+        "turnover_annual_x": 53.72,
+        "trades": 11790,
+        "max_drawdown_start": "2020-09-08",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": 7.25,
+          "2021": -0.72,
+          "2022": -8.24,
+          "2023": 0.3,
+          "2024": -13.08,
+          "2025": 14.67,
+          "2026": -11.01
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "slip_10bp",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.001,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 178783.65,
+        "total_return_pct": -28.49,
+        "cagr_pct": -4.79,
+        "sharpe": -0.173,
+        "max_drawdown_pct": -50.04,
+        "daily_win_rate_pct": 52.21,
+        "closed_trades": 5880,
+        "trade_win_rate_pct": 44.78,
+        "payoff": 1.169,
+        "avg_exposure_pct": 73.18,
+        "turnover_x": 364.43,
+        "turnover_annual_x": 53.39,
+        "trades": 11782,
+        "max_drawdown_start": "2020-09-08",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": 4.07,
+          "2021": -3.86,
+          "2022": -11.43,
+          "2023": -1.97,
+          "2024": -14.63,
+          "2025": 11.3,
+          "2026": -13.36
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "slip_20bp",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.002,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 121937.55,
+        "total_return_pct": -51.22,
+        "cagr_pct": -9.98,
+        "sharpe": -0.49,
+        "max_drawdown_pct": -58.8,
+        "daily_win_rate_pct": 51.36,
+        "closed_trades": 5842,
+        "trade_win_rate_pct": 43.32,
+        "payoff": 1.15,
+        "avg_exposure_pct": 71.71,
+        "turnover_x": 358.82,
+        "turnover_annual_x": 52.57,
+        "trades": 11706,
+        "max_drawdown_start": "2020-09-08",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": -1.34,
+          "2021": -9.27,
+          "2022": -15.78,
+          "2023": -8.25,
+          "2024": -20.42,
+          "2025": 3.84,
+          "2026": -14.67
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "rank_501_1500",
+        "rank_low": 501,
+        "rank_high": 1500,
+        "slippage": 0.0005,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 224745.45,
+        "total_return_pct": -10.1,
+        "cagr_pct": -1.55,
+        "sharpe": 0.019,
+        "max_drawdown_pct": -47.53,
+        "daily_win_rate_pct": 53.18,
+        "closed_trades": 5366,
+        "trade_win_rate_pct": 46.25,
+        "payoff": 1.15,
+        "avg_exposure_pct": 76.12,
+        "turnover_x": 334.18,
+        "turnover_annual_x": 48.96,
+        "trades": 10752,
+        "max_drawdown_start": "2022-01-12",
+        "max_drawdown_end": "2024-08-23",
+        "yearly_returns_pct": {
+          "2020": 0.03,
+          "2021": 17.39,
+          "2022": -12.67,
+          "2023": -6.54,
+          "2024": -13.8,
+          "2025": 20.82,
+          "2026": -9.94
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "rank_1000_2000",
+        "rank_low": 1000,
+        "rank_high": 2000,
+        "slippage": 0.0005,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 223601.13,
+        "total_return_pct": -10.56,
+        "cagr_pct": -1.62,
+        "sharpe": 0.01,
+        "max_drawdown_pct": -44.74,
+        "daily_win_rate_pct": 53.72,
+        "closed_trades": 5955,
+        "trade_win_rate_pct": 46.41,
+        "payoff": 1.14,
+        "avg_exposure_pct": 74.21,
+        "turnover_x": 371.17,
+        "turnover_annual_x": 54.38,
+        "trades": 11933,
+        "max_drawdown_start": "2020-08-18",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": 0.66,
+          "2021": 1.54,
+          "2022": -5.46,
+          "2023": -2.92,
+          "2024": -15.76,
+          "2025": 21.05,
+          "2026": -6.5
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "no_industry_cap",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.0005,
+        "pool_size": 50,
+        "dynamic": false,
+        "industry_cap": false
+      },
+      "metrics": {
+        "final_equity": 335495.33,
+        "total_return_pct": 34.2,
+        "cagr_pct": 4.4,
+        "sharpe": 0.303,
+        "max_drawdown_pct": -45.34,
+        "daily_win_rate_pct": 52.69,
+        "closed_trades": 7678,
+        "trade_win_rate_pct": 47.17,
+        "payoff": 1.185,
+        "avg_exposure_pct": 94.2,
+        "turnover_x": 480.71,
+        "turnover_annual_x": 70.43,
+        "trades": 15388,
+        "max_drawdown_start": "2021-09-08",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": 13.14,
+          "2021": 8.01,
+          "2022": -11.97,
+          "2023": 3.93,
+          "2024": 3.54,
+          "2025": 33.23,
+          "2026": -13.0
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "pool_150",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.0005,
+        "pool_size": 150,
+        "dynamic": false,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 356244.47,
+        "total_return_pct": 42.5,
+        "cagr_pct": 5.33,
+        "sharpe": 0.342,
+        "max_drawdown_pct": -47.34,
+        "daily_win_rate_pct": 54.26,
+        "closed_trades": 6975,
+        "trade_win_rate_pct": 47.68,
+        "payoff": 1.176,
+        "avg_exposure_pct": 94.71,
+        "turnover_x": 440.08,
+        "turnover_annual_x": 64.48,
+        "trades": 13981,
+        "max_drawdown_start": "2022-01-06",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": 3.4,
+          "2021": 20.93,
+          "2022": -9.93,
+          "2023": 0.17,
+          "2024": -10.23,
+          "2025": 56.82,
+          "2026": -10.28
+        }
+      },
+      "selection": []
+    },
+    {
+      "case": {
+        "name": "dynamic_3_6",
+        "rank_low": 801,
+        "rank_high": 1800,
+        "slippage": 0.0005,
+        "pool_size": 50,
+        "dynamic": true,
+        "industry_cap": true
+      },
+      "metrics": {
+        "final_equity": 143943.68,
+        "total_return_pct": -42.42,
+        "cagr_pct": -7.77,
+        "sharpe": -0.086,
+        "max_drawdown_pct": -68.09,
+        "daily_win_rate_pct": 50.7,
+        "closed_trades": 1265,
+        "trade_win_rate_pct": 47.11,
+        "payoff": 1.049,
+        "avg_exposure_pct": 97.99,
+        "turnover_x": 624.2,
+        "turnover_annual_x": 91.45,
+        "trades": 2535,
+        "max_drawdown_start": "2020-07-13",
+        "max_drawdown_end": "2024-02-07",
+        "yearly_returns_pct": {
+          "2020": -15.34,
+          "2021": -17.55,
+          "2022": -10.12,
+          "2023": 7.02,
+          "2024": 4.71,
+          "2025": 21.8,
+          "2026": -32.76
+        }
+      },
+      "selection": []
+    }
+  ]
+}

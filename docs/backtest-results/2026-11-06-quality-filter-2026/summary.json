@@ -1,0 +1,1867 @@
+{
+  "config": {
+    "start": "2020-01-02",
+    "end": "2026-10-30",
+    "initial": 250000.0,
+    "pool_size": 100,
+    "max_names": 30,
+    "min_history": 250,
+    "commission_rate": 0.0003,
+    "min_commission": 5.0,
+    "stamp_tax": 0.001,
+    "slippage": 0.0005,
+    "lot": 100
+  },
+  "data": {
+    "current_csi1000": 1000,
+    "current_with_price": 963,
+    "current_missing_price": 37,
+    "quality_symbols": 1000,
+    "quality_report_years": [
+      2018,
+      2025
+    ],
+    "signals": 82
+  },
+  "benchmark_399101": {
+    "total_return_pct": 21.95,
+    "cagr_pct": 2.95,
+    "sharpe": 0.248,
+    "max_drawdown_pct": -43.67,
+    "daily_win_rate_pct": 52.6
+  },
+  "variants": {
+    "baseline": {
+      "final_equity": 1625550.17,
+      "total_return_pct": 542.91,
+      "cagr_pct": 31.34,
+      "sharpe": 1.385,
+      "max_drawdown_pct": -30.15,
+      "max_drawdown_start": "2023-11-20",
+      "max_drawdown_end": "2024-02-05",
+      "daily_win_rate_pct": 56.02,
+      "closed_trades": 302,
+      "trade_win_rate_pct": 74.5,
+      "payoff": 2.85,
+      "avg_exposure_pct": 82.4,
+      "avg_positions": 29.98,
+      "turnover_x": 19.7,
+      "turnover_annual_x": 2.89,
+      "trades": 634,
+      "yearly_returns_pct": {
+        "2020": 26.07,
+        "2021": 68.25,
+        "2022": 4.67,
+        "2023": 42.01,
+        "2024": 28.84,
+        "2025": 73.07,
+        "2026": -8.56
+      },
+      "variant": {
+        "name": "baseline",
+        "quality": "none",
+        "roe_min": 0.0,
+        "roa_min": 0.0
+      }
+    },
+    "quality_loose": {
+      "final_equity": 1320398.52,
+      "total_return_pct": 423.3,
+      "cagr_pct": 27.44,
+      "sharpe": 1.176,
+      "max_drawdown_pct": -28.45,
+      "max_drawdown_start": "2023-07-04",
+      "max_drawdown_end": "2024-02-05",
+      "daily_win_rate_pct": 55.41,
+      "closed_trades": 313,
+      "trade_win_rate_pct": 64.86,
+      "payoff": 2.518,
+      "avg_exposure_pct": 86.27,
+      "avg_positions": 29.98,
+      "turnover_x": 20.25,
+      "turnover_annual_x": 2.97,
+      "trades": 656,
+      "yearly_returns_pct": {
+        "2020": 38.93,
+        "2021": 84.35,
+        "2022": 1.58,
+        "2023": 27.34,
+        "2024": 9.2,
+        "2025": 59.25,
+        "2026": -9.18
+      },
+      "variant": {
+        "name": "quality_loose",
+        "quality": "loose",
+        "roe_min": 8.0,
+        "roa_min": 4.0
+      }
+    },
+    "quality_strict": {
+      "final_equity": 539492.67,
+      "total_return_pct": 113.48,
+      "cagr_pct": 11.75,
+      "sharpe": 0.595,
+      "max_drawdown_pct": -35.54,
+      "max_drawdown_start": "2022-01-17",
+      "max_drawdown_end": "2022-04-26",
+      "daily_win_rate_pct": 53.18,
+      "closed_trades": 131,
+      "trade_win_rate_pct": 48.85,
+      "payoff": 1.94,
+      "avg_exposure_pct": 82.38,
+      "avg_positions": 9.74,
+      "turnover_x": 23.08,
+      "turnover_annual_x": 3.38,
+      "trades": 268,
+      "yearly_returns_pct": {
+        "2020": 3.22,
+        "2021": 53.92,
+        "2022": -5.62,
+        "2023": 14.26,
+        "2024": 0.14,
+        "2025": 40.89,
+        "2026": -11.68
+      },
+      "variant": {
+        "name": "quality_strict",
+        "quality": "strict",
+        "roe_min": 15.0,
+        "roa_min": 10.0
+      }
+    }
+  },
+  "curves": "            benchmark_399101      baseline  quality_loose  quality_strict\n2020-01-02          9890.104  2.528439e+05   2.523233e+05   252709.601013\n2020-01-03          9933.885  2.539229e+05   2.533727e+05   254958.642093\n2020-01-06         10016.667  2.553303e+05   2.568401e+05   258285.035173\n2020-01-07         10140.325  2.587179e+05   2.608570e+05   262957.937566\n2020-01-08         10004.070  2.567506e+05   2.609361e+05   264584.342424\n...                      ...           ...            ...             ...\n2026-10-26         12740.444  1.682114e+06   1.341923e+06   535957.390972\n2026-10-27         12464.626  1.649747e+06   1.320688e+06   521945.684762\n2026-10-28         12673.385  1.695795e+06   1.352757e+06   527886.930851\n2026-10-29         12386.047  1.663681e+06   1.338945e+06   526440.869350\n2026-10-30         12061.402  1.625550e+06   1.320399e+06   539492.668264\n\n[1653 rows x 4 columns]",
+  "quality_counts": [
+    {
+      "signal": "2019-12-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-01-23",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-02-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-04-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-05-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-07-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-08-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-10-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-11-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2020-12-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-01-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-02-26",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-04-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-05-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-07-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-08-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-10-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-11-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2021-12-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-01-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-02-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-04-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-05-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-07-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-08-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-10-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-11-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2022-12-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-01-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-02-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-04-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-05-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-07-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-08-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-09-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-10-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-11-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2023-12-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-01-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-02-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-03-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-04-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-05-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-06-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-07-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-08-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-10-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-11-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2024-12-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-01-27",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-02-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-04-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-05-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-07-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-08-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-10-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-11-28",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2025-12-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-01-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-02-27",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-03-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-04-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-05-29",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-06-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-07-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-08-31",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2026-09-30",
+      "variant": "baseline",
+      "pool": 100,
+      "quality_pass": 0,
+      "target": 30
+    },
+    {
+      "signal": "2019-12-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2020-01-23",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2020-02-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2020-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2020-04-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 35,
+      "target": 30
+    },
+    {
+      "signal": "2020-05-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 33,
+      "target": 30
+    },
+    {
+      "signal": "2020-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 34,
+      "target": 30
+    },
+    {
+      "signal": "2020-07-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 31,
+      "target": 30
+    },
+    {
+      "signal": "2020-08-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2020-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 34,
+      "target": 30
+    },
+    {
+      "signal": "2020-10-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2020-11-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 37,
+      "target": 30
+    },
+    {
+      "signal": "2020-12-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2021-01-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2021-02-26",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2021-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2021-04-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 35,
+      "target": 30
+    },
+    {
+      "signal": "2021-05-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2021-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 37,
+      "target": 30
+    },
+    {
+      "signal": "2021-07-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2021-08-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2021-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2021-10-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2021-11-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2021-12-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2022-01-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 45,
+      "target": 30
+    },
+    {
+      "signal": "2022-02-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2022-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 55,
+      "target": 30
+    },
+    {
+      "signal": "2022-04-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 44,
+      "target": 30
+    },
+    {
+      "signal": "2022-05-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 42,
+      "target": 30
+    },
+    {
+      "signal": "2022-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2022-07-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 43,
+      "target": 30
+    },
+    {
+      "signal": "2022-08-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 45,
+      "target": 30
+    },
+    {
+      "signal": "2022-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 46,
+      "target": 30
+    },
+    {
+      "signal": "2022-10-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 47,
+      "target": 30
+    },
+    {
+      "signal": "2022-11-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 45,
+      "target": 30
+    },
+    {
+      "signal": "2022-12-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 46,
+      "target": 30
+    },
+    {
+      "signal": "2023-01-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 46,
+      "target": 30
+    },
+    {
+      "signal": "2023-02-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2023-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2023-04-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 42,
+      "target": 30
+    },
+    {
+      "signal": "2023-05-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 45,
+      "target": 30
+    },
+    {
+      "signal": "2023-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 44,
+      "target": 30
+    },
+    {
+      "signal": "2023-07-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 47,
+      "target": 30
+    },
+    {
+      "signal": "2023-08-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 49,
+      "target": 30
+    },
+    {
+      "signal": "2023-09-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2023-10-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 51,
+      "target": 30
+    },
+    {
+      "signal": "2023-11-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2023-12-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 49,
+      "target": 30
+    },
+    {
+      "signal": "2024-01-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2024-02-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 48,
+      "target": 30
+    },
+    {
+      "signal": "2024-03-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 47,
+      "target": 30
+    },
+    {
+      "signal": "2024-04-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2024-05-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 29,
+      "target": 29
+    },
+    {
+      "signal": "2024-06-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2024-07-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 33,
+      "target": 30
+    },
+    {
+      "signal": "2024-08-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 37,
+      "target": 30
+    },
+    {
+      "signal": "2024-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2024-10-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2024-11-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 35,
+      "target": 30
+    },
+    {
+      "signal": "2024-12-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2025-01-27",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2025-02-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 39,
+      "target": 30
+    },
+    {
+      "signal": "2025-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2025-04-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 28,
+      "target": 28
+    },
+    {
+      "signal": "2025-05-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 30,
+      "target": 30
+    },
+    {
+      "signal": "2025-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2025-07-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 34,
+      "target": 30
+    },
+    {
+      "signal": "2025-08-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 35,
+      "target": 30
+    },
+    {
+      "signal": "2025-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 31,
+      "target": 30
+    },
+    {
+      "signal": "2025-10-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 33,
+      "target": 30
+    },
+    {
+      "signal": "2025-11-28",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 35,
+      "target": 30
+    },
+    {
+      "signal": "2025-12-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2026-01-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2026-02-27",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 38,
+      "target": 30
+    },
+    {
+      "signal": "2026-03-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 41,
+      "target": 30
+    },
+    {
+      "signal": "2026-04-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 40,
+      "target": 30
+    },
+    {
+      "signal": "2026-05-29",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2026-06-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 33,
+      "target": 30
+    },
+    {
+      "signal": "2026-07-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 36,
+      "target": 30
+    },
+    {
+      "signal": "2026-08-31",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 32,
+      "target": 30
+    },
+    {
+      "signal": "2026-09-30",
+      "variant": "quality_loose",
+      "pool": 100,
+      "quality_pass": 30,
+      "target": 30
+    },
+    {
+      "signal": "2019-12-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 10,
+      "target": 10
+    },
+    {
+      "signal": "2020-01-23",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 10,
+      "target": 10
+    },
+    {
+      "signal": "2020-02-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2020-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 10,
+      "target": 10
+    },
+    {
+      "signal": "2020-04-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2020-05-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2020-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2020-07-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 6,
+      "target": 6
+    },
+    {
+      "signal": "2020-08-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2020-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 11,
+      "target": 11
+    },
+    {
+      "signal": "2020-10-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2020-11-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2020-12-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 15,
+      "target": 15
+    },
+    {
+      "signal": "2021-01-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2021-02-26",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2021-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2021-04-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2021-05-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2021-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 6,
+      "target": 6
+    },
+    {
+      "signal": "2021-07-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2021-08-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2021-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2021-10-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 14,
+      "target": 14
+    },
+    {
+      "signal": "2021-11-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 16,
+      "target": 16
+    },
+    {
+      "signal": "2021-12-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 20,
+      "target": 20
+    },
+    {
+      "signal": "2022-01-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 22,
+      "target": 22
+    },
+    {
+      "signal": "2022-02-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 24,
+      "target": 24
+    },
+    {
+      "signal": "2022-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 24,
+      "target": 24
+    },
+    {
+      "signal": "2022-04-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2022-05-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 10,
+      "target": 10
+    },
+    {
+      "signal": "2022-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2022-07-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2022-08-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 14,
+      "target": 14
+    },
+    {
+      "signal": "2022-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 15,
+      "target": 15
+    },
+    {
+      "signal": "2022-10-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 15,
+      "target": 15
+    },
+    {
+      "signal": "2022-11-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2022-12-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 14,
+      "target": 14
+    },
+    {
+      "signal": "2023-01-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 14,
+      "target": 14
+    },
+    {
+      "signal": "2023-02-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 19,
+      "target": 19
+    },
+    {
+      "signal": "2023-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 19,
+      "target": 19
+    },
+    {
+      "signal": "2023-04-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 11,
+      "target": 11
+    },
+    {
+      "signal": "2023-05-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 11,
+      "target": 11
+    },
+    {
+      "signal": "2023-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 11,
+      "target": 11
+    },
+    {
+      "signal": "2023-07-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2023-08-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2023-09-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2023-10-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2023-11-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 12,
+      "target": 12
+    },
+    {
+      "signal": "2023-12-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 14,
+      "target": 14
+    },
+    {
+      "signal": "2024-01-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 15,
+      "target": 15
+    },
+    {
+      "signal": "2024-02-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 15,
+      "target": 15
+    },
+    {
+      "signal": "2024-03-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 13,
+      "target": 13
+    },
+    {
+      "signal": "2024-04-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-05-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-06-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-07-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 3,
+      "target": 3
+    },
+    {
+      "signal": "2024-08-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-10-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2024-11-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2024-12-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2025-01-27",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2025-02-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2025-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2025-04-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 4,
+      "target": 4
+    },
+    {
+      "signal": "2025-05-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2025-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 6,
+      "target": 6
+    },
+    {
+      "signal": "2025-07-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2025-08-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2025-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2025-10-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2025-11-28",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2025-12-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2026-01-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2026-02-27",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2026-03-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 10,
+      "target": 10
+    },
+    {
+      "signal": "2026-04-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 7,
+      "target": 7
+    },
+    {
+      "signal": "2026-05-29",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 9,
+      "target": 9
+    },
+    {
+      "signal": "2026-06-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 8,
+      "target": 8
+    },
+    {
+      "signal": "2026-07-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 6,
+      "target": 6
+    },
+    {
+      "signal": "2026-08-31",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 5,
+      "target": 5
+    },
+    {
+      "signal": "2026-09-30",
+      "variant": "quality_strict",
+      "pool": 100,
+      "quality_pass": 6,
+      "target": 6
+    }
+  ],
+  "limitations": [
+    "Universe is the 2026-11-05 CSI 1000 snapshot, not historical PIT membership; absolute returns are biased.",
+    "The A/B uses the same fixed universe, so the marginal filter effect is more informative than the level.",
+    "Quality is annual-report data joined to actual disclosure dates; missing actual dates fail the gate.",
+    "Goodwill missing is treated as zero; the abstract source omits some zero/non-applicable items.",
+    "No delisted stocks, no historical minute/tick, no intraday stop sequencing.",
+    "No parameter tuning: loose=ROE 8/ROA 4, strict=ROE 15/ROA 10, plus common balance-sheet/cash-flow gates."
+  ]
+}

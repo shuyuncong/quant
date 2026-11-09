@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三策略净值对比（2020–2026）</title>
+<style>
+:root{--bg:#0b0f14;--panel:#111821;--fg:#e6edf5;--muted:#8b9bb0;--border:#263244;--c1:#5b9cf5;--c2:#39b98a;--c3:#e0a23c;--warning:#e0a23c;--danger:#e06c75;}
+@media (prefers-color-scheme: light){:root{--bg:#f6f8fb;--panel:#ffffff;--fg:#17202b;--muted:#5c6b7c;--border:#dbe3ec;--c1:#2f6fd0;--c2:#16835f;--c3:#b9780e;--warning:#a86a00;--danger:#b23a45;}}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.55}
+main{max-width:1120px;margin:0 auto;padding:32px 20px 56px} h1{font-size:28px;margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:14px;margin:0 0 24px} .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 18px 10px;margin:18px 0;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.card h2{font-size:16px;margin:0 0 10px} .chart{width:100%;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;width:24%} th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+tr:last-child td{border-bottom:0} .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.c1{background:var(--c1)} .c2{background:var(--c2)} .c3{background:var(--c3)} .note{color:var(--muted);font-size:13px;margin:12px 0 0}
+.warn{border-left:3px solid var(--warning);padding:10px 12px;background:color-mix(in srgb,var(--warning) 8%,transparent);border-radius:6px;color:var(--fg);font-size:13px;margin:14px 0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0} .mini{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px}
+.mini b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px} .mini span{font-size:13px} a{color:var(--c1)}
+@media(max-width:760px){.grid{grid-template-columns:1fr} table{font-size:12px} th,td{padding:8px 5px}}
+</style></head><body><main>
+<h1>三策略净值对比（2020–2026）</h1>
+<p class="sub">归一化：各策略 2020-01-02 = 100。三组均为 2020-01-02 → 2026-10-30；2026 为年初至今。</p>
+<div class="grid">
+<div class="mini"><b>质量 A/B baseline</b><span>当前中证 1000 快照池；100→30 最小市值；月度；无质量过滤；2026 快照有选择偏差。</span></div>
+<div class="mini"><b>ETF 生产基准</b><span>40% 核心 + 卫星 ≤35% + 回填 35%；10% vol；周度。</span></div>
+<div class="mini"><b>小市值研究基线</b><span>PIT 排名 801–1800；严格 50 池；静态 30；周度；无止损。</span></div>
+</div>
+<div class="card"><h2>净值曲线</h2><div class="chart"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 520" width="100%" height="auto" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<text x="72" y="32" font-size="19" font-weight="700" fill="currentColor">三策略净值对比（2020-01-02 = 100）</text>
+<text x="72" y="54" font-size="13" fill="var(--muted)">2020-01-02 → 2026-10-30；2026 为年初至今。三组同区间，但股票池/频率/风控不同。</text>
+<line x1="72" y1="449.9" x2="880" y2="449.9" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="453.9" text-anchor="end" font-size="12" fill="var(--muted)">100</text>
+<line x1="72" y1="389.2" x2="880" y2="389.2" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="393.2" text-anchor="end" font-size="12" fill="var(--muted)">200</text>
+<line x1="72" y1="328.6" x2="880" y2="328.6" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="332.6" text-anchor="end" font-size="12" fill="var(--muted)">300</text>
+<line x1="72" y1="267.9" x2="880" y2="267.9" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="271.9" text-anchor="end" font-size="12" fill="var(--muted)">400</text>
+<line x1="72" y1="207.3" x2="880" y2="207.3" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="211.3" text-anchor="end" font-size="12" fill="var(--muted)">500</text>
+<line x1="72" y1="146.6" x2="880" y2="146.6" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="150.6" text-anchor="end" font-size="12" fill="var(--muted)">600</text>
+<line x1="72" y1="86.0" x2="880" y2="86.0" stroke="var(--border)" stroke-width="1" opacity="0.55"/>
+<text x="62" y="90.0" text-anchor="end" font-size="12" fill="var(--muted)">700</text>
+<line x1="72.0" y1="86" x2="72.0" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="72.0" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2020</text>
+<line x1="190.3" y1="86" x2="190.3" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="190.3" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2021</text>
+<line x1="308.6" y1="86" x2="308.6" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="308.6" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2022</text>
+<line x1="426.9" y1="86" x2="426.9" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="426.9" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2023</text>
+<line x1="545.2" y1="86" x2="545.2" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="545.2" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2024</text>
+<line x1="663.8" y1="86" x2="663.8" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="663.8" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2025</text>
+<line x1="782.1" y1="86" x2="782.1" y2="462" stroke="var(--border)" stroke-width="1" opacity="0.32"/>
+<text x="782.1" y="488" text-anchor="middle" font-size="12" fill="var(--muted)">2026</text>
+<polyline points="81.4,448.8 90.8,447.8 100.8,447.7 110.6,448.5 120.6,445.9 130.3,441.7 140.4,431.5 150.4,429.1 160.2,433.8 170.2,431.6 179.9,429.2 190.0,434.1 200.0,438.1 209.1,435.5 219.1,434.1 228.9,432.8 238.9,428.9 248.6,422.6 258.7,417.8 268.7,400.6 278.5,398.7 288.5,399.4 298.2,384.0 308.3,381.9 318.3,390.8 327.4,382.7 337.4,389.8 347.2,402.1 357.2,390.3 366.9,379.0 377.0,365.3 387.0,372.5 396.8,385.7 406.8,376.6 416.5,369.2 426.6,375.9 436.6,363.2 445.7,356.9 455.7,357.7 465.5,361.8 475.5,344.1 485.2,327.9 495.3,327.5 505.3,328.3 515.1,328.0 525.1,330.4 534.8,320.5 544.9,319.3 554.9,357.0 564.3,347.1 574.4,336.2 584.1,314.6 594.1,312.6 603.9,324.5 613.9,326.2 624.0,330.6 633.7,299.8 643.7,281.2 653.4,267.7 663.5,264.2 673.5,261.1 682.6,236.5 692.7,218.6 702.4,222.0 712.4,215.3 722.2,190.8 732.2,160.4 742.3,120.5 752.0,94.5 762.0,102.0 771.7,107.7 781.8,84.1 791.8,62.5 800.9,63.0 811.0,106.0 820.7,71.6 830.7,82.7 840.5,114.2 850.5,112.1 860.6,91.1 870.3,102.4 880.0,120.6" fill="none" stroke="var(--c1)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880.0" cy="120.6" r="3.6" fill="var(--c1)"/>
+<text x="888.0" y="124.6" font-size="11" fill="currentColor">质量基线 643</text>
+<polyline points="81.4,450.9 90.8,447.7 100.8,448.8 110.6,448.8 120.6,447.6 130.3,445.7 140.4,439.5 150.4,439.2 160.2,443.8 170.2,443.8 179.9,441.3 190.0,441.8 200.0,448.0 209.1,446.3 219.1,443.1 228.9,444.9 238.9,442.2 248.6,440.6 258.7,442.5 268.7,440.0 278.5,441.3 288.5,442.9 298.2,436.7 308.3,430.7 318.3,437.0 327.4,435.7 337.4,433.9 347.2,444.0 357.2,437.1 366.9,435.5 377.0,430.3 387.0,430.8 396.8,437.3 406.8,437.1 416.5,430.2 426.6,433.4 436.6,430.3 445.7,427.2 455.7,429.7 465.5,433.1 475.5,432.7 485.2,430.9 495.3,426.9 505.3,429.1 515.1,430.4 525.1,431.0 534.8,427.8 544.9,427.7 554.9,439.7 564.3,438.2 574.4,431.4 584.1,430.7 594.1,432.5 603.9,437.2 613.9,437.3 624.0,437.4 633.7,428.5 643.7,424.0 653.4,418.7 663.5,417.3 673.5,418.1 682.6,413.4 692.7,410.5 702.4,406.9 712.4,404.4 722.2,398.1 732.2,393.1 742.3,386.7 752.0,388.8 762.0,384.0 771.7,381.6 781.8,382.3 791.8,373.8 800.9,368.7 811.0,380.1 820.7,376.0 830.7,382.4 840.5,395.2 850.5,391.2 860.6,383.5 870.3,379.8 880.0,392.9" fill="none" stroke="var(--c3)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880.0" cy="392.9" r="3.6" fill="var(--c3)"/>
+<text x="888.0" y="384.9" font-size="11" fill="currentColor">小市值基线 194</text>
+<polyline points="81.4,449.2 90.8,444.7 100.8,446.1 110.6,444.8 120.6,444.0 130.3,442.4 140.4,438.2 150.4,439.0 160.2,440.8 170.2,442.3 179.9,444.7 190.0,440.2 200.0,438.7 209.1,441.0 219.1,441.3 228.9,439.9 238.9,438.2 248.6,437.9 258.7,437.3 268.7,437.4 278.5,437.7 288.5,437.7 298.2,437.4 308.3,437.8 318.3,437.6 327.4,437.1 337.4,437.1 347.2,435.9 357.2,436.0 366.9,436.3 377.0,435.7 387.0,435.3 396.8,435.6 406.8,435.0 416.5,434.1 426.6,433.6 436.6,433.3 445.7,433.7 455.7,431.9 465.5,433.8 475.5,434.5 485.2,435.4 495.3,434.8 505.3,435.3 515.1,436.0 525.1,434.3 534.8,434.5 544.9,433.8 554.9,433.6 564.3,433.5 574.4,429.3 584.1,427.9 594.1,427.3 603.9,428.8 613.9,428.1 624.0,427.5 633.7,426.0 643.7,425.8 653.4,426.2 663.5,424.6 673.5,422.7 682.6,421.7 692.7,417.9 702.4,417.0 712.4,415.6 722.2,414.2 732.2,414.5 742.3,408.5 752.0,402.8 762.0,400.0 771.7,400.7 781.8,397.4 791.8,391.4 800.9,391.7 811.0,394.7 820.7,391.3 830.7,388.9 840.5,388.8 850.5,393.4 860.6,388.9 870.3,392.0 880.0,395.2" fill="none" stroke="var(--c2)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="880.0" cy="395.2" r="3.6" fill="var(--c2)"/>
+<text x="888.0" y="387.2" font-size="11" fill="currentColor">ETF 190</text>
+<line x1="80" y1="100" x2="104" y2="100" stroke="var(--c1)" stroke-width="2.8"/>
+<text x="112" y="104" font-size="12" fill="currentColor">质量 A/B baseline</text>
+<line x1="80" y1="121" x2="104" y2="121" stroke="var(--c2)" stroke-width="2.8"/>
+<text x="112" y="125" font-size="12" fill="currentColor">ETF 生产基准</text>
+<line x1="80" y1="142" x2="104" y2="142" stroke="var(--c3)" stroke-width="2.8"/>
+<text x="112" y="146" font-size="12" fill="currentColor">小市值研究基线</text>
+<line x1="72" y1="462" x2="880" y2="462" stroke="currentColor" stroke-width="1"/>
+<line x1="72" y1="86" x2="72" y2="462" stroke="currentColor" stroke-width="1"/>
+</svg></div><p class="note">2025–2026 股票日线来自 Sina；全 A 缓存 4,815/4,817 只成功（2 只失败）。质量 baseline 的股票池是 2026 快照，绝对收益不能当真实历史业绩。</p></div>
+<div class="card"><h2>指标</h2><table><thead><tr><th>策略</th><th>区间</th><th>年化</th><th>最大回撤</th><th>夏普</th><th>盈亏比</th><th>胜率</th><th>期末权益</th></tr></thead><tbody><tr><td><span class="dot c1"></span>质量 A/B baseline</td><td>2020-01-02 → 2026-10-30</td><td>31.34%</td><td>−30.15%</td><td>1.385</td><td>2.850</td><td>74.50%</td><td>1,625,550</td></tr>
+<tr><td><span class="dot c2"></span>ETF 生产基准</td><td>2020-01-02 → 2026-10-30</td><td>9.87%</td><td>−10.19%</td><td>1.200</td><td>1.892</td><td>52.94%</td><td>475,245</td></tr>
+<tr><td><span class="dot c3"></span>小市值研究基线</td><td>2020-01-02 → 2026-10-30</td><td>10.19%</td><td>−27.87%</td><td>0.626</td><td>1.258</td><td>47.90%</td><td>484,849</td></tr></tbody></table>
+<p class="note">胜率为交易胜率；盈亏比 = 平均盈利交易 / 平均亏损交易。三者股票池、频率、风控不同，不能只看收益排名。</p></div>
+<div class="card"><h2>年度收益</h2><table><thead><tr><th>策略</th><th>2020</th><th>2021</th><th>2022</th><th>2023</th><th>2024</th><th>2025</th><th>2026 YTD</th></tr></thead><tbody><tr><td>质量 A/B baseline</td><td>26.07%</td><td>68.25%</td><td>4.67%</td><td>42.01%</td><td>28.84%</td><td>73.07%</td><td>−8.56%</td></tr>
+<tr><td>ETF 生产基准</td><td>15.89%</td><td>3.53%</td><td>5.76%</td><td>−0.33%</td><td>11.95%</td><td>31.73%</td><td>1.92%</td></tr>
+<tr><td>小市值研究基线</td><td>13.37%</td><td>16.15%</td><td>−3.42%</td><td>7.35%</td><td>12.57%</td><td>37.54%</td><td>−8.25%</td></tr></tbody></table></div>
+<div class="warn"><b>口径警告：</b>质量 baseline 使用 2026 中证 1000 快照回测历史，存在幸存者/选择偏差；小市值基线仍缺历史 PIT 中证 1000 和退市股行情；2025–2026 为新浪日线拼接。不要把三者末端直接当作可交易业绩。<br><br><b>PIT 校验：</b>把 237 只退市股补进全 A 后，严格 50 小市值基线变为 <b>−2.03% / Sharpe −0.014 / 最大回撤 −45.45%</b>；同规则 100→30 月度的质量 baseline 变为 <b>6.44% / 0.399 / −48.52%</b>，不是图中的 31.34%。详见 <a href="../2026-11-06-pit-smallcap/memo.md">PIT 小市值</a>、<a href="../2026-11-06-pit-quality-baseline/memo.md">PIT 质量 baseline</a>。</div>
+<div class="card"><h2>数据</h2><p class="note">曲线：<a href="three_strategies_curves.csv">three_strategies_curves.csv</a>；指标：<a href="metrics.csv">metrics.csv</a>；年度：<a href="annual_returns.csv">annual_returns.csv</a>；复跑校验：<a href="verification.json">verification.json</a>。</p></div>
+</main></body></html>

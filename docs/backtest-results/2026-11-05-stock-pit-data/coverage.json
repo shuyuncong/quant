@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-11-05T15:01:48Z",
+  "root": "cache\\stock_pit",
+  "universe": {
+    "current_csi1000": 1000,
+    "delisted": 367,
+    "merged": 1367,
+    "current_snapshot": [
+      "2026-11-05"
+    ]
+  },
+  "disclosure": {
+    "rows": 27846,
+    "by_year": {
+      "2019": 3584,
+      "2020": 4054,
+      "2021": 4581,
+      "2022": 4996,
+      "2023": 5266,
+      "2024": 5365
+    },
+    "actual_disclosure_non_null": 27846
+  },
+  "forecast": {
+    "rows": 43828,
+    "by_year": {
+      "2019": 3646,
+      "2020": 8233,
+      "2021": 8029,
+      "2022": 8195,
+      "2023": 8278,
+      "2024": 7447
+    },
+    "announcement_non_null": 43828
+  },
+  "margin": {
+    "rows": 16773,
+    "dates": [
+      "2019-12-31",
+      "2020-12-31",
+      "2021-12-31",
+      "2022-12-30",
+      "2023-12-29",
+      "2024-12-31"
+    ],
+    "by_date": {
+      "2019-12-31": 1738,
+      "2020-12-31": 1992,
+      "2021-12-31": 2407,
+      "2022-12-30": 3316,
+      "2023-12-29": 3602,
+      "2024-12-31": 3718
+    }
+  },
+  "financial_abstract": {
+    "symbols": 1000,
+    "raw_files": 1000,
+    "annual_rows": 152053,
+    "annual_symbols": 1000,
+    "annual_by_year": {
+      "1990": 41,
+      "1991": 72,
+      "1992": 172,
+      "1993": 423,
+      "1994": 597,
+      "1995": 759,
+      "1996": 846,
+      "1997": 1009,
+      "1998": 1364,
+      "1999": 1552,
+      "2000": 1873,
+      "2001": 2062,
+      "2002": 2135,
+      "2003": 2349,
+      "2004": 2555,
+      "2005": 2688,
+      "2006": 3022,
+      "2007": 3696,
+      "2008": 4109,
+      "2009": 4328,
+      "2010": 4406,
+      "2011": 5145,
+      "2012": 5560,
+      "2013": 6124,
+      "2014": 6487,
+      "2015": 6700,
+      "2016": 7034,
+      "2017": 7562,
+      "2018": 7991,
+      "2019": 8353,
+      "2020": 8453,
+      "2021": 8491,
+      "2022": 8512,
+      "2023": 8519,
+      "2024": 8524,
+      "2025": 8540
+    },
+    "pit_rows_by_year": {
+      "2019": 6297,
+      "2020": 6787,
+      "2021": 7393,
+      "2022": 7830,
+      "2023": 8185,
+      "2024": 8410,
+      "2025": 8540
+    },
+    "indicators": [
+      "净资产收益率(ROE)",
+      "商誉",
+      "归母净利润",
+      "总资产报酬率(ROA)",
+      "扣非净利润",
+      "经营现金流量净额",
+      "股东权益合计(净资产)",
+      "营业总收入",
+      "资产负债率"
+    ]
+  },
+  "financial_statements_raw": {
+    "files": 30,
+    "symbols": 10
+  },
+  "pledge": {
+    "available": false,
+    "reason": "stock_gpzy_pledge_ratio_em historical quarter-end calls returned empty/None"
+  },
+  "gaps": [
+    "historical PIT CSI 1000 constituents",
+    "structured audit opinion",
+    "regulatory investigation / filing records",
+    "historical pledge ratios",
+    "delisted stock daily prices",
+    "historical minute/tick/order-book data",
+    "historical total market cap",
+    "historical PIT CSI 1000 membership (still paid-only)",
+    "delisted stock daily prices (partial)"
+  ],
+  "prices_2025_2026": {
+    "symbols": 4815,
+    "files": 4815,
+    "start": "2025-01-02",
+    "end": "2026-10-30",
+    "errors": [
+      "601059",
+      "601198"
+    ]
+  }
+}
