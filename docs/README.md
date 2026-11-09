@@ -41,6 +41,8 @@
   - 46 只行业/主题 ETF 的 point-in-time 池、核心黄金/国债 20%–40%、板块 30%–70%、常态 75%；v5/v5.1 严格分池正式复测（top1 +97.5%、Sharpe 1.07），含 8/10/12 波动前沿、核心权重网格、成本压力与消融；**运行口径已于 2026-11-04 收敛到 40/35 + 回填**（见 §8.7），页面曲线与实时信号同源
 - [ETF 扩展研究：闸门消融、vol-8 top2、风险诊断与公开控制组](backtest-results/2026-11-04-etf-extended-study/memo.md)
   - 仓库内入口 `signal_system/etf_extended_study.py`（parity 逐位复现 §8.5.3）；无闸门消融 `inconclusive`（全期 +16pp 但 bootstrap 全跨 0、2022 反向）、8% top2 `reject`（波动不降、收益 −21pp）、top2 分散只是名义（持仓相关 0.23、最大相关 p95 0.98）、Faber/GEM/VAA/DAA 控制组无显著差异（DAA vt12 +106% 但 Sharpe 0.90）；不改变生产口径
+- [ETF forward paper ledger（500k）](backtest-results/2026-11-05-forward-paper/README.md)
+  - 纸面账本只记录计划/成交/净值，不接券商；2026-11-09 已补跑 11-06 周度信号，待成交计划为 `511260` 61% + `518880` 14%，下一交易日开盘成交
 - [纳斯达克指数 / QQQ 趋势策略研究](backtest-results/2026-11-08-nasdaq-index/memo.md)
   - 2004-01-02 → 2026-11-06、5,749 日；Yahoo QQQ/`^IXIC`/`^NDX` + FRED 交叉验证；QQQ 买入持有 CAGR 14.33% / Sharpe 0.73 / 回撤 −53.42%，MA200 把回撤降到 −26.42% 但 CAGR 10.04%、Sharpe 0.70，配对 bootstrap 不显著；结论：不投产独立择时，先做组合层叠加
 - [三策略 vs ETF 2020-2026 对比看板](etf-vs-stocks-2020-2026.html)
