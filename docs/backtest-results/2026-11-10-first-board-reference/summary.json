@@ -1,0 +1,501 @@
+{
+  "strategy": "external first-board pullback mechanical shell",
+  "source": "华安证券金融工程 2026-03-18 涨停板背后的Alpha：首板回调策略的系统化探索与实证",
+  "config": {
+    "start": "2019-01-01",
+    "end": "2026-10-30",
+    "min_history": 250,
+    "min_price": 2.0,
+    "min_adv20": 20000000.0,
+    "first_board_lookback": 20,
+    "pullback_min": -0.07,
+    "pullback_max": 0.03,
+    "close_position_max": 0.8,
+    "hold_days": 5,
+    "stop_loss": 0.05,
+    "max_exit_defer": 5,
+    "exclude_one_word": true
+  },
+  "costs": {
+    "base_commission_per_side": 0.0003,
+    "base_stamp_tax_sell": 0.001,
+    "base_slippage": 0.001,
+    "stress_slippage": 0.002,
+    "report_commission_per_side": 0.00025,
+    "report_stamp_tax_sell": 0.0005,
+    "report_slippage": 0.001
+  },
+  "data": {
+    "symbols": 5145,
+    "source": "BaoStock qfq 2016-2024 + local qfq 2025-2026; BSE excluded",
+    "limitations": [
+      "no PIT industry, sector-heat, 封单, 炸板 or sentiment score",
+      "no historical ST list; ST 5% boards are effectively not detected",
+      "qfq prices; dividends not separately modeled",
+      "2024-12-31 splice; cross-splice entries/exits are dropped",
+      "event trades overlap; t-stat is not an independent-sample test"
+    ]
+  },
+  "event_full": {
+    "trades": 23487,
+    "mean_pct": -0.26,
+    "gross_mean_pct": 0.1,
+    "median_pct": -0.56,
+    "std_pct": 4.53,
+    "t_stat": -8.77,
+    "win_rate_pct": 42.45,
+    "gross_win_rate_pct": 46.39,
+    "avg_win_pct": 3.19,
+    "avg_loss_pct": -2.81,
+    "payoff": 1.14,
+    "profit_factor": 0.84,
+    "best_pct": 79.72,
+    "worst_pct": -34.41,
+    "by_exit_reason": {
+      "one_day": {
+        "trades": 21503,
+        "mean_pct": -0.2,
+        "win_rate_pct": 43.13
+      },
+      "ride_end": {
+        "trades": 743,
+        "mean_pct": 9.39,
+        "win_rate_pct": 91.79
+      },
+      "stop": {
+        "trades": 1228,
+        "mean_pct": -7.83,
+        "win_rate_pct": 0.08
+      },
+      "timeout": {
+        "trades": 13,
+        "mean_pct": 66.44,
+        "win_rate_pct": 100.0
+      }
+    }
+  },
+  "event_full_report_cost": {
+    "trades": 23487,
+    "mean_pct": -0.2,
+    "median_pct": -0.5,
+    "t_stat": -6.74,
+    "win_rate_pct": 43.14
+  },
+  "event_report_period_2021_2025": {
+    "trades": 14566,
+    "mean_pct": -0.31,
+    "gross_mean_pct": 0.05,
+    "median_pct": -0.61,
+    "std_pct": 4.45,
+    "t_stat": -8.48,
+    "win_rate_pct": 41.71,
+    "gross_win_rate_pct": 45.65,
+    "avg_win_pct": 3.14,
+    "avg_loss_pct": -2.78,
+    "payoff": 1.13,
+    "profit_factor": 0.81,
+    "best_pct": 73.79,
+    "worst_pct": -23.83,
+    "by_exit_reason": {
+      "one_day": {
+        "trades": 13336,
+        "mean_pct": -0.23,
+        "win_rate_pct": 42.28
+      },
+      "ride_end": {
+        "trades": 462,
+        "mean_pct": 8.65,
+        "win_rate_pct": 92.64
+      },
+      "stop": {
+        "trades": 760,
+        "mean_pct": -7.89,
+        "win_rate_pct": 0.0
+      },
+      "timeout": {
+        "trades": 8,
+        "mean_pct": 68.81,
+        "win_rate_pct": 100.0
+      }
+    }
+  },
+  "event_report_period_report_cost": {
+    "trades": 14566,
+    "mean_pct": -0.25,
+    "median_pct": -0.55,
+    "t_stat": -6.85,
+    "win_rate_pct": 42.42
+  },
+  "event_design_2021_2023": {
+    "trades": 8246,
+    "mean_pct": -0.25,
+    "gross_mean_pct": 0.11,
+    "median_pct": -0.59,
+    "std_pct": 4.25,
+    "t_stat": -5.28,
+    "win_rate_pct": 41.79,
+    "gross_win_rate_pct": 45.86,
+    "avg_win_pct": 3.07,
+    "avg_loss_pct": -2.63,
+    "payoff": 1.17,
+    "profit_factor": 0.84,
+    "best_pct": 73.79,
+    "worst_pct": -23.29,
+    "by_exit_reason": {
+      "one_day": {
+        "trades": 7618,
+        "mean_pct": -0.21,
+        "win_rate_pct": 42.07
+      },
+      "ride_end": {
+        "trades": 253,
+        "mean_pct": 8.27,
+        "win_rate_pct": 93.28
+      },
+      "stop": {
+        "trades": 370,
+        "mean_pct": -7.75,
+        "win_rate_pct": 0.0
+      },
+      "timeout": {
+        "trades": 5,
+        "mean_pct": 72.03,
+        "win_rate_pct": 100.0
+      }
+    }
+  },
+  "event_holdout_2024_2025": {
+    "trades": 6320,
+    "mean_pct": -0.4,
+    "gross_mean_pct": -0.04,
+    "median_pct": -0.63,
+    "std_pct": 4.71,
+    "t_stat": -6.74,
+    "win_rate_pct": 41.6,
+    "gross_win_rate_pct": 45.36,
+    "avg_win_pct": 3.23,
+    "avg_loss_pct": -2.98,
+    "payoff": 1.08,
+    "profit_factor": 0.77,
+    "best_pct": 68.92,
+    "worst_pct": -23.83,
+    "by_exit_reason": {
+      "one_day": {
+        "trades": 5718,
+        "mean_pct": -0.26,
+        "win_rate_pct": 42.57
+      },
+      "stop": {
+        "trades": 390,
+        "mean_pct": -8.02,
+        "win_rate_pct": 0.0
+      },
+      "ride_end": {
+        "trades": 209,
+        "mean_pct": 9.11,
+        "win_rate_pct": 91.87
+      },
+      "timeout": {
+        "trades": 3,
+        "mean_pct": 63.44,
+        "win_rate_pct": 100.0
+      }
+    }
+  },
+  "event_latest_2026": {
+    "trades": 3396,
+    "mean_pct": -0.41,
+    "gross_mean_pct": -0.05,
+    "median_pct": -0.75,
+    "std_pct": 4.48,
+    "t_stat": -5.38,
+    "win_rate_pct": 41.87,
+    "gross_win_rate_pct": 45.29,
+    "avg_win_pct": 3.27,
+    "avg_loss_pct": -3.07,
+    "payoff": 1.07,
+    "profit_factor": 0.77,
+    "best_pct": 57.12,
+    "worst_pct": -17.51,
+    "by_exit_reason": {
+      "one_day": {
+        "trades": 3053,
+        "mean_pct": -0.27,
+        "win_rate_pct": 43.24
+      },
+      "stop": {
+        "trades": 235,
+        "mean_pct": -7.44,
+        "win_rate_pct": 0.43
+      },
+      "ride_end": {
+        "trades": 107,
+        "mean_pct": 10.41,
+        "win_rate_pct": 93.46
+      },
+      "timeout": {
+        "trades": 1,
+        "mean_pct": 57.12,
+        "win_rate_pct": 100.0
+      }
+    }
+  },
+  "event_yearly_base": {
+    "2019": {
+      "trades": 2547,
+      "mean_pct": -0.22,
+      "win_rate_pct": 43.35
+    },
+    "2020": {
+      "trades": 2978,
+      "mean_pct": 0.14,
+      "win_rate_pct": 45.97
+    },
+    "2021": {
+      "trades": 2940,
+      "mean_pct": -0.17,
+      "win_rate_pct": 43.37
+    },
+    "2022": {
+      "trades": 3077,
+      "mean_pct": -0.19,
+      "win_rate_pct": 43.65
+    },
+    "2023": {
+      "trades": 2229,
+      "mean_pct": -0.43,
+      "win_rate_pct": 37.15
+    },
+    "2024": {
+      "trades": 3211,
+      "mean_pct": -0.58,
+      "win_rate_pct": 40.98
+    },
+    "2025": {
+      "trades": 3109,
+      "mean_pct": -0.21,
+      "win_rate_pct": 42.23
+    },
+    "2026": {
+      "trades": 3396,
+      "mean_pct": -0.41,
+      "win_rate_pct": 41.87
+    }
+  },
+  "event_yearly_report_cost": {
+    "2019": {
+      "trades": 2547,
+      "mean_pct": -0.16,
+      "win_rate_pct": 44.05
+    },
+    "2020": {
+      "trades": 2978,
+      "mean_pct": 0.2,
+      "win_rate_pct": 46.57
+    },
+    "2021": {
+      "trades": 2940,
+      "mean_pct": -0.11,
+      "win_rate_pct": 43.88
+    },
+    "2022": {
+      "trades": 3077,
+      "mean_pct": -0.13,
+      "win_rate_pct": 44.52
+    },
+    "2023": {
+      "trades": 2229,
+      "mean_pct": -0.37,
+      "win_rate_pct": 37.69
+    },
+    "2024": {
+      "trades": 3211,
+      "mean_pct": -0.53,
+      "win_rate_pct": 41.61
+    },
+    "2025": {
+      "trades": 3109,
+      "mean_pct": -0.15,
+      "win_rate_pct": 43.2
+    },
+    "2026": {
+      "trades": 3396,
+      "mean_pct": -0.35,
+      "win_rate_pct": 42.52
+    }
+  },
+  "buckets_report_period": {
+    "pullback": {
+      "[-0.01, 0.01)": {
+        "trades": 3521,
+        "gross_mean_pct": 0.15,
+        "net_mean_pct": -0.21,
+        "report_cost_mean_pct": -0.15,
+        "median_pct": -0.44,
+        "win_rate_pct": 43.43
+      },
+      "[-0.03, -0.01)": {
+        "trades": 3811,
+        "gross_mean_pct": 0.03,
+        "net_mean_pct": -0.33,
+        "report_cost_mean_pct": -0.27,
+        "median_pct": -0.63,
+        "win_rate_pct": 40.91
+      },
+      "[-0.05, -0.03)": {
+        "trades": 2737,
+        "gross_mean_pct": -0.02,
+        "net_mean_pct": -0.38,
+        "report_cost_mean_pct": -0.32,
+        "median_pct": -0.63,
+        "win_rate_pct": 40.08
+      },
+      "[-0.07, -0.05)": {
+        "trades": 1236,
+        "gross_mean_pct": -0.11,
+        "net_mean_pct": -0.47,
+        "report_cost_mean_pct": -0.41,
+        "median_pct": -1.01,
+        "win_rate_pct": 39.24
+      },
+      "[0.01, 0.03)": {
+        "trades": 3261,
+        "gross_mean_pct": 0.07,
+        "net_mean_pct": -0.29,
+        "report_cost_mean_pct": -0.23,
+        "median_pct": -0.61,
+        "win_rate_pct": 43.08
+      }
+    },
+    "close_position": {
+      "[0.0, 0.2)": {
+        "trades": 5841,
+        "gross_mean_pct": 0.08,
+        "net_mean_pct": -0.28,
+        "report_cost_mean_pct": -0.22,
+        "median_pct": -0.63,
+        "win_rate_pct": 41.48
+      },
+      "[0.2, 0.4)": {
+        "trades": 4365,
+        "gross_mean_pct": -0.06,
+        "net_mean_pct": -0.42,
+        "report_cost_mean_pct": -0.36,
+        "median_pct": -0.67,
+        "win_rate_pct": 40.62
+      },
+      "[0.4, 0.6)": {
+        "trades": 2893,
+        "gross_mean_pct": 0.1,
+        "net_mean_pct": -0.26,
+        "report_cost_mean_pct": -0.2,
+        "median_pct": -0.48,
+        "win_rate_pct": 43.1
+      },
+      "[0.6, 0.8)": {
+        "trades": 1467,
+        "gross_mean_pct": 0.11,
+        "net_mean_pct": -0.25,
+        "report_cost_mean_pct": -0.19,
+        "median_pct": -0.54,
+        "win_rate_pct": 43.08
+      }
+    },
+    "pullback_amount_ratio": {
+      "[0.0, 0.3)": {
+        "trades": 4,
+        "gross_mean_pct": 1.27,
+        "net_mean_pct": 0.91,
+        "report_cost_mean_pct": 0.97,
+        "median_pct": 0.5,
+        "win_rate_pct": 75.0
+      },
+      "[0.3, 0.5)": {
+        "trades": 27,
+        "gross_mean_pct": -0.02,
+        "net_mean_pct": -0.38,
+        "report_cost_mean_pct": -0.32,
+        "median_pct": -0.16,
+        "win_rate_pct": 48.15
+      },
+      "[0.5, 0.75)": {
+        "trades": 840,
+        "gross_mean_pct": 0.03,
+        "net_mean_pct": -0.33,
+        "report_cost_mean_pct": -0.27,
+        "median_pct": -0.47,
+        "win_rate_pct": 43.69
+      },
+      "[0.75, 1.0)": {
+        "trades": 2533,
+        "gross_mean_pct": 0.03,
+        "net_mean_pct": -0.33,
+        "report_cost_mean_pct": -0.27,
+        "median_pct": -0.61,
+        "win_rate_pct": 41.53
+      },
+      "[1.0, 1.5)": {
+        "trades": 5041,
+        "gross_mean_pct": -0.02,
+        "net_mean_pct": -0.38,
+        "report_cost_mean_pct": -0.32,
+        "median_pct": -0.71,
+        "win_rate_pct": 40.33
+      },
+      "[1.5, inf)": {
+        "trades": 6121,
+        "gross_mean_pct": 0.11,
+        "net_mean_pct": -0.25,
+        "report_cost_mean_pct": -0.19,
+        "median_pct": -0.55,
+        "win_rate_pct": 42.59
+      }
+    },
+    "limit_amount_ratio": {
+      "[0.0, 1.0)": {
+        "trades": 733,
+        "gross_mean_pct": 0.27,
+        "net_mean_pct": -0.09,
+        "report_cost_mean_pct": -0.03,
+        "median_pct": -0.54,
+        "win_rate_pct": 42.84
+      },
+      "[1.0, 1.5)": {
+        "trades": 1600,
+        "gross_mean_pct": -0.0,
+        "net_mean_pct": -0.36,
+        "report_cost_mean_pct": -0.3,
+        "median_pct": -0.52,
+        "win_rate_pct": 42.31
+      },
+      "[1.5, 2.0)": {
+        "trades": 2107,
+        "gross_mean_pct": 0.12,
+        "net_mean_pct": -0.23,
+        "report_cost_mean_pct": -0.18,
+        "median_pct": -0.58,
+        "win_rate_pct": 42.15
+      },
+      "[2.0, 3.0)": {
+        "trades": 3786,
+        "gross_mean_pct": 0.19,
+        "net_mean_pct": -0.17,
+        "report_cost_mean_pct": -0.11,
+        "median_pct": -0.5,
+        "win_rate_pct": 43.37
+      },
+      "[3.0, inf)": {
+        "trades": 6340,
+        "gross_mean_pct": -0.08,
+        "net_mean_pct": -0.44,
+        "report_cost_mean_pct": -0.38,
+        "median_pct": -0.7,
+        "win_rate_pct": 40.28
+      }
+    }
+  },
+  "notes": [
+    "Score >= 6 and the five-stage sentiment overlay are not replicated; this is a hard-filter shell, not the report's final strategy.",
+    "No portfolio curve is produced because position sizing and ranking in the report depend on the unavailable score."
+  ]
+}

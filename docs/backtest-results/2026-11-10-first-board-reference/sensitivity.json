@@ -1,0 +1,22 @@
+{
+  "no-close-cap": {
+    "trades": 15017,
+    "net_mean_pct": -0.3156,
+    "report_net_mean_pct": -0.2558,
+    "close_position_ge_0.8": {
+      "trades": 451,
+      "net_mean_pct": -0.4002,
+      "report_net_mean_pct": -0.3404
+    }
+  },
+  "pullback-max-5pct": {
+    "trades": 16907,
+    "net_mean_pct": -0.3169,
+    "report_net_mean_pct": -0.2571,
+    "pullback_gt_0.03": {
+      "trades": 2341,
+      "net_mean_pct": -0.3413,
+      "report_net_mean_pct": -0.2814
+    }
+  }
+}
