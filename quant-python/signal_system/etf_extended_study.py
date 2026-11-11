@@ -106,10 +106,11 @@ class StudyError(RuntimeError):
 # --------------------------------------------------------------------------- data
 
 
-def load_panels(data_dir: Path) -> tuple[dict[str, str], pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_panels(data_dir: Path, extra: tuple[str, ...] = (),
+                ) -> tuple[dict[str, str], pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not data_dir.exists():
         raise StudyError(f"数据目录不存在: {data_dir}")
-    symbols = [*SATELLITE, MARKET, GOLD, BOND]
+    symbols = [*SATELLITE, MARKET, GOLD, BOND, *extra]
     frames: dict[str, pd.DataFrame] = {}
     for symbol in symbols:
         path = data_dir / f"{symbol}_qfq.pkl"
@@ -211,7 +212,8 @@ def make_target(sig: dict[str, Any], panels: dict[str, pd.DataFrame], day: pd.Ti
                 max_picks: int, target_vol: float | None, breadth: bool,
                 crash_overlay: bool, use_market_gate: bool = True,
                 sat_max: float = SAT_MAX, core_mode: str = "winner",
-                core_w: float = CORE_W, backfill: bool = False) -> tuple[dict[str, float], dict[str, Any]]:
+                core_w: float = CORE_W, backfill: bool = False,
+                backfill_trend_only: bool = False) -> tuple[dict[str, float], dict[str, Any]]:
     gate = bool(sig["gate"])
     crash = bool(sig["crash"] and crash_overlay)
     core_mom = sig["core_mom"]
@@ -243,8 +245,12 @@ def make_target(sig: dict[str, Any], panels: dict[str, pd.DataFrame], day: pd.Ti
         for symbol in picks:
             weights[symbol] = weights.get(symbol, 0.0) + sat_budget / len(picks)
     elif backfill:
-        weights[GOLD] = weights.get(GOLD, 0.0) + BACKFILL_WEIGHT * BACKFILL_GOLD
-        weights[BOND] = weights.get(BOND, 0.0) + BACKFILL_WEIGHT * BACKFILL_BOND
+        # `backfill_trend_only` drops a backfill leg whose own 12-1 momentum is
+        # not positive; its share stays in cash instead of being reassigned.
+        for symbol, share in ((GOLD, BACKFILL_GOLD), (BOND, BACKFILL_BOND)):
+            if backfill_trend_only and symbol not in core_mom:
+                continue
+            weights[symbol] = weights.get(symbol, 0.0) + BACKFILL_WEIGHT * share
 
     raw_weights = dict(weights)
     scale = 1.0
@@ -301,6 +307,7 @@ class RunResult:
     trades: int
     turnover: float
     slippage: float
+    holdings: pd.DataFrame | None = None
 
     def metrics(self) -> dict[str, Any]:
         series = self.curve
@@ -341,8 +348,14 @@ def rebalance_days(dates: pd.Index, rebalance: str) -> set[pd.Timestamp]:
 def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
             target_fn: Callable[[pd.Timestamp], dict[str, float]],
             rebalance: str, slippage: float, label: str,
-            trace_fn: Callable[[pd.Timestamp], dict[str, Any]] | None = None) -> RunResult:
-    """Daily mark-to-market with next-open execution, sells before buys."""
+            trace_fn: Callable[[pd.Timestamp], dict[str, Any]] | None = None,
+            band: float = 0.0, keep_holdings: bool = False) -> RunResult:
+    """Daily mark-to-market with next-open execution, sells before buys.
+
+    ``band`` is a no-trade band as a fraction of equity: a position that stays
+    within ``band`` of its target is left alone.  Full exits always trade.
+    ``keep_holdings`` records end-of-day share counts for P&L attribution.
+    """
     if len(dates) < 30:
         raise StudyError(f"{label}: 样本过短 ({len(dates)} 天)")
     marks = rebalance_days(dates, rebalance)
@@ -351,6 +364,7 @@ def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
     pending: dict[str, float] | None = None
     curve: list[tuple[pd.Timestamp, float]] = []
     exposures: list[float] = []
+    holdings: list[dict[str, int]] = []
     trace: list[dict[str, Any]] = []
     trades = 0
     turnover = 0.0
@@ -366,6 +380,8 @@ def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
                 current = positions[symbol]["qty"]
                 target_value = targets.get(symbol, 0.0)
                 if current * price <= target_value:
+                    continue
+                if target_value > 0 and current * price - target_value < band * equity_open:
                     continue
                 qty = int((current * price - target_value) / price / LOT) * LOT
                 if target_value <= 0:
@@ -387,6 +403,8 @@ def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
                 current = positions.get(symbol, {}).get("qty", 0)
                 delta = target_value - current * price
                 if delta <= price * LOT * 0.5:
+                    continue
+                if delta < band * equity_open:
                     continue
                 qty = int(delta / price / LOT) * LOT
                 if qty <= 0:
@@ -412,6 +430,8 @@ def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
         invested = sum(p["qty"] * float(close[s].loc[day]) for s, p in positions.items())
         curve.append((day, equity))
         exposures.append(invested / equity if equity > 0 else 0.0)
+        if keep_holdings:
+            holdings.append({s: p["qty"] for s, p in positions.items()})
 
         if day in marks:
             weights = target_fn(day)
@@ -425,6 +445,7 @@ def execute(close: pd.DataFrame, open_: pd.DataFrame, *, dates: pd.Index,
         label=label, start=str(dates[0].date()), end=str(dates[-1].date()),
         curve=series, exposures=pd.Series(exposures, index=dates), trace=trace,
         trades=trades, turnover=turnover, slippage=slippage,
+        holdings=pd.DataFrame(holdings, index=dates).fillna(0.0) if keep_holdings else None,
     )
 
 

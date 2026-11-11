@@ -74,12 +74,14 @@ def extend_panels(
     symbols: list[str],
     start: str = "2025-01-01",
 ) -> dict[str, pd.DataFrame]:
-    """Append Sina 2025-2026 bars to the baostock 2020-2024 panels.
+    """Append 2025-2026 bars to the baostock 2020-2024 panels.
 
-    Sina files are unadjusted.  Each symbol is scaled so its first 2025 close
-    equals the last 2024 baostock close; this preserves return continuity at
-    the splice.  Market-cap ranking uses amount/turnover, which is unaffected
-    by price scaling.
+    A file that carries a bar on or before the 2024-12-31 splice (the adjusted
+    extension from ``fetch_pit_qfq_extension.py``) is aligned on that overlap
+    bar, so the first 2025 session keeps its real return.  A file without one
+    (unadjusted Sina bars) is scaled so its first 2025 close equals the last
+    2024 baostock close, which zeroes that session's return.  Market-cap
+    ranking uses amount/turnover, which is unaffected by price scaling.
     """
 
     if not price_dir.exists():
@@ -92,12 +94,14 @@ def extend_panels(
         frame = pd.read_csv(path)
         date_column = "date" if "date" in frame.columns else frame.columns[0]
         frame["datetime"] = pd.to_datetime(frame[date_column], errors="coerce")
-        frame = frame[frame["datetime"] >= pd.Timestamp(start)].copy()
-        if frame.empty:
-            continue
+        splice = pd.Timestamp("2024-12-31")
         for column in ["open", "high", "low", "close", "volume", "amount"]:
             if column in frame.columns:
                 frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        anchor = frame[(frame["datetime"] <= splice) & (frame["close"] > 0)].tail(1)
+        frame = frame[(frame["datetime"] > splice) & (frame["datetime"] >= pd.Timestamp(start))].copy()
+        if frame.empty:
+            continue
         if "turnover" in frame.columns:
             frame["turnover_rate"] = pd.to_numeric(frame["turnover"], errors="coerce") * 100.0
         else:
@@ -105,11 +109,16 @@ def extend_panels(
         last_close = panels["close"].get(symbol)
         if last_close is not None:
             last_close = last_close.dropna()
-            last_close = last_close.loc[: pd.Timestamp("2024-12-31")]
+            last_close = last_close.loc[:splice]
         if last_close is not None and not last_close.empty:
-            first_close = frame["close"].dropna()
-            if not first_close.empty and first_close.iloc[0] > 0:
-                scale = float(last_close.iloc[-1]) / float(first_close.iloc[0])
+            scale = None
+            if not anchor.empty and anchor["datetime"].iloc[0] in last_close.index:
+                scale = float(last_close.loc[anchor["datetime"].iloc[0]]) / float(anchor["close"].iloc[0])
+            else:
+                first_close = frame["close"].dropna()
+                if not first_close.empty and first_close.iloc[0] > 0:
+                    scale = float(last_close.iloc[-1]) / float(first_close.iloc[0])
+            if scale is not None:
                 for column in ["open", "high", "low", "close"]:
                     frame[column] = frame[column] * scale
         frame["symbol"] = symbol

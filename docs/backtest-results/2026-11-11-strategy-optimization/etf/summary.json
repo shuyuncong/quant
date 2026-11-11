@@ -1,0 +1,1414 @@
+{
+ "meta": {
+  "generated_at": "2026-11-11T13:58:30",
+  "data_dir": "cache/etf_research_long",
+  "start": "2020-01-02",
+  "end": "2026-10-30",
+  "design_end": "2023-12-31",
+  "holdout_start": "2024-01-01",
+  "initial": 250000.0,
+  "slippage": 0.0005,
+  "stress_slippage": 0.002,
+  "target_vol": 0.1,
+  "cash_etf": "511880",
+  "nasdaq_etf": "513100",
+  "cash_buffer": 0.02,
+  "n_boot": 5000,
+  "acceptance": {
+   "prob_diff_gt_zero": 0.9,
+   "drawdown_tolerance_pp": 1.0,
+   "tested_arms": 9
+  },
+  "script_sha256": "d0377b8b53ee6b77a1b122d5d66d1536e08e73a05a7bc1fa18d5095d6e811fdb",
+  "data_sha256": {
+   "159611_qfq.pkl": "b79e12a008687de2f42c83e83f236bb8fd231329b2305f5c2267f223b84a67a7",
+   "159647_qfq.pkl": "fd6515cf89764d7dc8c4593c604330dec08b14c762c7362a0293785c941ca66e",
+   "159745_qfq.pkl": "4536c2ccd7c80f63017c368bf3fffe54904b3d86a269534655c3673f89554120",
+   "159766_qfq.pkl": "feb2c449225514151e16e663c728532fa5200472439a0d6ec60604c9f4763f1e",
+   "159770_qfq.pkl": "d81b69a3d628b5534a30fb3e0abec0353b087dc27271a41bd1a951d725f055ea",
+   "159825_qfq.pkl": "cc7628d8990c36dac65bced6023fa0767bb1328a18a2ff17b436eeb33cc8f2a6",
+   "159865_qfq.pkl": "012eaaaf3f741b6af1fe40033734c905412c25dfe1c6e7fb343deaac97d06b81",
+   "159869_qfq.pkl": "8fdd0a46da3955a054d031fcfd2ce7d37f09e8d9a77fd9c3b70771f950b9187c",
+   "159870_qfq.pkl": "a3a4604560b5472bebba3a4f188726bfb05fcf9925a39118019a1f7fe31eb622",
+   "159886_qfq.pkl": "64e385431b17841574d73db8f274f87ca455382a599eb7728da1daee95dce8fb",
+   "159915_qfq.pkl": "b82dfca0c8bb5bbceac841416e21c9a4c9c9b3b0658f94c4e0ed95586e207104",
+   "159928_qfq.pkl": "d416baffa6dd977f17709662f39786d0a7c3377339501713ac047589aef7a17c",
+   "159941_qfq.pkl": "b951c8185b1d1fc0537eeb77a7bddf5e7dd8c3f4227964366a4706f1992a8639",
+   "159967_qfq.pkl": "5accc5c4e7a4d25d829973c65da985dbc1163d81977bf18170f22f0be5517ada",
+   "159992_qfq.pkl": "127958c232f9b043ebf1f0ac5d3034c26333ed427765206cfe036828da45b723",
+   "159996_qfq.pkl": "b45af349f3b63f1c2b07ff3e873e9e85f9ca24e69e504033fe19190c4816a698",
+   "159997_qfq.pkl": "faf68bcd1569a07faf48edaef0a092c8a04234b5038693657bba4f9c16f6b16d",
+   "510300_qfq.pkl": "aeabe0fd6c1e8900e7276882baa01febdf80cbe3692a41a84c8c175adfe9a285",
+   "510880_qfq.pkl": "4479bc0a07d51d2d0b5534dd7cd2f044eb1c566f2a20371c5e4f72d90ecadb3a",
+   "511010_qfq.pkl": "fcbfcf4becd261be1793f846479c2fc86b771422f003edb909474ce9eede4cfc",
+   "511090_qfq.pkl": "6f5f561ffb3055b2077e2515c43c946e88636db43ab5fc8edc8d2fd6687ba327",
+   "511260_qfq.pkl": "1d826bf803b1d5ecb4d0268d374d2d2b55cf679a4d3d2dfc7dc68d8ea85d15ef",
+   "511880_qfq.pkl": "6df1d94b08bb743fe9aede326cd41f08a092e0f3eb9dc6cfec9f09ec8a39f2ba",
+   "512010_qfq.pkl": "e3a698346fd77d860e5146fdefde3ea76d7b47ef69977e03c68fc3470a2e0a59",
+   "512040_qfq.pkl": "6e7e95d292ade5ba1ac46217d5b307206a5a0384353f92033991be2a77ab87d0",
+   "512100_qfq.pkl": "e9a966fe1be859211c406e11033b42fbe10d0a209176b3698a25ba94700bf368",
+   "512170_qfq.pkl": "00160da1f58e635e14149ffd481f84a58265e62c84f1c41d834e027ae172fda4",
+   "512200_qfq.pkl": "1597f839c24a6a31505533b311b0b2ce2c15cc2b62114ddfd212a091b402cb80",
+   "512400_qfq.pkl": "ea58d8d8c753ba1d084b52a402a1f8d9e448ff03a78fdc5e17612a3c05d40246",
+   "512480_qfq.pkl": "c0cacebc26600b0c768b61a1533f060eb8edd15def9ff7c5c2fa9490f922054c",
+   "512580_qfq.pkl": "3254570fb069be21ba7619a91c214d1b2db8b16166b8e180f9326dec94a49c2c",
+   "512660_qfq.pkl": "347f4a2a5a096f77280395b18abbc174dcaf19936ce247319c43554062a515b0",
+   "512720_qfq.pkl": "68f46b33455bf2a3213344aea4d1191d00c26bcddd8fc64c9f92b9a12ed6d314",
+   "512760_qfq.pkl": "37127226797ca72c4271d59ba25848a7d6a61892e755871a2811b85adee41949",
+   "512800_qfq.pkl": "db1fab813b47f4ccbde572439b89d43423d01f839ee5eb5e019b8cc4fe4dec8e",
+   "512880_qfq.pkl": "06eb2e81202ecb92b17a9b338ac62adc85e92521ef8de6a52b84ccaa544d730c",
+   "512890_qfq.pkl": "df600fb1c83742e024ab6402fda737dabdfd1fff57aa6f06b36e4f87e63b7603",
+   "512980_qfq.pkl": "5463108163c5223e37e82566c173f6fa74e27074d2e5ac674710a396155f8720",
+   "513100_qfq.pkl": "9c1eaee56b23ea0506c752105bb774cfb972f4b7f2c67d56c1bfc5678162a285",
+   "515000_qfq.pkl": "e50ba14159e215e7914dca85841d1a60e0e1fe80be5f6d2177c883d848f2529f",
+   "515050_qfq.pkl": "97504c2019e9503158e181b423783141ca3142b673fc5daa503fcf0d5eda1a20",
+   "515070_qfq.pkl": "2c9d212eccd6c9e2fbe1352f878497f184d0fcc1d1e9ac04fc0409a7ea06d072",
+   "515170_qfq.pkl": "abae932191e893f6795bd6f8b9cf0c1d17456d7ae03a83ca5d3ea1890d04f6f4",
+   "515210_qfq.pkl": "260ad475629889a9352aceb42015164a03a5bd7241675b4ec79ab40fd88da57d",
+   "515220_qfq.pkl": "e0899a2431cacfa3d87b9a2ecd67b77395358bc13ab21336840fce715e8af0dd",
+   "515230_qfq.pkl": "41ecd4fa21d2adbc410da528290f50adef84c45f9c155f7a421ff6c6eea12a5c",
+   "515790_qfq.pkl": "46d935531e2bf671b7572ffa8a80213c5b0d41c3c8dfd5f0d642a782e180e650",
+   "515880_qfq.pkl": "da101c59444bc87510924cbef57cc0b3d65397bd373ae72029dd51128f945200",
+   "516110_qfq.pkl": "63e7450d927b1cbfa7ac6e249172b6dc978c3bad5cc5b0687f37a12a05edfe4a",
+   "516160_qfq.pkl": "dba6911f690dd151adaf54c0208014e6fd99c9bd659a6941889f13fb48a1deb8",
+   "516510_qfq.pkl": "91ca80e2243eb97c76dc9c810a369e45290a748ce48fac5be186fc87500d4caf",
+   "516780_qfq.pkl": "05f34c485d1075f92b681289489cc0766379b4b9cc18e34be0c0876fca58c071",
+   "516970_qfq.pkl": "bc4091709a6e4a2b0d9db9dbb93b8507a268ce920e5d1208d30cad531ebbd98d",
+   "518880_qfq.pkl": "28f77c029bd76e4af62d8b9d51ee1c0983972ba0c4dd9c92321a3ddfd56d1e5e",
+   "588000_qfq.pkl": "1981c5d47daa384467224d8014e15b621c1d42c5a47a4a5718ce6c299e3c0451"
+  }
+ },
+ "parity": {
+  "expected": [
+   90.1,
+   1.2,
+   -10.19
+  ],
+  "actual": [
+   90.08,
+   1.2,
+   -10.19
+  ],
+  "delta": [
+   -0.02,
+   0.0,
+   0.0
+  ],
+  "tolerance": 0.02,
+  "ok": true
+ },
+ "arms": {
+  "baseline": {
+   "group": "baseline",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 90.08,
+    "cagr_pct": 9.87,
+    "vol_pct": 8.48,
+    "sharpe": 1.198,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 26.46,
+    "cagr_pct": 6.06,
+    "vol_pct": 7.52,
+    "sharpe": 0.85,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.602,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.53,
+    "2022": 5.76,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.73,
+    "2026": 1.92
+   },
+   "avg_exposure": 0.63,
+   "trades": 539,
+   "turnover_x": 72.12,
+   "stress_20bp": {
+    "total_return_pct": 75.18,
+    "cagr_pct": 8.56,
+    "vol_pct": 8.49,
+    "sharpe": 1.05,
+    "max_drawdown_pct": -10.87
+   },
+   "attribution_pct": {
+    "gold": 60.52,
+    "bond": 4.68,
+    "satellite": 31.18,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -6.29,
+    "total": 90.08
+   },
+   "sharpe_ci": {
+    "sharpe": 1.1978,
+    "ci95_low": 0.5047,
+    "ci95_high": 1.897,
+    "bootstrap_mean": 1.1989,
+    "bootstrap_std": 0.3588,
+    "n_boot": 5000,
+    "block": 20
+   }
+  },
+  "core_only": {
+   "group": "attribution",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 47.26,
+    "cagr_pct": 5.83,
+    "vol_pct": 6.35,
+    "sharpe": 0.962,
+    "max_drawdown_pct": -11.5
+   },
+   "design": {
+    "total_return_pct": 13.39,
+    "cagr_pct": 3.2,
+    "vol_pct": 4.71,
+    "sharpe": 0.717,
+    "max_drawdown_pct": -8.62
+   },
+   "holdout": {
+    "total_return_pct": 29.87,
+    "cagr_pct": 9.65,
+    "vol_pct": 8.12,
+    "sharpe": 1.228,
+    "max_drawdown_pct": -11.5
+   },
+   "yearly_pct": {
+    "2020": 4.39,
+    "2021": -1.49,
+    "2022": 3.78,
+    "2023": 6.25,
+    "2024": 10.38,
+    "2025": 20.17,
+    "2026": -2.1
+   },
+   "avg_exposure": 0.38,
+   "trades": 207,
+   "turnover_x": 14.75,
+   "stress_20bp": {
+    "total_return_pct": 44.33,
+    "cagr_pct": 5.52,
+    "vol_pct": 6.36,
+    "sharpe": 0.912,
+    "max_drawdown_pct": -11.65
+   },
+   "attribution_pct": {
+    "gold": 46.86,
+    "bond": 1.89,
+    "satellite": 0.0,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -1.49,
+    "total": 47.26
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": -0.2361,
+     "ci95_low": -0.7899,
+     "ci95_high": 0.3231,
+     "p_value_two_sided": 0.4096,
+     "prob_diff_gt_zero": 0.2048,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.1326,
+     "ci95_low": -0.9687,
+     "ci95_high": 0.6689,
+     "p_value_two_sided": 0.8004,
+     "prob_diff_gt_zero": 0.4002,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": -0.3737,
+     "ci95_low": -1.1048,
+     "ci95_high": 0.3586,
+     "p_value_two_sided": 0.3452,
+     "prob_diff_gt_zero": 0.1726,
+     "n_boot": 5000,
+     "block": 20
+    }
+   }
+  },
+  "core_sat": {
+   "group": "attribution",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 78.38,
+    "cagr_pct": 8.85,
+    "vol_pct": 8.15,
+    "sharpe": 1.124,
+    "max_drawdown_pct": -9.92
+   },
+   "design": {
+    "total_return_pct": 21.98,
+    "cagr_pct": 5.11,
+    "vol_pct": 7.15,
+    "sharpe": 0.759,
+    "max_drawdown_pct": -9.92
+   },
+   "holdout": {
+    "total_return_pct": 46.23,
+    "cagr_pct": 14.34,
+    "vol_pct": 9.39,
+    "sharpe": 1.541,
+    "max_drawdown_pct": -6.16
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.66,
+    "2022": 3.79,
+    "2023": -2.14,
+    "2024": 8.71,
+    "2025": 31.76,
+    "2026": 2.09
+   },
+   "avg_exposure": 0.48,
+   "trades": 471,
+   "turnover_x": 60.96,
+   "stress_20bp": {
+    "total_return_pct": 66.2,
+    "cagr_pct": 7.73,
+    "vol_pct": 8.16,
+    "sharpe": 0.991,
+    "max_drawdown_pct": -10.38
+   },
+   "attribution_pct": {
+    "gold": 51.61,
+    "bond": 2.2,
+    "satellite": 29.93,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -5.36,
+    "total": 78.38
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": -0.0738,
+     "ci95_low": -0.1687,
+     "ci95_high": 0.0152,
+     "p_value_two_sided": 0.1048,
+     "prob_diff_gt_zero": 0.0524,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.0912,
+     "ci95_low": -0.2292,
+     "ci95_high": 0.0314,
+     "p_value_two_sided": 0.1576,
+     "prob_diff_gt_zero": 0.0788,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": -0.0607,
+     "ci95_low": -0.1923,
+     "ci95_high": 0.0532,
+     "p_value_two_sided": 0.3324,
+     "prob_diff_gt_zero": 0.1662,
+     "n_boot": 5000,
+     "block": 20
+    }
+   }
+  },
+  "core_backfill": {
+   "group": "attribution",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 74.19,
+    "cagr_pct": 8.47,
+    "vol_pct": 8.07,
+    "sharpe": 1.09,
+    "max_drawdown_pct": -13.9
+   },
+   "design": {
+    "total_return_pct": 19.9,
+    "cagr_pct": 4.66,
+    "vol_pct": 6.29,
+    "sharpe": 0.782,
+    "max_drawdown_pct": -11.34
+   },
+   "holdout": {
+    "total_return_pct": 45.28,
+    "cagr_pct": 14.07,
+    "vol_pct": 10.06,
+    "sharpe": 1.421,
+    "max_drawdown_pct": -13.9
+   },
+   "yearly_pct": {
+    "2020": 4.41,
+    "2021": -1.05,
+    "2022": 5.76,
+    "2023": 9.74,
+    "2024": 16.52,
+    "2025": 27.43,
+    "2026": -2.16
+   },
+   "avg_exposure": 0.7,
+   "trades": 274,
+   "turnover_x": 18.08,
+   "stress_20bp": {
+    "total_return_pct": 70.21,
+    "cagr_pct": 8.1,
+    "vol_pct": 8.08,
+    "sharpe": 1.045,
+    "max_drawdown_pct": -14.16
+   },
+   "attribution_pct": {
+    "gold": 66.95,
+    "bond": 9.06,
+    "satellite": 0.0,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -1.82,
+    "total": 74.19
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": -0.1076,
+     "ci95_low": -0.6499,
+     "ci95_high": 0.4482,
+     "p_value_two_sided": 0.7068,
+     "prob_diff_gt_zero": 0.3534,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.0674,
+     "ci95_low": -0.8661,
+     "ci95_high": 0.7492,
+     "p_value_two_sided": 0.918,
+     "prob_diff_gt_zero": 0.459,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": -0.1812,
+     "ci95_low": -0.9066,
+     "ci95_high": 0.5748,
+     "p_value_two_sided": 0.6536,
+     "prob_diff_gt_zero": 0.3268,
+     "n_boot": 5000,
+     "block": 20
+    }
+   }
+  },
+  "E1_cash_sleeve": {
+   "group": "optimization",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 95.91,
+    "cagr_pct": 10.35,
+    "vol_pct": 8.47,
+    "sharpe": 1.254,
+    "max_drawdown_pct": -10.04
+   },
+   "design": {
+    "total_return_pct": 29.11,
+    "cagr_pct": 6.61,
+    "vol_pct": 7.5,
+    "sharpe": 0.923,
+    "max_drawdown_pct": -10.04
+   },
+   "holdout": {
+    "total_return_pct": 51.74,
+    "cagr_pct": 15.84,
+    "vol_pct": 9.67,
+    "sharpe": 1.64,
+    "max_drawdown_pct": -6.98
+   },
+   "yearly_pct": {
+    "2020": 16.51,
+    "2021": 4.32,
+    "2022": 6.18,
+    "2023": 0.04,
+    "2024": 12.32,
+    "2025": 32.05,
+    "2026": 2.31
+   },
+   "avg_exposure": 0.97,
+   "trades": 639,
+   "turnover_x": 87.88,
+   "stress_20bp": {
+    "total_return_pct": 77.58,
+    "cagr_pct": 8.78,
+    "vol_pct": 8.47,
+    "sharpe": 1.077,
+    "max_drawdown_pct": -10.88
+   },
+   "attribution_pct": {
+    "gold": 61.71,
+    "bond": 4.75,
+    "satellite": 31.72,
+    "cash_etf": 5.31,
+    "nasdaq": 0.0,
+    "costs": -7.58,
+    "total": 95.91
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.0563,
+     "ci95_low": 0.046,
+     "ci95_high": 0.0686,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0732,
+     "ci95_low": 0.0593,
+     "ci95_high": 0.093,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0384,
+     "ci95_low": 0.0277,
+     "ci95_high": 0.05,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": true,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": true
+  },
+  "E2_backfill_trend": {
+   "group": "optimization",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 89.05,
+    "cagr_pct": 9.78,
+    "vol_pct": 8.46,
+    "sharpe": 1.191,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 25.77,
+    "cagr_pct": 5.92,
+    "vol_pct": 7.48,
+    "sharpe": 0.834,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.603,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.86,
+    "2022": 4.84,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.72,
+    "2026": 1.93
+   },
+   "avg_exposure": 0.62,
+   "trades": 516,
+   "turnover_x": 71.89,
+   "stress_20bp": {
+    "total_return_pct": 74.34,
+    "cagr_pct": 8.48,
+    "vol_pct": 8.47,
+    "sharpe": 1.043,
+    "max_drawdown_pct": -10.87
+   },
+   "attribution_pct": {
+    "gold": 59.51,
+    "bond": 4.68,
+    "satellite": 31.09,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -6.23,
+    "total": 89.05
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": -0.0072,
+     "ci95_low": -0.0517,
+     "ci95_high": 0.0292,
+     "p_value_two_sided": 0.7888,
+     "prob_diff_gt_zero": 0.3944,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.0156,
+     "ci95_low": -0.1085,
+     "ci95_high": 0.0543,
+     "p_value_two_sided": 0.7384,
+     "prob_diff_gt_zero": 0.3692,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0009,
+     "ci95_low": -0.0015,
+     "ci95_high": 0.0036,
+     "p_value_two_sided": 0.5244,
+     "prob_diff_gt_zero": 0.7378,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": false,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": false,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": false
+   },
+   "accepted": false
+  },
+  "E3_band2": {
+   "group": "optimization",
+   "band": 0.02,
+   "full": {
+    "total_return_pct": 89.9,
+    "cagr_pct": 9.85,
+    "vol_pct": 8.51,
+    "sharpe": 1.192,
+    "max_drawdown_pct": -10.2
+   },
+   "design": {
+    "total_return_pct": 26.06,
+    "cagr_pct": 5.98,
+    "vol_pct": 7.55,
+    "sharpe": 0.835,
+    "max_drawdown_pct": -10.2
+   },
+   "holdout": {
+    "total_return_pct": 50.64,
+    "cagr_pct": 15.54,
+    "vol_pct": 9.71,
+    "sharpe": 1.606,
+    "max_drawdown_pct": -7.0
+   },
+   "yearly_pct": {
+    "2020": 15.51,
+    "2021": 3.5,
+    "2022": 5.78,
+    "2023": -0.32,
+    "2024": 12.1,
+    "2025": 31.87,
+    "2026": 1.91
+   },
+   "avg_exposure": 0.63,
+   "trades": 274,
+   "turnover_x": 70.29,
+   "stress_20bp": {
+    "total_return_pct": 75.45,
+    "cagr_pct": 8.59,
+    "vol_pct": 8.52,
+    "sharpe": 1.049,
+    "max_drawdown_pct": -10.88
+   },
+   "attribution_pct": {
+    "gold": 59.61,
+    "bond": 4.68,
+    "satellite": 31.28,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -5.67,
+    "total": 89.9
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": -0.0057,
+     "ci95_low": -0.0212,
+     "ci95_high": 0.0106,
+     "p_value_two_sided": 0.494,
+     "prob_diff_gt_zero": 0.247,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.0144,
+     "ci95_low": -0.0294,
+     "ci95_high": 0.0006,
+     "p_value_two_sided": 0.062,
+     "prob_diff_gt_zero": 0.031,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0042,
+     "ci95_low": -0.0235,
+     "ci95_high": 0.0328,
+     "p_value_two_sided": 0.7724,
+     "prob_diff_gt_zero": 0.6138,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": false,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": false,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "E3s_band5": {
+   "group": "sensitivity",
+   "band": 0.05,
+   "full": {
+    "total_return_pct": 93.92,
+    "cagr_pct": 10.19,
+    "vol_pct": 8.62,
+    "sharpe": 1.216,
+    "max_drawdown_pct": -9.95
+   },
+   "design": {
+    "total_return_pct": 25.52,
+    "cagr_pct": 5.86,
+    "vol_pct": 7.72,
+    "sharpe": 0.804,
+    "max_drawdown_pct": -9.95
+   },
+   "holdout": {
+    "total_return_pct": 54.49,
+    "cagr_pct": 16.57,
+    "vol_pct": 9.74,
+    "sharpe": 1.698,
+    "max_drawdown_pct": -7.08
+   },
+   "yearly_pct": {
+    "2020": 15.63,
+    "2021": 2.93,
+    "2022": 5.78,
+    "2023": -0.3,
+    "2024": 12.12,
+    "2025": 32.33,
+    "2026": 4.13
+   },
+   "avg_exposure": 0.64,
+   "trades": 225,
+   "turnover_x": 68.91,
+   "stress_20bp": {
+    "total_return_pct": 79.48,
+    "cagr_pct": 8.95,
+    "vol_pct": 8.63,
+    "sharpe": 1.077,
+    "max_drawdown_pct": -10.58
+   },
+   "attribution_pct": {
+    "gold": 59.49,
+    "bond": 4.7,
+    "satellite": 35.24,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -5.51,
+    "total": 93.92
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.0181,
+     "ci95_low": -0.0453,
+     "ci95_high": 0.0932,
+     "p_value_two_sided": 0.6452,
+     "prob_diff_gt_zero": 0.6774,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": -0.0458,
+     "ci95_low": -0.1007,
+     "ci95_high": 0.0111,
+     "p_value_two_sided": 0.1148,
+     "prob_diff_gt_zero": 0.0574,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0959,
+     "ci95_low": -0.0088,
+     "ci95_high": 0.2247,
+     "p_value_two_sided": 0.0828,
+     "prob_diff_gt_zero": 0.9586,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": false,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "E4_package": {
+   "group": "optimization",
+   "band": 0.02,
+   "full": {
+    "total_return_pct": 94.77,
+    "cagr_pct": 10.26,
+    "vol_pct": 8.48,
+    "sharpe": 1.242,
+    "max_drawdown_pct": -10.04
+   },
+   "design": {
+    "total_return_pct": 28.13,
+    "cagr_pct": 6.41,
+    "vol_pct": 7.5,
+    "sharpe": 0.897,
+    "max_drawdown_pct": -10.04
+   },
+   "holdout": {
+    "total_return_pct": 52.01,
+    "cagr_pct": 15.91,
+    "vol_pct": 9.69,
+    "sharpe": 1.644,
+    "max_drawdown_pct": -6.94
+   },
+   "yearly_pct": {
+    "2020": 16.23,
+    "2021": 4.7,
+    "2022": 5.25,
+    "2023": 0.04,
+    "2024": 12.46,
+    "2025": 32.15,
+    "2026": 2.29
+   },
+   "avg_exposure": 0.97,
+   "trades": 381,
+   "turnover_x": 86.23,
+   "stress_20bp": {
+    "total_return_pct": 76.64,
+    "cagr_pct": 8.69,
+    "vol_pct": 8.48,
+    "sharpe": 1.066,
+    "max_drawdown_pct": -10.87
+   },
+   "attribution_pct": {
+    "gold": 59.82,
+    "bond": 4.66,
+    "satellite": 31.77,
+    "cash_etf": 5.49,
+    "nasdaq": 0.0,
+    "costs": -6.97,
+    "total": 94.77
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.0447,
+     "ci95_low": 0.0001,
+     "ci95_high": 0.0891,
+     "p_value_two_sided": 0.05,
+     "prob_diff_gt_zero": 0.975,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0473,
+     "ci95_low": -0.0393,
+     "ci95_high": 0.1277,
+     "p_value_two_sided": 0.246,
+     "prob_diff_gt_zero": 0.877,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0419,
+     "ci95_low": 0.0135,
+     "ci95_high": 0.0749,
+     "p_value_two_sided": 0.004,
+     "prob_diff_gt_zero": 0.998,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": true,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": true
+  },
+  "N1_idle10": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 116.83,
+    "cagr_pct": 12.01,
+    "vol_pct": 9.34,
+    "sharpe": 1.311,
+    "max_drawdown_pct": -10.63
+   },
+   "design": {
+    "total_return_pct": 35.21,
+    "cagr_pct": 7.86,
+    "vol_pct": 8.4,
+    "sharpe": 0.977,
+    "max_drawdown_pct": -10.63
+   },
+   "holdout": {
+    "total_return_pct": 60.36,
+    "cagr_pct": 18.12,
+    "vol_pct": 10.53,
+    "sharpe": 1.708,
+    "max_drawdown_pct": -6.83
+   },
+   "yearly_pct": {
+    "2020": 19.68,
+    "2021": 5.68,
+    "2022": 2.86,
+    "2023": 3.94,
+    "2024": 15.41,
+    "2025": 34.01,
+    "2026": 3.68
+   },
+   "avg_exposure": 0.73,
+   "trades": 870,
+   "turnover_x": 78.1,
+   "stress_20bp": {
+    "total_return_pct": 99.71,
+    "cagr_pct": 10.67,
+    "vol_pct": 9.34,
+    "sharpe": 1.176,
+    "max_drawdown_pct": -10.72
+   },
+   "attribution_pct": {
+    "gold": 64.81,
+    "bond": 4.86,
+    "satellite": 33.58,
+    "cash_etf": 0.0,
+    "nasdaq": 20.96,
+    "costs": -7.39,
+    "total": 116.83
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.1133,
+     "ci95_low": -0.0706,
+     "ci95_high": 0.3029,
+     "p_value_two_sided": 0.2192,
+     "prob_diff_gt_zero": 0.8904,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1267,
+     "ci95_low": -0.1524,
+     "ci95_high": 0.4166,
+     "p_value_two_sided": 0.3584,
+     "prob_diff_gt_zero": 0.8208,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1062,
+     "ci95_low": -0.1352,
+     "ci95_high": 0.3623,
+     "p_value_two_sided": 0.388,
+     "prob_diff_gt_zero": 0.806,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "N2_idle20": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 147.92,
+    "cagr_pct": 14.23,
+    "vol_pct": 10.73,
+    "sharpe": 1.345,
+    "max_drawdown_pct": -12.25
+   },
+   "design": {
+    "total_return_pct": 44.69,
+    "cagr_pct": 9.7,
+    "vol_pct": 9.9,
+    "sharpe": 1.02,
+    "max_drawdown_pct": -12.25
+   },
+   "holdout": {
+    "total_return_pct": 71.34,
+    "cagr_pct": 20.91,
+    "vol_pct": 11.8,
+    "sharpe": 1.744,
+    "max_drawdown_pct": -7.9
+   },
+   "yearly_pct": {
+    "2020": 23.47,
+    "2021": 7.9,
+    "2022": 0.09,
+    "2023": 8.5,
+    "2024": 19.11,
+    "2025": 36.37,
+    "2026": 5.49
+   },
+   "avg_exposure": 0.84,
+   "trades": 883,
+   "turnover_x": 83.82,
+   "stress_20bp": {
+    "total_return_pct": 127.72,
+    "cagr_pct": 12.81,
+    "vol_pct": 10.73,
+    "sharpe": 1.224,
+    "max_drawdown_pct": -12.34
+   },
+   "attribution_pct": {
+    "gold": 69.61,
+    "bond": 5.2,
+    "satellite": 36.29,
+    "cash_etf": 0.0,
+    "nasdaq": 44.64,
+    "costs": -7.83,
+    "total": 147.92
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.1472,
+     "ci95_low": -0.1827,
+     "ci95_high": 0.4889,
+     "p_value_two_sided": 0.3728,
+     "prob_diff_gt_zero": 0.8136,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1701,
+     "ci95_low": -0.3161,
+     "ci95_high": 0.6706,
+     "p_value_two_sided": 0.476,
+     "prob_diff_gt_zero": 0.762,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.142,
+     "ci95_low": -0.3007,
+     "ci95_high": 0.608,
+     "p_value_two_sided": 0.5316,
+     "prob_diff_gt_zero": 0.7342,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": false,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "N3_carve10": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 104.15,
+    "cagr_pct": 11.02,
+    "vol_pct": 8.53,
+    "sharpe": 1.32,
+    "max_drawdown_pct": -9.75
+   },
+   "design": {
+    "total_return_pct": 32.41,
+    "cagr_pct": 7.29,
+    "vol_pct": 7.68,
+    "sharpe": 0.989,
+    "max_drawdown_pct": -9.75
+   },
+   "holdout": {
+    "total_return_pct": 54.18,
+    "cagr_pct": 16.49,
+    "vol_pct": 9.59,
+    "sharpe": 1.714,
+    "max_drawdown_pct": -6.29
+   },
+   "yearly_pct": {
+    "2020": 18.04,
+    "2021": 5.34,
+    "2022": 2.36,
+    "2023": 4.03,
+    "2024": 14.21,
+    "2025": 30.43,
+    "2026": 3.51
+   },
+   "avg_exposure": 0.67,
+   "trades": 852,
+   "turnover_x": 68.09,
+   "stress_20bp": {
+    "total_return_pct": 89.23,
+    "cagr_pct": 9.79,
+    "vol_pct": 8.53,
+    "sharpe": 1.184,
+    "max_drawdown_pct": -9.84
+   },
+   "attribution_pct": {
+    "gold": 56.79,
+    "bond": 4.46,
+    "satellite": 29.19,
+    "cash_etf": 0.0,
+    "nasdaq": 20.28,
+    "costs": -6.57,
+    "total": 104.15
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.122,
+     "ci95_low": -0.0803,
+     "ci95_high": 0.3306,
+     "p_value_two_sided": 0.234,
+     "prob_diff_gt_zero": 0.883,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1387,
+     "ci95_low": -0.1682,
+     "ci95_high": 0.4583,
+     "p_value_two_sided": 0.3572,
+     "prob_diff_gt_zero": 0.8214,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1123,
+     "ci95_low": -0.1531,
+     "ci95_high": 0.3938,
+     "p_value_two_sided": 0.4104,
+     "prob_diff_gt_zero": 0.7948,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "N4_carve20": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 118.94,
+    "cagr_pct": 12.17,
+    "vol_pct": 9.26,
+    "sharpe": 1.338,
+    "max_drawdown_pct": -10.59
+   },
+   "design": {
+    "total_return_pct": 38.54,
+    "cagr_pct": 8.52,
+    "vol_pct": 8.65,
+    "sharpe": 1.023,
+    "max_drawdown_pct": -10.59
+   },
+   "holdout": {
+    "total_return_pct": 58.03,
+    "cagr_pct": 17.51,
+    "vol_pct": 10.05,
+    "sharpe": 1.731,
+    "max_drawdown_pct": -6.82
+   },
+   "yearly_pct": {
+    "2020": 20.24,
+    "2021": 7.23,
+    "2022": -1.01,
+    "2023": 8.54,
+    "2024": 16.41,
+    "2025": 29.12,
+    "2026": 5.13
+   },
+   "avg_exposure": 0.71,
+   "trades": 873,
+   "turnover_x": 63.86,
+   "stress_20bp": {
+    "total_return_pct": 104.59,
+    "cagr_pct": 11.06,
+    "vol_pct": 9.26,
+    "sharpe": 1.226,
+    "max_drawdown_pct": -10.66
+   },
+   "attribution_pct": {
+    "gold": 52.57,
+    "bond": 3.92,
+    "satellite": 26.98,
+    "cash_etf": 0.0,
+    "nasdaq": 41.72,
+    "costs": -6.25,
+    "total": 118.94
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.1402,
+     "ci95_low": -0.2461,
+     "ci95_high": 0.5398,
+     "p_value_two_sided": 0.4664,
+     "prob_diff_gt_zero": 0.7668,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1734,
+     "ci95_low": -0.3909,
+     "ci95_high": 0.7518,
+     "p_value_two_sided": 0.5408,
+     "prob_diff_gt_zero": 0.7296,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1293,
+     "ci95_low": -0.3953,
+     "ci95_high": 0.6832,
+     "p_value_two_sided": 0.6252,
+     "prob_diff_gt_zero": 0.6874,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "N5_tsmom20": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 141.38,
+    "cagr_pct": 13.78,
+    "vol_pct": 10.54,
+    "sharpe": 1.329,
+    "max_drawdown_pct": -12.25
+   },
+   "design": {
+    "total_return_pct": 40.9,
+    "cagr_pct": 8.98,
+    "vol_pct": 9.54,
+    "sharpe": 0.983,
+    "max_drawdown_pct": -12.25
+   },
+   "holdout": {
+    "total_return_pct": 71.31,
+    "cagr_pct": 20.9,
+    "vol_pct": 11.8,
+    "sharpe": 1.743,
+    "max_drawdown_pct": -7.92
+   },
+   "yearly_pct": {
+    "2020": 23.47,
+    "2021": 8.3,
+    "2022": 0.41,
+    "2023": 4.94,
+    "2024": 19.11,
+    "2025": 36.37,
+    "2026": 5.47
+   },
+   "avg_exposure": 0.81,
+   "trades": 838,
+   "turnover_x": 85.59,
+   "stress_20bp": {
+    "total_return_pct": 120.81,
+    "cagr_pct": 12.31,
+    "vol_pct": 10.54,
+    "sharpe": 1.2,
+    "max_drawdown_pct": -12.34
+   },
+   "attribution_pct": {
+    "gold": 68.12,
+    "bond": 5.22,
+    "satellite": 35.76,
+    "cash_etf": 0.0,
+    "nasdaq": 40.15,
+    "costs": -7.87,
+    "total": 141.38
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.1312,
+     "ci95_low": -0.1766,
+     "ci95_high": 0.4592,
+     "p_value_two_sided": 0.4156,
+     "prob_diff_gt_zero": 0.7922,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1328,
+     "ci95_low": -0.3124,
+     "ci95_high": 0.6149,
+     "p_value_two_sided": 0.5484,
+     "prob_diff_gt_zero": 0.7258,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1411,
+     "ci95_low": -0.3025,
+     "ci95_high": 0.6066,
+     "p_value_two_sided": 0.5324,
+     "prob_diff_gt_zero": 0.7338,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": false,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  }
+ },
+ "buy_and_hold_reference": {
+  "513100": {
+   "full": {
+    "total_return_pct": 245.52,
+    "cagr_pct": 19.92,
+    "vol_pct": 25.02,
+    "sharpe": 0.882,
+    "max_drawdown_pct": -28.49
+   },
+   "design": {
+    "total_return_pct": 87.19,
+    "cagr_pct": 17.02,
+    "vol_pct": 25.95,
+    "sharpe": 0.759,
+    "max_drawdown_pct": -28.49
+   },
+   "holdout": {
+    "total_return_pct": 84.58,
+    "cagr_pct": 24.12,
+    "vol_pct": 23.66,
+    "sharpe": 1.075,
+    "max_drawdown_pct": -24.01
+   }
+  },
+  "511880": {
+   "full": {
+    "total_return_pct": 12.48,
+    "cagr_pct": 1.74,
+    "vol_pct": 0.23,
+    "sharpe": 7.967,
+    "max_drawdown_pct": -0.2
+   },
+   "design": {
+    "total_return_pct": 8.5,
+    "cagr_pct": 2.07,
+    "vol_pct": 0.23,
+    "sharpe": 9.322,
+    "max_drawdown_pct": -0.09
+   },
+   "holdout": {
+    "total_return_pct": 3.67,
+    "cagr_pct": 1.28,
+    "vol_pct": 0.22,
+    "sharpe": 6.083,
+    "max_drawdown_pct": -0.2
+   }
+  },
+  "518880": {
+   "full": {
+    "total_return_pct": 140.8,
+    "cagr_pct": 13.74,
+    "vol_pct": 17.54,
+    "sharpe": 0.853,
+    "max_drawdown_pct": -31.83
+   },
+   "design": {
+    "total_return_pct": 37.92,
+    "cagr_pct": 8.39,
+    "vol_pct": 13.62,
+    "sharpe": 0.682,
+    "max_drawdown_pct": -20.47
+   },
+   "holdout": {
+    "total_return_pct": 74.59,
+    "cagr_pct": 21.71,
+    "vol_pct": 21.93,
+    "sharpe": 1.049,
+    "max_drawdown_pct": -31.83
+   }
+  },
+  "511260": {
+   "full": {
+    "total_return_pct": 31.46,
+    "cagr_pct": 4.09,
+    "vol_pct": 2.58,
+    "sharpe": 1.628,
+    "max_drawdown_pct": -4.85
+   },
+   "design": {
+    "total_return_pct": 15.69,
+    "cagr_pct": 3.72,
+    "vol_pct": 2.76,
+    "sharpe": 1.386,
+    "max_drawdown_pct": -4.85
+   },
+   "holdout": {
+    "total_return_pct": 13.63,
+    "cagr_pct": 4.61,
+    "vol_pct": 2.31,
+    "sharpe": 2.054,
+    "max_drawdown_pct": -2.27
+   }
+  }
+ }
+}

@@ -90,6 +90,33 @@ class QualityFilterTests(unittest.TestCase):
                 float(extended["turnover_rate"].loc["2025-01-02", "000001"]), 1.0
             )
 
+    def test_extend_panels_aligns_on_overlap_bar(self) -> None:
+        import tempfile
+
+        days = pd.bdate_range("2024-12-30", periods=2)
+        panels = {
+            column: pd.DataFrame({"000001": [10.0, 10.0]}, index=days)
+            for column in ["open", "high", "low", "close", "volume", "amount", "turnover_rate"]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # Extension is on a 5x scale; its 2024-12-31 bar overlaps the panel.
+            (root / "000001.csv").write_text(
+                "date,open,high,low,close,volume,amount,outstanding_share,turnover\n"
+                "2024-12-31,50,50,50,50,10,1000,1000,0.01\n"
+                "2025-01-02,55,55,55,55,10,1000,1000,0.01\n"
+                "2025-01-03,44,44,44,44,10,1100,1000,0.01\n",
+                encoding="utf-8",
+            )
+            extended = extend_panels(panels, root, ["000001"])
+            close = extended["close"]["000001"]
+            # The first 2025 session keeps its +10% instead of being flattened.
+            self.assertAlmostEqual(float(close.loc["2025-01-02"]), 11.0)
+            self.assertAlmostEqual(float(close.loc["2025-01-03"]), 8.8)
+            # The panel's own 2024 bar is not overwritten by the anchor row.
+            self.assertEqual(float(close.loc["2024-12-31"]), 10.0)
+            self.assertEqual(int(close.index.duplicated().sum()), 0)
+
     def test_delisted_panels_add_new_symbol(self) -> None:
         import tempfile
 
