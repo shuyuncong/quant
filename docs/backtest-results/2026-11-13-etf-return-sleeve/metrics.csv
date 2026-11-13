@@ -1,0 +1,5 @@
+arm,group,full_cagr_pct,full_sharpe,full_max_drawdown_pct,design_cagr_pct,design_sharpe,design_max_drawdown_pct,holdout_cagr_pct,holdout_sharpe,holdout_max_drawdown_pct,avg_exposure,turnover_x,stress_20bp_cagr_pct,d_sharpe_full,d_sharpe_design,d_sharpe_holdout,prob_diff_gt_zero,accepted
+baseline,baseline,9.87,1.198,-10.19,6.06,0.85,-10.19,15.45,1.602,-7.02,0.63,72.12,8.56,,,,,
+E1_cash_sleeve,optimization,10.35,1.254,-10.04,6.61,0.923,-10.04,15.84,1.64,-6.98,0.97,87.88,8.78,0.0563,0.0732,0.0384,1.0,True
+N3_carve10,nasdaq,11.02,1.32,-9.75,7.29,0.989,-9.75,16.49,1.714,-6.29,0.67,68.09,9.79,0.122,0.1387,0.1123,0.883,False
+E1N3_cash_carve10,combined,11.45,1.37,-9.71,7.77,1.052,-9.71,16.84,1.749,-6.2,0.97,82.46,9.97,0.1719,0.2022,0.1472,0.9532,True

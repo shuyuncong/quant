@@ -74,6 +74,15 @@ SCENARIOS: list[dict[str, Any]] = [
     },
 ]
 
+CAPACITY_SCENARIOS: list[dict[str, Any]] = [
+    {"label": "baseline", "kwargs": {}},
+    {"label": "adv_1pct", "kwargs": {"max_participation": 0.01}},
+    {"label": "adv_5pct", "kwargs": {"max_participation": 0.05}},
+    {"label": "adv_10pct", "kwargs": {"max_participation": 0.10}},
+    {"label": "spread_5bp", "kwargs": {"extra_slippage_bps": 5}},
+    {"label": "spread_20bp", "kwargs": {"extra_slippage_bps": 20}},
+]
+
 
 def _run_one(close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame, *,
              signal_fn: Callable[..., dict[str, Any]], start: str, end: str,
@@ -120,17 +129,41 @@ def main() -> int:
     parser.add_argument("--start", default=DEFAULT_START)
     parser.add_argument("--end", default=DEFAULT_END)
     parser.add_argument("--initial", type=float, default=250_000.0)
+    parser.add_argument("--capitals", default=None,
+                        help="comma-separated capital levels; default: --initial")
+    parser.add_argument("--capacity-sweep", action="store_true",
+                        help="run baseline + 1/5/10%% ADV + spread scenarios across capital levels")
+    parser.add_argument("--data-dir", default=str(BASE_DIR / "cache" / "etf_research_long"),
+                        help="long-history research cache; falls back to the runtime cache")
     parser.add_argument("--spread-file", default="D:/tmp/etf_microstructure/half_spread.csv")
     args = parser.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    close, volume = load_panel()
-    open_ = load_open_panel()
+    data_dir = Path(args.data_dir)
+    if data_dir.exists():
+        _, close, open_, volume = study.load_panels(data_dir)
+        print(f"loaded panels: {data_dir}", flush=True)
+    else:
+        close, volume = load_panel()
+        open_ = load_open_panel()
+        print("loaded runtime panels", flush=True)
 
-    scenarios = [dict(scenario) for scenario in SCENARIOS]
+    if args.capacity_sweep:
+        scenarios = [dict(scenario) for scenario in CAPACITY_SCENARIOS]
+        default_capitals = [250_000.0, 500_000.0, 1_000_000.0, 2_000_000.0, 5_000_000.0]
+    else:
+        scenarios = [dict(scenario) for scenario in SCENARIOS]
+        default_capitals = [float(args.initial)]
+    if args.capitals:
+        capitals = [float(value) for value in args.capitals.split(",") if value.strip()]
+        if not capitals or any(value <= 0 for value in capitals):
+            raise SystemExit("--capitals must contain positive numbers")
+    else:
+        capitals = default_capitals
+
     spread_path = Path(args.spread_file)
-    if spread_path.exists():
+    if spread_path.exists() and not args.capacity_sweep:
         empirical_spread = pd.read_csv(spread_path, index_col=0)
         empirical_spread.index = pd.to_datetime(empirical_spread.index)
         empirical_spread = empirical_spread.reindex(close.index).ffill().fillna(0.0)
@@ -155,42 +188,45 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     for strategy, spec in strategies.items():
         signal_fn = _cached_fn(caches[strategy])
-        for scenario in scenarios:
-            label = scenario["label"]
-            kwargs = scenario["kwargs"]
-            print(f"{strategy} / {label} ...", flush=True)
-            result = _run_one(
-                close, open_, volume, signal_fn=signal_fn,
-                start=args.start, end=args.end, initial=args.initial,
-                rebalance=spec["rebalance"], kwargs=kwargs,
-            )
-            execution = result.get("execution", {})
-            results.append({
-                "strategy": strategy,
-                "scenario": label,
-                "initial": args.initial,
-                "start": result["start"],
-                "end": result["end"],
-                "cagr_pct": result["cagr_pct"],
-                "sharpe": result["sharpe"],
-                "max_drawdown_pct": result["max_drawdown_pct"],
-                "trade_win_rate_pct": result["trade_win_rate_pct"],
-                "trade_payoff": result["trade_payoff"],
-                "closed_rounds": result["closed_rounds"],
-                "trades": result["trades"],
-                "turnover_x": result["turnover_x"],
-                "avg_exposure": result["avg_exposure"],
-                "execution": execution,
-            })
+        for initial in capitals:
+            for scenario in scenarios:
+                label = scenario["label"]
+                kwargs = scenario["kwargs"]
+                print(f"{strategy} / {initial:,.0f} / {label} ...", flush=True)
+                result = _run_one(
+                    close, open_, volume, signal_fn=signal_fn,
+                    start=args.start, end=args.end, initial=initial,
+                    rebalance=spec["rebalance"], kwargs=kwargs,
+                )
+                execution = result.get("execution", {})
+                results.append({
+                    "strategy": strategy,
+                    "scenario": label,
+                    "initial": initial,
+                    "start": result["start"],
+                    "end": result["end"],
+                    "cagr_pct": result["cagr_pct"],
+                    "sharpe": result["sharpe"],
+                    "max_drawdown_pct": result["max_drawdown_pct"],
+                    "trade_win_rate_pct": result["trade_win_rate_pct"],
+                    "trade_payoff": result["trade_payoff"],
+                    "closed_rounds": result["closed_rounds"],
+                    "trades": result["trades"],
+                    "turnover_x": result["turnover_x"],
+                    "avg_exposure": result["avg_exposure"],
+                    "execution": execution,
+                })
 
     payload = {
         "period": {"start": args.start, "end": args.end},
-        "initial": args.initial,
+        "initial": capitals[0],
+        "capitals": capitals,
+        "capacity_sweep": bool(args.capacity_sweep),
         "data_status": {
             "premium_discount": "historical NAV/price data available separately; not applied as a constant cost",
             "bid_ask": "empirical high-low spread proxy available; not a quote",
             "partial_fill": "unavailable; scenario is a fill-ratio assumption",
-            "pit_delisted_universe": "SSE historical scale available; SZSE historical list unavailable; current 47 are current-listed",
+            "pit_delisted_universe": "PIT builder added separately; this run still uses the current-listed panel",
         },
         "scenarios": [
             {
@@ -211,26 +247,59 @@ def main() -> int:
         "# ETF execution stress test (V4/V5)",
         "",
         f"- Period: {args.start} → {args.end}",
-        f"- Initial capital: {args.initial:,.0f} CNY",
+        f"- Capital levels: {', '.join(f'{value:,.0f}' for value in capitals)} CNY",
         "- Signals and rebalance dates are identical across scenarios; only execution changes.",
         "- Premium/discount and empirical spread proxy use fetched historical data; partial fill remains **assumption-based**.",
         "",
-        "| Strategy | Scenario | CAGR | Sharpe | Max DD | Trades | Turnover | 1% ADV caps | Partial fills | Unfilled notional |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Strategy | Capital | Scenario | CAGR | Sharpe | Max DD | Trades | Turnover | ADV caps | Partial fills | Unfilled notional |",
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in results:
         execution = row["execution"]
         lines.append(
-            f"| {row['strategy']} | {row['scenario']} | {row['cagr_pct']:.2f}% | "
-            f"{row['sharpe']:.2f} | {row['max_drawdown_pct']:.2f}% | {row['trades']} | "
-            f"{row['turnover_x']:.1f}x | {execution.get('capped_orders', 0)} | "
+            f"| {row['strategy']} | {row['initial']:,.0f} | {row['scenario']} | "
+            f"{row['cagr_pct']:.2f}% | {row['sharpe']:.2f} | {row['max_drawdown_pct']:.2f}% | "
+            f"{row['trades']} | {row['turnover_x']:.1f}x | {execution.get('capped_orders', 0)} | "
             f"{execution.get('partial_fills', 0)} | {execution.get('unfilled_notional', 0):,.0f} |"
         )
+
+    if len(capitals) > 1:
+        benchmark_rows = [row for row in results if row["strategy"] == "benchmark_etf_v5.1_40_35_10"]
+        lines += [
+            "",
+            "## Capacity view (benchmark)",
+            "",
+            "CAGR by participation cap; Δ is versus the same-capital baseline.",
+            "",
+            "| Capital | Baseline CAGR | 1% ADV | Δ 1% | 5% ADV | Δ 5% | 10% ADV | Δ 10% | 1% ADV capped orders |",
+            "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for initial in capitals:
+            by_scenario = {row["scenario"]: row for row in benchmark_rows if row["initial"] == initial}
+            baseline = by_scenario.get("baseline")
+            if baseline is None:
+                continue
+            cells = [f"{initial:,.0f}", f"{baseline['cagr_pct']:.2f}%"]
+            for label in ("adv_1pct", "adv_5pct", "adv_10pct"):
+                row = by_scenario.get(label)
+                if row is None:
+                    cells += ["-", "-"]
+                else:
+                    cells += [f"{row['cagr_pct']:.2f}%", f"{row['cagr_pct'] - baseline['cagr_pct']:+.2f}pp"]
+            one_pct = by_scenario.get("adv_1pct")
+            cells.append(str(one_pct["execution"].get("capped_orders", 0)) if one_pct else "-")
+            lines.append("| " + " | ".join(cells) + " |")
+        lines += [
+            "",
+            "- A cap that binds produces `capped_orders > 0`; zero means the 1% ADV limit was not reached at that capital.",
+            "- This is a capacity **proxy**: no order-book depth, queue position, or intraday volume profile.",
+        ]
+
     lines += [
         "",
         "## Data gaps",
         "",
-        "- **PIT delisted/liquidated ETF universe:** SSE historical scale is available; SZSE historical list is not; current 47 are current-listed. Survivorship bias remains.",
+        "- **PIT delisted/liquidated ETF universe:** a PIT builder was added separately, but this execution run still uses the current-listed panel. Survivorship bias remains for this table.",
         "- **ETF premium/discount:** historical NAV/price data is available separately; it is a diagnostic, not a constant cost on top of market prices.",
         "- **Bid-ask spread:** no quote data; `empirical_spread_proxy` uses a Corwin-Schultz high-low estimator, which is not a quote; extra-slippage scenarios remain assumptions.",
         "- **Partial fill:** no order-book/queue data; the 50% fill-ratio scenario is an assumption.",

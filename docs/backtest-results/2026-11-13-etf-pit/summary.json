@@ -1,0 +1,383 @@
+{
+ "meta": {
+  "generated_at": "2026-11-13T23:04:20",
+  "universe": "cache/etf_pit/universe.csv",
+  "prices": "cache/etf_pit/prices",
+  "start": "2020-01-02",
+  "end": "2026-10-30",
+  "design_end": "2023-12-31",
+  "holdout_start": "2024-01-01",
+  "n_boot": 5000,
+  "theme_keywords": {
+   "电力": [
+    "电力"
+   ],
+   "中药": [
+    "中药"
+   ],
+   "建材": [
+    "建材"
+   ],
+   "旅游": [
+    "旅游"
+   ],
+   "机器人": [
+    "机器人"
+   ],
+   "农业": [
+    "农业",
+    "农牧"
+   ],
+   "养殖": [
+    "养殖",
+    "畜牧"
+   ],
+   "游戏": [
+    "游戏"
+   ],
+   "化工": [
+    "化工"
+   ],
+   "机械": [
+    "机械"
+   ],
+   "创业板": [
+    "创业板"
+   ],
+   "消费": [
+    "消费"
+   ],
+   "成长": [
+    "成长"
+   ],
+   "创新药": [
+    "创新药"
+   ],
+   "家电": [
+    "家电"
+   ],
+   "电子": [
+    "电子"
+   ],
+   "医药": [
+    "医药"
+   ],
+   "价值": [
+    "价值"
+   ],
+   "中证1000": [
+    "中证1000",
+    "1000ETF"
+   ],
+   "医疗": [
+    "医疗"
+   ],
+   "房地产": [
+    "房地产",
+    "地产"
+   ],
+   "半导体": [
+    "半导体"
+   ],
+   "环保": [
+    "环保"
+   ],
+   "军工": [
+    "军工",
+    "国防"
+   ],
+   "计算机": [
+    "计算机"
+   ],
+   "芯片": [
+    "芯片"
+   ],
+   "银行": [
+    "银行"
+   ],
+   "证券": [
+    "证券",
+    "券商"
+   ],
+   "低波": [
+    "低波"
+   ],
+   "传媒": [
+    "传媒"
+   ],
+   "科技": [
+    "科技"
+   ],
+   "5G": [
+    "5G"
+   ],
+   "人工智能": [
+    "人工智能",
+    "AI"
+   ],
+   "食品": [
+    "食品"
+   ],
+   "钢铁": [
+    "钢铁"
+   ],
+   "软件": [
+    "软件"
+   ],
+   "光伏": [
+    "光伏"
+   ],
+   "通信": [
+    "通信"
+   ],
+   "汽车": [
+    "汽车"
+   ],
+   "新能源": [
+    "新能源"
+   ],
+   "云计算": [
+    "云计算"
+   ],
+   "稀土": [
+    "稀土"
+   ],
+   "基建": [
+    "基建"
+   ],
+   "科创50": [
+    "科创50",
+    "科创板50"
+   ]
+  },
+  "adv_min": 50000000.0,
+  "pit_codes_all": 68,
+  "pit_codes_current": 45,
+  "stale_codes_in_theme_map": 23,
+  "stale_codes_with_price": 23,
+  "stale_codes_ever_candidate": 0,
+  "stale_codes_ever_top": 0,
+  "limitations": [
+   "annual exchange snapshots only; first/last seen is approximate",
+   "theme mapping is keyword-based and not the production selector",
+   "one representative per theme is chosen by 12-1/vol score",
+   "delisted positions are marked at their last price; no forced liquidation",
+   "only delisted peers of the 44 production themes were fetched; current peers beyond the production pool are absent"
+  ]
+ },
+ "arms": {
+  "static_current44": {
+   "full": {
+    "total_return_pct": 90.08,
+    "cagr_pct": 9.87,
+    "vol_pct": 8.48,
+    "sharpe": 1.198,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 26.46,
+    "cagr_pct": 6.06,
+    "vol_pct": 7.52,
+    "sharpe": 0.85,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.602,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.53,
+    "2022": 5.76,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.73,
+    "2026": 1.92
+   },
+   "avg_exposure": 0.63,
+   "trades": 539,
+   "turnover_x": 72.12,
+   "stress_20bp": {
+    "total_return_pct": 75.18,
+    "cagr_pct": 8.56,
+    "vol_pct": 8.49,
+    "sharpe": 1.05,
+    "max_drawdown_pct": -10.87
+   }
+  },
+  "pit_current_only": {
+   "full": {
+    "total_return_pct": 90.08,
+    "cagr_pct": 9.87,
+    "vol_pct": 8.48,
+    "sharpe": 1.198,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 26.46,
+    "cagr_pct": 6.06,
+    "vol_pct": 7.52,
+    "sharpe": 0.85,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.602,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.53,
+    "2022": 5.76,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.73,
+    "2026": 1.92
+   },
+   "avg_exposure": 0.63,
+   "trades": 539,
+   "turnover_x": 72.12,
+   "stress_20bp": {
+    "total_return_pct": 75.18,
+    "cagr_pct": 8.56,
+    "vol_pct": 8.49,
+    "sharpe": 1.05,
+    "max_drawdown_pct": -10.87
+   },
+   "vs_static": {
+    "full": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    }
+   }
+  },
+  "pit_all": {
+   "full": {
+    "total_return_pct": 90.08,
+    "cagr_pct": 9.87,
+    "vol_pct": 8.48,
+    "sharpe": 1.198,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 26.46,
+    "cagr_pct": 6.06,
+    "vol_pct": 7.52,
+    "sharpe": 0.85,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.602,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.53,
+    "2022": 5.76,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.73,
+    "2026": 1.92
+   },
+   "avg_exposure": 0.63,
+   "trades": 539,
+   "turnover_x": 72.12,
+   "stress_20bp": {
+    "total_return_pct": 75.18,
+    "cagr_pct": 8.56,
+    "vol_pct": 8.49,
+    "sharpe": 1.05,
+    "max_drawdown_pct": -10.87
+   },
+   "vs_static": {
+    "full": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "vs_pit_current_only": {
+    "full": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0,
+     "ci95_low": 0.0,
+     "ci95_high": 0.0,
+     "p_value_two_sided": 1.0,
+     "prob_diff_gt_zero": 0.0,
+     "n_boot": 5000,
+     "block": 20
+    }
+   }
+  }
+ }
+}

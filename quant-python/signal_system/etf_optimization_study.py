@@ -150,6 +150,12 @@ def with_overlay(target_fn: TargetFn, *, symbol: str, weight: float, mode: str,
     return target
 
 
+def with_cash_and_overlay(target_fn: TargetFn, *, symbol: str = NASDAQ_ETF,
+                          weight: float = 0.10) -> TargetFn:
+    """E1 cash sleeve plus a carved return sleeve; gross exposure stays at 1."""
+    return with_overlay(with_cash_sleeve(target_fn), symbol=symbol, weight=weight, mode="carve")
+
+
 def build_arms(signals: dict[pd.Timestamp, dict[str, Any]],
                panels: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]:
     base = runtime_target(signals, panels)
@@ -177,6 +183,7 @@ def build_arms(signals: dict[pd.Timestamp, dict[str, Any]],
         "N3_carve10": dict(group="nasdaq", target=overlay(0.10, "carve"), band=0.0),
         "N4_carve20": dict(group="nasdaq", target=overlay(0.20, "carve"), band=0.0),
         "N5_tsmom20": dict(group="nasdaq", target=overlay(0.20, "idle", nasdaq_mom), band=0.0),
+        "E1N3_cash_carve10": dict(group="combined", target=with_cash_and_overlay(base, weight=0.10), band=0.0),
     }
 
 
@@ -265,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", default=END)
     parser.add_argument("--n-boot", type=int, default=5000)
     parser.add_argument("--skip-parity", action="store_true")
+    parser.add_argument("--arms", default=None,
+                        help="comma-separated arm names; default: all arms")
     args = parser.parse_args(argv)
 
     data_dir = Path(args.data_dir)
@@ -280,6 +289,14 @@ def main(argv: list[str] | None = None) -> int:
     panels = build_panels(close, volume)
     signals = build_signals(close, satellite, panels, dates)
     arms = build_arms(signals, panels)
+    if args.arms:
+        selected = [name.strip() for name in args.arms.split(",") if name.strip()]
+        unknown = [name for name in selected if name not in arms]
+        if unknown:
+            raise StudyError(f"unknown arms: {unknown}")
+        if "baseline" not in selected:
+            raise StudyError("--arms must include baseline for paired comparisons")
+        arms = {name: arms[name] for name in selected}
     print(f"satellite={len(satellite)} days={len(dates)} arms={len(arms)}", flush=True)
 
     def run(name: str, slippage: float, keep_holdings: bool = False) -> RunResult:
@@ -371,7 +388,8 @@ def main(argv: list[str] | None = None) -> int:
             "acceptance": {
                 "prob_diff_gt_zero": PROB_THRESHOLD,
                 "drawdown_tolerance_pp": DRAWDOWN_TOLERANCE_PP,
-                "tested_arms": sum(1 for arm in arms.values() if arm["group"] in {"optimization", "nasdaq"}),
+                "tested_arms": sum(1 for arm in arms.values()
+                                   if arm["group"] in {"optimization", "nasdaq", "combined"}),
             },
             "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "data_sha256": data_manifest(data_dir),

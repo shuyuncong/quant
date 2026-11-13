@@ -57,6 +57,15 @@ class OverlayTests(unittest.TestCase):
                                          mode="idle", momentum=momentum)(DAY)
             self.assertEqual(study.NASDAQ_ETF in weights, held, value)
 
+    def test_cash_sleeve_then_carve_keeps_gross_exposure(self) -> None:
+        base = {GOLD: 0.40, "159611": 0.20}
+        weights = study.with_cash_and_overlay(fixed(base), weight=0.10)(DAY)
+        self.assertAlmostEqual(weights[GOLD], 0.36)
+        self.assertAlmostEqual(weights["159611"], 0.18)
+        self.assertAlmostEqual(weights[study.CASH_ETF], 0.342)
+        self.assertAlmostEqual(weights[study.NASDAQ_ETF], 0.10)
+        self.assertAlmostEqual(sum(weights.values()), 0.982)
+
 
 class MetricsTests(unittest.TestCase):
     def test_period_metrics_include_the_first_day_of_the_period(self) -> None:

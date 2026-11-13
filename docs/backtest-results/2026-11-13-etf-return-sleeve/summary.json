@@ -1,0 +1,531 @@
+{
+ "meta": {
+  "generated_at": "2026-11-13T23:10:50",
+  "data_dir": "cache/etf_research_long",
+  "start": "2020-01-02",
+  "end": "2026-10-30",
+  "design_end": "2023-12-31",
+  "holdout_start": "2024-01-01",
+  "initial": 250000.0,
+  "slippage": 0.0005,
+  "stress_slippage": 0.002,
+  "target_vol": 0.1,
+  "cash_etf": "511880",
+  "nasdaq_etf": "513100",
+  "cash_buffer": 0.02,
+  "n_boot": 5000,
+  "acceptance": {
+   "prob_diff_gt_zero": 0.9,
+   "drawdown_tolerance_pp": 1.0,
+   "tested_arms": 3
+  },
+  "script_sha256": "26ecdd2683d4b5b3c3e13e74a981f42df2958069f6ac9a4409cee9045155935f",
+  "data_sha256": {
+   "159611_qfq.pkl": "b79e12a008687de2f42c83e83f236bb8fd231329b2305f5c2267f223b84a67a7",
+   "159647_qfq.pkl": "fd6515cf89764d7dc8c4593c604330dec08b14c762c7362a0293785c941ca66e",
+   "159745_qfq.pkl": "4536c2ccd7c80f63017c368bf3fffe54904b3d86a269534655c3673f89554120",
+   "159766_qfq.pkl": "feb2c449225514151e16e663c728532fa5200472439a0d6ec60604c9f4763f1e",
+   "159770_qfq.pkl": "d81b69a3d628b5534a30fb3e0abec0353b087dc27271a41bd1a951d725f055ea",
+   "159825_qfq.pkl": "cc7628d8990c36dac65bced6023fa0767bb1328a18a2ff17b436eeb33cc8f2a6",
+   "159865_qfq.pkl": "012eaaaf3f741b6af1fe40033734c905412c25dfe1c6e7fb343deaac97d06b81",
+   "159869_qfq.pkl": "8fdd0a46da3955a054d031fcfd2ce7d37f09e8d9a77fd9c3b70771f950b9187c",
+   "159870_qfq.pkl": "a3a4604560b5472bebba3a4f188726bfb05fcf9925a39118019a1f7fe31eb622",
+   "159886_qfq.pkl": "64e385431b17841574d73db8f274f87ca455382a599eb7728da1daee95dce8fb",
+   "159915_qfq.pkl": "b82dfca0c8bb5bbceac841416e21c9a4c9c9b3b0658f94c4e0ed95586e207104",
+   "159928_qfq.pkl": "d416baffa6dd977f17709662f39786d0a7c3377339501713ac047589aef7a17c",
+   "159941_qfq.pkl": "b951c8185b1d1fc0537eeb77a7bddf5e7dd8c3f4227964366a4706f1992a8639",
+   "159967_qfq.pkl": "5accc5c4e7a4d25d829973c65da985dbc1163d81977bf18170f22f0be5517ada",
+   "159992_qfq.pkl": "127958c232f9b043ebf1f0ac5d3034c26333ed427765206cfe036828da45b723",
+   "159996_qfq.pkl": "b45af349f3b63f1c2b07ff3e873e9e85f9ca24e69e504033fe19190c4816a698",
+   "159997_qfq.pkl": "faf68bcd1569a07faf48edaef0a092c8a04234b5038693657bba4f9c16f6b16d",
+   "510300_qfq.pkl": "aeabe0fd6c1e8900e7276882baa01febdf80cbe3692a41a84c8c175adfe9a285",
+   "510880_qfq.pkl": "4479bc0a07d51d2d0b5534dd7cd2f044eb1c566f2a20371c5e4f72d90ecadb3a",
+   "511010_qfq.pkl": "fcbfcf4becd261be1793f846479c2fc86b771422f003edb909474ce9eede4cfc",
+   "511090_qfq.pkl": "6f5f561ffb3055b2077e2515c43c946e88636db43ab5fc8edc8d2fd6687ba327",
+   "511260_qfq.pkl": "1d826bf803b1d5ecb4d0268d374d2d2b55cf679a4d3d2dfc7dc68d8ea85d15ef",
+   "511880_qfq.pkl": "6df1d94b08bb743fe9aede326cd41f08a092e0f3eb9dc6cfec9f09ec8a39f2ba",
+   "512010_qfq.pkl": "e3a698346fd77d860e5146fdefde3ea76d7b47ef69977e03c68fc3470a2e0a59",
+   "512040_qfq.pkl": "6e7e95d292ade5ba1ac46217d5b307206a5a0384353f92033991be2a77ab87d0",
+   "512100_qfq.pkl": "e9a966fe1be859211c406e11033b42fbe10d0a209176b3698a25ba94700bf368",
+   "512170_qfq.pkl": "00160da1f58e635e14149ffd481f84a58265e62c84f1c41d834e027ae172fda4",
+   "512200_qfq.pkl": "1597f839c24a6a31505533b311b0b2ce2c15cc2b62114ddfd212a091b402cb80",
+   "512400_qfq.pkl": "ea58d8d8c753ba1d084b52a402a1f8d9e448ff03a78fdc5e17612a3c05d40246",
+   "512480_qfq.pkl": "c0cacebc26600b0c768b61a1533f060eb8edd15def9ff7c5c2fa9490f922054c",
+   "512580_qfq.pkl": "3254570fb069be21ba7619a91c214d1b2db8b16166b8e180f9326dec94a49c2c",
+   "512660_qfq.pkl": "347f4a2a5a096f77280395b18abbc174dcaf19936ce247319c43554062a515b0",
+   "512720_qfq.pkl": "68f46b33455bf2a3213344aea4d1191d00c26bcddd8fc64c9f92b9a12ed6d314",
+   "512760_qfq.pkl": "37127226797ca72c4271d59ba25848a7d6a61892e755871a2811b85adee41949",
+   "512800_qfq.pkl": "db1fab813b47f4ccbde572439b89d43423d01f839ee5eb5e019b8cc4fe4dec8e",
+   "512880_qfq.pkl": "06eb2e81202ecb92b17a9b338ac62adc85e92521ef8de6a52b84ccaa544d730c",
+   "512890_qfq.pkl": "df600fb1c83742e024ab6402fda737dabdfd1fff57aa6f06b36e4f87e63b7603",
+   "512980_qfq.pkl": "5463108163c5223e37e82566c173f6fa74e27074d2e5ac674710a396155f8720",
+   "513100_qfq.pkl": "9c1eaee56b23ea0506c752105bb774cfb972f4b7f2c67d56c1bfc5678162a285",
+   "515000_qfq.pkl": "e50ba14159e215e7914dca85841d1a60e0e1fe80be5f6d2177c883d848f2529f",
+   "515050_qfq.pkl": "97504c2019e9503158e181b423783141ca3142b673fc5daa503fcf0d5eda1a20",
+   "515070_qfq.pkl": "2c9d212eccd6c9e2fbe1352f878497f184d0fcc1d1e9ac04fc0409a7ea06d072",
+   "515170_qfq.pkl": "abae932191e893f6795bd6f8b9cf0c1d17456d7ae03a83ca5d3ea1890d04f6f4",
+   "515210_qfq.pkl": "260ad475629889a9352aceb42015164a03a5bd7241675b4ec79ab40fd88da57d",
+   "515220_qfq.pkl": "e0899a2431cacfa3d87b9a2ecd67b77395358bc13ab21336840fce715e8af0dd",
+   "515230_qfq.pkl": "41ecd4fa21d2adbc410da528290f50adef84c45f9c155f7a421ff6c6eea12a5c",
+   "515790_qfq.pkl": "46d935531e2bf671b7572ffa8a80213c5b0d41c3c8dfd5f0d642a782e180e650",
+   "515880_qfq.pkl": "da101c59444bc87510924cbef57cc0b3d65397bd373ae72029dd51128f945200",
+   "516110_qfq.pkl": "63e7450d927b1cbfa7ac6e249172b6dc978c3bad5cc5b0687f37a12a05edfe4a",
+   "516160_qfq.pkl": "dba6911f690dd151adaf54c0208014e6fd99c9bd659a6941889f13fb48a1deb8",
+   "516510_qfq.pkl": "91ca80e2243eb97c76dc9c810a369e45290a748ce48fac5be186fc87500d4caf",
+   "516780_qfq.pkl": "05f34c485d1075f92b681289489cc0766379b4b9cc18e34be0c0876fca58c071",
+   "516970_qfq.pkl": "bc4091709a6e4a2b0d9db9dbb93b8507a268ce920e5d1208d30cad531ebbd98d",
+   "518880_qfq.pkl": "28f77c029bd76e4af62d8b9d51ee1c0983972ba0c4dd9c92321a3ddfd56d1e5e",
+   "588000_qfq.pkl": "1981c5d47daa384467224d8014e15b621c1d42c5a47a4a5718ce6c299e3c0451"
+  }
+ },
+ "parity": {
+  "expected": [
+   90.1,
+   1.2,
+   -10.19
+  ],
+  "actual": [
+   90.08,
+   1.2,
+   -10.19
+  ],
+  "delta": [
+   -0.02,
+   0.0,
+   0.0
+  ],
+  "tolerance": 0.02,
+  "ok": true
+ },
+ "arms": {
+  "baseline": {
+   "group": "baseline",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 90.08,
+    "cagr_pct": 9.87,
+    "vol_pct": 8.48,
+    "sharpe": 1.198,
+    "max_drawdown_pct": -10.19
+   },
+   "design": {
+    "total_return_pct": 26.46,
+    "cagr_pct": 6.06,
+    "vol_pct": 7.52,
+    "sharpe": 0.85,
+    "max_drawdown_pct": -10.19
+   },
+   "holdout": {
+    "total_return_pct": 50.31,
+    "cagr_pct": 15.45,
+    "vol_pct": 9.68,
+    "sharpe": 1.602,
+    "max_drawdown_pct": -7.02
+   },
+   "yearly_pct": {
+    "2020": 15.87,
+    "2021": 3.53,
+    "2022": 5.76,
+    "2023": -0.32,
+    "2024": 11.95,
+    "2025": 31.73,
+    "2026": 1.92
+   },
+   "avg_exposure": 0.63,
+   "trades": 539,
+   "turnover_x": 72.12,
+   "stress_20bp": {
+    "total_return_pct": 75.18,
+    "cagr_pct": 8.56,
+    "vol_pct": 8.49,
+    "sharpe": 1.05,
+    "max_drawdown_pct": -10.87
+   },
+   "attribution_pct": {
+    "gold": 60.52,
+    "bond": 4.68,
+    "satellite": 31.18,
+    "cash_etf": 0.0,
+    "nasdaq": 0.0,
+    "costs": -6.29,
+    "total": 90.08
+   },
+   "sharpe_ci": {
+    "sharpe": 1.1978,
+    "ci95_low": 0.5047,
+    "ci95_high": 1.897,
+    "bootstrap_mean": 1.1989,
+    "bootstrap_std": 0.3588,
+    "n_boot": 5000,
+    "block": 20
+   }
+  },
+  "E1_cash_sleeve": {
+   "group": "optimization",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 95.91,
+    "cagr_pct": 10.35,
+    "vol_pct": 8.47,
+    "sharpe": 1.254,
+    "max_drawdown_pct": -10.04
+   },
+   "design": {
+    "total_return_pct": 29.11,
+    "cagr_pct": 6.61,
+    "vol_pct": 7.5,
+    "sharpe": 0.923,
+    "max_drawdown_pct": -10.04
+   },
+   "holdout": {
+    "total_return_pct": 51.74,
+    "cagr_pct": 15.84,
+    "vol_pct": 9.67,
+    "sharpe": 1.64,
+    "max_drawdown_pct": -6.98
+   },
+   "yearly_pct": {
+    "2020": 16.51,
+    "2021": 4.32,
+    "2022": 6.18,
+    "2023": 0.04,
+    "2024": 12.32,
+    "2025": 32.05,
+    "2026": 2.31
+   },
+   "avg_exposure": 0.97,
+   "trades": 639,
+   "turnover_x": 87.88,
+   "stress_20bp": {
+    "total_return_pct": 77.58,
+    "cagr_pct": 8.78,
+    "vol_pct": 8.47,
+    "sharpe": 1.077,
+    "max_drawdown_pct": -10.88
+   },
+   "attribution_pct": {
+    "gold": 61.71,
+    "bond": 4.75,
+    "satellite": 31.72,
+    "cash_etf": 5.31,
+    "nasdaq": 0.0,
+    "costs": -7.58,
+    "total": 95.91
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.0563,
+     "ci95_low": 0.046,
+     "ci95_high": 0.0686,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.0732,
+     "ci95_low": 0.0593,
+     "ci95_high": 0.093,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.0384,
+     "ci95_low": 0.0277,
+     "ci95_high": 0.05,
+     "p_value_two_sided": 0.0,
+     "prob_diff_gt_zero": 1.0,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": true,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": true
+  },
+  "N3_carve10": {
+   "group": "nasdaq",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 104.15,
+    "cagr_pct": 11.02,
+    "vol_pct": 8.53,
+    "sharpe": 1.32,
+    "max_drawdown_pct": -9.75
+   },
+   "design": {
+    "total_return_pct": 32.41,
+    "cagr_pct": 7.29,
+    "vol_pct": 7.68,
+    "sharpe": 0.989,
+    "max_drawdown_pct": -9.75
+   },
+   "holdout": {
+    "total_return_pct": 54.18,
+    "cagr_pct": 16.49,
+    "vol_pct": 9.59,
+    "sharpe": 1.714,
+    "max_drawdown_pct": -6.29
+   },
+   "yearly_pct": {
+    "2020": 18.04,
+    "2021": 5.34,
+    "2022": 2.36,
+    "2023": 4.03,
+    "2024": 14.21,
+    "2025": 30.43,
+    "2026": 3.51
+   },
+   "avg_exposure": 0.67,
+   "trades": 852,
+   "turnover_x": 68.09,
+   "stress_20bp": {
+    "total_return_pct": 89.23,
+    "cagr_pct": 9.79,
+    "vol_pct": 8.53,
+    "sharpe": 1.184,
+    "max_drawdown_pct": -9.84
+   },
+   "attribution_pct": {
+    "gold": 56.79,
+    "bond": 4.46,
+    "satellite": 29.19,
+    "cash_etf": 0.0,
+    "nasdaq": 20.28,
+    "costs": -6.57,
+    "total": 104.15
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.122,
+     "ci95_low": -0.0803,
+     "ci95_high": 0.3306,
+     "p_value_two_sided": 0.234,
+     "prob_diff_gt_zero": 0.883,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.1387,
+     "ci95_low": -0.1682,
+     "ci95_high": 0.4583,
+     "p_value_two_sided": 0.3572,
+     "prob_diff_gt_zero": 0.8214,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1123,
+     "ci95_low": -0.1531,
+     "ci95_high": 0.3938,
+     "p_value_two_sided": 0.4104,
+     "prob_diff_gt_zero": 0.7948,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": false,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": false
+  },
+  "E1N3_cash_carve10": {
+   "group": "combined",
+   "band": 0.0,
+   "full": {
+    "total_return_pct": 109.58,
+    "cagr_pct": 11.45,
+    "vol_pct": 8.51,
+    "sharpe": 1.37,
+    "max_drawdown_pct": -9.71
+   },
+   "design": {
+    "total_return_pct": 34.79,
+    "cagr_pct": 7.77,
+    "vol_pct": 7.66,
+    "sharpe": 1.052,
+    "max_drawdown_pct": -9.71
+   },
+   "holdout": {
+    "total_return_pct": 55.48,
+    "cagr_pct": 16.84,
+    "vol_pct": 9.58,
+    "sharpe": 1.749,
+    "max_drawdown_pct": -6.2
+   },
+   "yearly_pct": {
+    "2020": 18.7,
+    "2021": 5.97,
+    "2022": 2.65,
+    "2023": 4.4,
+    "2024": 14.55,
+    "2025": 30.68,
+    "2026": 3.87
+   },
+   "avg_exposure": 0.97,
+   "trades": 947,
+   "turnover_x": 82.46,
+   "stress_20bp": {
+    "total_return_pct": 91.35,
+    "cagr_pct": 9.97,
+    "vol_pct": 8.51,
+    "sharpe": 1.206,
+    "max_drawdown_pct": -9.83
+   },
+   "attribution_pct": {
+    "gold": 57.66,
+    "bond": 4.47,
+    "satellite": 29.69,
+    "cash_etf": 4.87,
+    "nasdaq": 20.62,
+    "costs": -7.74,
+    "total": 109.58
+   },
+   "vs_baseline": {
+    "full": {
+     "sharpe_diff": 0.1719,
+     "ci95_low": -0.0327,
+     "ci95_high": 0.3816,
+     "p_value_two_sided": 0.0936,
+     "prob_diff_gt_zero": 0.9532,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "design": {
+     "sharpe_diff": 0.2022,
+     "ci95_low": -0.1053,
+     "ci95_high": 0.5222,
+     "p_value_two_sided": 0.1832,
+     "prob_diff_gt_zero": 0.9084,
+     "n_boot": 5000,
+     "block": 20
+    },
+    "holdout": {
+     "sharpe_diff": 0.1472,
+     "ci95_low": -0.1206,
+     "ci95_high": 0.4311,
+     "p_value_two_sided": 0.2888,
+     "prob_diff_gt_zero": 0.8556,
+     "n_boot": 5000,
+     "block": 20
+    }
+   },
+   "checks": {
+    "sharpe_diff_positive": true,
+    "prob_diff_gt_zero": true,
+    "design_not_worse": true,
+    "holdout_not_worse": true,
+    "drawdown_within_tolerance": true,
+    "stress_cagr_not_worse": true
+   },
+   "accepted": true
+  }
+ },
+ "buy_and_hold_reference": {
+  "513100": {
+   "full": {
+    "total_return_pct": 245.52,
+    "cagr_pct": 19.92,
+    "vol_pct": 25.02,
+    "sharpe": 0.882,
+    "max_drawdown_pct": -28.49
+   },
+   "design": {
+    "total_return_pct": 87.19,
+    "cagr_pct": 17.02,
+    "vol_pct": 25.95,
+    "sharpe": 0.759,
+    "max_drawdown_pct": -28.49
+   },
+   "holdout": {
+    "total_return_pct": 84.58,
+    "cagr_pct": 24.12,
+    "vol_pct": 23.66,
+    "sharpe": 1.075,
+    "max_drawdown_pct": -24.01
+   }
+  },
+  "511880": {
+   "full": {
+    "total_return_pct": 12.48,
+    "cagr_pct": 1.74,
+    "vol_pct": 0.23,
+    "sharpe": 7.967,
+    "max_drawdown_pct": -0.2
+   },
+   "design": {
+    "total_return_pct": 8.5,
+    "cagr_pct": 2.07,
+    "vol_pct": 0.23,
+    "sharpe": 9.322,
+    "max_drawdown_pct": -0.09
+   },
+   "holdout": {
+    "total_return_pct": 3.67,
+    "cagr_pct": 1.28,
+    "vol_pct": 0.22,
+    "sharpe": 6.083,
+    "max_drawdown_pct": -0.2
+   }
+  },
+  "518880": {
+   "full": {
+    "total_return_pct": 140.8,
+    "cagr_pct": 13.74,
+    "vol_pct": 17.54,
+    "sharpe": 0.853,
+    "max_drawdown_pct": -31.83
+   },
+   "design": {
+    "total_return_pct": 37.92,
+    "cagr_pct": 8.39,
+    "vol_pct": 13.62,
+    "sharpe": 0.682,
+    "max_drawdown_pct": -20.47
+   },
+   "holdout": {
+    "total_return_pct": 74.59,
+    "cagr_pct": 21.71,
+    "vol_pct": 21.93,
+    "sharpe": 1.049,
+    "max_drawdown_pct": -31.83
+   }
+  },
+  "511260": {
+   "full": {
+    "total_return_pct": 31.46,
+    "cagr_pct": 4.09,
+    "vol_pct": 2.58,
+    "sharpe": 1.628,
+    "max_drawdown_pct": -4.85
+   },
+   "design": {
+    "total_return_pct": 15.69,
+    "cagr_pct": 3.72,
+    "vol_pct": 2.76,
+    "sharpe": 1.386,
+    "max_drawdown_pct": -4.85
+   },
+   "holdout": {
+    "total_return_pct": 13.63,
+    "cagr_pct": 4.61,
+    "vol_pct": 2.31,
+    "sharpe": 2.054,
+    "max_drawdown_pct": -2.27
+   }
+  }
+ }
+}

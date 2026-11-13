@@ -1,0 +1,4 @@
+arm,cagr_pct,sharpe,max_drawdown_pct,design_cagr_pct,design_sharpe,holdout_cagr_pct,holdout_sharpe,stress_20bp_cagr_pct,turnover_x
+static_current44,9.87,1.198,-10.19,6.06,0.85,15.45,1.602,8.56,72.12
+pit_current_only,9.87,1.198,-10.19,6.06,0.85,15.45,1.602,8.56,72.12
+pit_all,9.87,1.198,-10.19,6.06,0.85,15.45,1.602,8.56,72.12
