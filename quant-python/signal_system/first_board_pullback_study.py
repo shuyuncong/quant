@@ -5,7 +5,7 @@
   涨停日收盘价 >=2 元, 涨停日前 20 日日均成交额 >=2000 万元。
 - 首板: 涨停日之前 20 个交易日内没有涨停。
 - 放量: 涨停日成交额 >= 前 20 个交易日日均成交额的 2.0 倍。
-- 缩量回调: 涨停后第 1~3 个交易日内, 首次出现
+- 缩量回调: 涨停后第 1~N 个交易日内, 首次出现
   close < 涨停日 close, 回撤不超过 8%, 且
   amount <= 0.6 * 涨停日 amount, amount <= 涨停日前 20 日均额。
 - 入场: 回调日收盘确认, 次一交易日开盘买入; 开盘涨停则放弃。
@@ -15,6 +15,10 @@
 - 成本: 佣金 3bp/边, 卖出印花税 10bp, 滑点 10bp/边 (压力 20bp/边)。
 - 组合: 100 万初始资金, 单票 5%, 最多 20 只, 同日候选按放量倍数排序;
   不追加杠杆, 现金不计息。
+- user 变体: 可选回踩 20 日线 (±3%), 放量反包日
+  (开盘/收盘均高于回调日收盘, 成交额 >= 5 倍回调日), 小市值
+  (流通市值 < --min-market-cap), 以及同 Sina 行业当日首板家数
+  >= --industry-min-first-boards 的板块共振代理。
 
 这是研究脚本, 不接生产、不自动交易。
 """
@@ -25,6 +29,7 @@ import argparse
 import json
 import math
 import pathlib
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any
 
@@ -65,6 +70,18 @@ class ExitConfig:
     stop_loss: float = 0.05
     take_profit: float = 0.10
     max_exit_defer: int = 5
+
+
+@dataclass(frozen=True)
+class EngulfConfig:
+    """User rule: pullback to MA20, stabilize, then a volume surge (5x)."""
+    require_ma20: bool = False
+    ma20_atol: float = 0.03
+    require_engulf: bool = False
+    engulf_volume_multiple: float = 5.0
+    min_market_cap: float | None = None
+    industry_file: str | None = None
+    industry_min_first_boards: int | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +249,9 @@ def detect_candidates(
     bars: pd.DataFrame,
     signal_cfg: SignalConfig,
     exit_cfg: ExitConfig,
+    engulf_cfg: EngulfConfig | None = None,
+    industry: dict[str, str] | None = None,
+    industry_boards: dict[pd.Timestamp, dict[str, int]] | None = None,
 ) -> list[dict[str, Any]]:
     """Return independent trades for every qualifying first-board pullback."""
     if len(bars) < signal_cfg.min_history + signal_cfg.max_wait_days + exit_cfg.hold_days:
@@ -249,6 +269,8 @@ def detect_candidates(
     if not np.isfinite(amount).all() or (amount <= 0).any():
         return []
 
+    close_s = pd.Series(close)
+    ma20 = close_s.rolling(20, min_periods=20).mean().to_numpy()
     rates = limit_rate_series(symbol, dates)
     prev_close = np.r_[np.nan, close[:-1]]
     returns = close / prev_close - 1.0
@@ -270,6 +292,12 @@ def detect_candidates(
             )
 
     out: list[dict[str, Any]] = []
+    if engulf_cfg is not None and engulf_cfg.min_market_cap is not None:
+        if "turnover_rate" not in bars.columns:
+            return []
+        amount_numeric = pd.to_numeric(bars["amount"], errors="coerce")
+        turnover = pd.to_numeric(bars["turnover_rate"], errors="coerce")
+        market_cap = (amount_numeric / turnover.replace(0, np.nan) * 100.0).to_numpy(dtype=float)
     for t in np.flatnonzero(first_board):
         if not np.isfinite(avg20[t]) or avg20[t] < signal_cfg.min_adv20:
             continue
@@ -277,6 +305,17 @@ def detect_candidates(
             continue
         if vol_multiple[t] < signal_cfg.volume_multiple:
             continue
+        if engulf_cfg is not None and engulf_cfg.min_market_cap is not None:
+            if t >= len(market_cap) or not np.isfinite(market_cap[t]) or market_cap[t] >= engulf_cfg.min_market_cap:
+                continue
+        if engulf_cfg is not None and engulf_cfg.industry_file is not None:
+            sector = (industry or {}).get(str(symbol), "")
+            if not sector:
+                continue
+            boards = (industry_boards or {}).get(pd.Timestamp(dates.iloc[t]), {})
+            if engulf_cfg.industry_min_first_boards is not None:
+                if boards.get(sector, 0) < engulf_cfg.industry_min_first_boards:
+                    continue
 
         limit_close = float(close[t])
         limit_amount = float(amount[t])
@@ -296,7 +335,24 @@ def detect_candidates(
             if pullback_amount > avg20[t]:
                 continue
 
-            entry_idx = j + 1
+            if engulf_cfg is not None and engulf_cfg.require_ma20:
+                if not np.isfinite(ma20[j]) or abs(pullback_close - float(ma20[j])) / float(ma20[j]) > engulf_cfg.ma20_atol:
+                    continue
+            if engulf_cfg is not None and engulf_cfg.require_engulf:
+                b = j + 1
+                if b + 1 >= len(bars):
+                    break
+                engulf_open = float(open_[b])
+                engulf_close = float(close[b])
+                engulf_amount = float(amount[b])
+                if not (np.isfinite(engulf_open) and np.isfinite(engulf_close) and np.isfinite(engulf_amount)):
+                    break
+                if engulf_open > pullback_close or engulf_close <= pullback_close:
+                    break
+                if engulf_amount < engulf_cfg.engulf_volume_multiple * pullback_amount:
+                    break
+
+            entry_idx = j + 1 if engulf_cfg is None or not engulf_cfg.require_engulf else b + 1
             entry_open = float(open_[entry_idx])
             if not math.isfinite(entry_open) or entry_open <= 0:
                 break
@@ -584,6 +640,43 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _load_user_industry(path: str) -> dict[str, str]:
+    industry: dict[str, str] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        for code in row.get("codes", []):
+            industry.setdefault(str(code).zfill(6), str(row.get("name", "")))
+    return industry
+
+
+def _industry_first_boards(
+    bars: dict[str, pd.DataFrame], industry: dict[str, str]
+) -> dict[pd.Timestamp, dict[str, int]]:
+    """Daily first-board count by Sina industry, used as a sector-resonance proxy."""
+    day_sector: dict[pd.Timestamp, dict[str, int]] = {}
+    for symbol, frame in bars.items():
+        if len(frame) < 2 or str(symbol) not in industry:
+            continue
+        sector = industry[str(symbol)]
+        dates = pd.to_datetime(frame["datetime"])
+        close = pd.to_numeric(frame["close"], errors="coerce").to_numpy(dtype=float)
+        high = pd.to_numeric(frame["high"], errors="coerce").to_numpy(dtype=float)
+        rates = limit_rate_series(symbol, dates)
+        prev_close = np.r_[np.nan, close[:-1]]
+        limit_up = _is_limit_up_at(close, high, prev_close, rates)
+        limit_up[0] = False
+        if "splice_break" in frame.columns:
+            limit_up[frame["splice_break"].fillna(False).to_numpy(dtype=bool)] = False
+        for t in np.flatnonzero(limit_up):
+            if t == 0 or limit_up[t - 1]:
+                continue
+            bucket = day_sector.setdefault(pd.Timestamp(dates.iloc[t]), {})
+            bucket[sector] = bucket.get(sector, 0) + 1
+    return day_sector
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=str(BASE_DIR / "first_board_pullback_results"))
@@ -597,6 +690,14 @@ def main() -> None:
     parser.add_argument("--max-pullback", type=float, default=SignalConfig.max_pullback)
     parser.add_argument("--max-positions", type=int, default=PortfolioConfig.max_positions)
     parser.add_argument("--position-pct", type=float, default=PortfolioConfig.position_pct)
+    parser.add_argument("--variant", choices=["base", "user"], default="base")
+    parser.add_argument("--require-ma20", action="store_true")
+    parser.add_argument("--require-engulf", action="store_true")
+    parser.add_argument("--engulf-volume-multiple", type=float, default=5.0)
+    parser.add_argument("--max-wait-days", type=int, default=SignalConfig.max_wait_days)
+    parser.add_argument("--min-market-cap", type=float, default=None)
+    parser.add_argument("--industry-file", default=str(BASE_DIR / "cache" / "smallcap_study" / "sina_all.jsonl"))
+    parser.add_argument("--industry-min-first-boards", type=int, default=None)
     args = parser.parse_args()
 
     if not 0 < args.stop_loss < 1 or not 0 < args.take_profit < 1:
@@ -607,6 +708,7 @@ def main() -> None:
         volume_multiple=args.volume_multiple,
         shrink_ratio=args.shrink_ratio,
         max_pullback=args.max_pullback,
+        max_wait_days=args.max_wait_days,
     )
     exit_cfg = ExitConfig(
         hold_days=args.hold_days,
@@ -617,14 +719,41 @@ def main() -> None:
         max_positions=args.max_positions,
         position_pct=args.position_pct,
     )
+    engulf_cfg: EngulfConfig | None = None
+    industry: dict[str, str] | None = None
+    industry_boards: dict[pd.Timestamp, dict[str, int]] | None = None
+    if args.variant == "user":
+        engulf_cfg = EngulfConfig(
+            require_ma20=args.require_ma20,
+            require_engulf=args.require_engulf,
+            engulf_volume_multiple=args.engulf_volume_multiple,
+            min_market_cap=args.min_market_cap,
+            industry_file=args.industry_file,
+            industry_min_first_boards=args.industry_min_first_boards,
+        )
 
     print("loading bars ...", flush=True)
     bars = load_bars()
     print(f"loaded {len(bars)} symbols", flush=True)
+    if engulf_cfg is not None and engulf_cfg.industry_file:
+        industry = _load_user_industry(engulf_cfg.industry_file)
+        print(f"building industry first-board heatmap for {len(industry)} mapped symbols ...", flush=True)
+        industry_boards = _industry_first_boards(bars, industry)
+        print(f"industry heatmap days: {len(industry_boards)}", flush=True)
 
     all_trades: list[dict[str, Any]] = []
     for i, (symbol, frame) in enumerate(bars.items(), 1):
-        all_trades.extend(detect_candidates(symbol, frame, signal_cfg, exit_cfg))
+        all_trades.extend(
+            detect_candidates(
+                symbol,
+                frame,
+                signal_cfg,
+                exit_cfg,
+                engulf_cfg,
+                industry,
+                industry_boards,
+            )
+        )
         if i % 1000 == 0:
             print(f"  scanned {i}/{len(bars)} symbols, {len(all_trades)} trades", flush=True)
     all_trades.sort(key=lambda t: (t["entry_date"], t["symbol"]))
@@ -663,6 +792,8 @@ def main() -> None:
 
     summary: dict[str, Any] = {
         "strategy": "first-board high-volume limit-up, shrinking-volume pullback",
+        "variant": args.variant,
+        "engulf": asdict(engulf_cfg) if engulf_cfg else None,
         "signal": asdict(signal_cfg),
         "exit": asdict(exit_cfg),
         "portfolio": asdict(portfolio_cfg),

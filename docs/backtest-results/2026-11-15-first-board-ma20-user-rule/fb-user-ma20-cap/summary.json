@@ -1,0 +1,240 @@
+{
+  "strategy": "first-board high-volume limit-up, shrinking-volume pullback",
+  "variant": "user",
+  "engulf": {
+    "require_ma20": true,
+    "ma20_atol": 0.03,
+    "require_engulf": false,
+    "engulf_volume_multiple": 5.0,
+    "min_market_cap": 20000000000.0,
+    "industry_file": "/home/ubuntu/development/quant/quant-python/signal_system/cache/smallcap_study/sina_all.jsonl",
+    "industry_min_first_boards": null
+  },
+  "signal": {
+    "start": "2020-01-01",
+    "end": "2026-10-30",
+    "min_history": 250,
+    "min_price": 2.0,
+    "min_adv20": 20000000.0,
+    "first_board_lookback": 20,
+    "volume_multiple": 2.0,
+    "max_pullback": 0.08,
+    "shrink_ratio": 0.6,
+    "max_wait_days": 3
+  },
+  "exit": {
+    "hold_days": 5,
+    "stop_loss": 0.05,
+    "take_profit": 0.1,
+    "max_exit_defer": 5
+  },
+  "portfolio": {
+    "initial_capital": 1000000.0,
+    "max_positions": 20,
+    "position_pct": 0.05
+  },
+  "costs": {
+    "commission_per_side": 0.0003,
+    "stamp_tax_sell": 0.001,
+    "slippage_base": 0.001,
+    "slippage_stress": 0.002
+  },
+  "data": {
+    "symbols": 5148,
+    "start": "2020-01-01",
+    "end": "2026-10-30",
+    "source": "BaoStock qfq 2016-2024 + local qfq 2025-2026; BSE excluded",
+    "limitations": [
+      "no historical ST list; ST 5% boards are effectively not detected",
+      "no historical index constituent list; full local A-share cache",
+      "qfq prices; dividends not separately modeled",
+      "delisted symbols are included only if local bars exist",
+      "2024-12-31 data splice; cross-splice entries/exits are dropped"
+    ]
+  },
+  "event_base": {
+    "trades": 105,
+    "mean_pct": -0.52,
+    "gross_mean_pct": -0.17,
+    "median_pct": -1.71,
+    "std_pct": 5.75,
+    "t_stat": -0.93,
+    "win_rate_pct": 40.0,
+    "gross_win_rate_pct": 40.95,
+    "avg_win_pct": 5.13,
+    "avg_loss_pct": -4.29,
+    "payoff": 1.19,
+    "profit_factor": 0.8,
+    "best_pct": 20.78,
+    "worst_pct": -12.74,
+    "by_exit_reason": {
+      "timeout": {
+        "trades": 74,
+        "mean_pct": 0.57,
+        "win_rate_pct": 48.65
+      },
+      "take_profit": {
+        "trades": 6,
+        "mean_pct": 12.86,
+        "win_rate_pct": 100.0
+      },
+      "stop": {
+        "trades": 25,
+        "mean_pct": -6.97,
+        "win_rate_pct": 0.0
+      }
+    }
+  },
+  "event_stress_20bp": {
+    "trades": 105,
+    "mean_pct": -0.72,
+    "gross_mean_pct": -0.17,
+    "median_pct": -1.9,
+    "std_pct": 5.74,
+    "t_stat": -1.29,
+    "win_rate_pct": 38.1,
+    "gross_win_rate_pct": 40.95,
+    "avg_win_pct": 5.17,
+    "avg_loss_pct": -4.35,
+    "payoff": 1.19,
+    "profit_factor": 0.73,
+    "best_pct": 20.54,
+    "worst_pct": -12.91,
+    "by_exit_reason": {
+      "timeout": {
+        "trades": 74,
+        "mean_pct": 0.37,
+        "win_rate_pct": 45.95
+      },
+      "take_profit": {
+        "trades": 6,
+        "mean_pct": 12.63,
+        "win_rate_pct": 100.0
+      },
+      "stop": {
+        "trades": 25,
+        "mean_pct": -7.15,
+        "win_rate_pct": 0.0
+      }
+    }
+  },
+  "event_design_2019_2024": {
+    "trades": 101,
+    "mean_pct": -0.54,
+    "gross_mean_pct": -0.18,
+    "median_pct": -1.72,
+    "std_pct": 5.85,
+    "t_stat": -0.93,
+    "win_rate_pct": 39.6,
+    "gross_win_rate_pct": 40.59,
+    "avg_win_pct": 5.28,
+    "avg_loss_pct": -4.36,
+    "payoff": 1.21,
+    "profit_factor": 0.79,
+    "best_pct": 20.78,
+    "worst_pct": -12.74,
+    "by_exit_reason": {
+      "timeout": {
+        "trades": 70,
+        "mean_pct": 0.61,
+        "win_rate_pct": 48.57
+      },
+      "take_profit": {
+        "trades": 6,
+        "mean_pct": 12.86,
+        "win_rate_pct": 100.0
+      },
+      "stop": {
+        "trades": 25,
+        "mean_pct": -6.97,
+        "win_rate_pct": 0.0
+      }
+    }
+  },
+  "event_holdout_2025_2026": {
+    "trades": 4,
+    "mean_pct": -0.09,
+    "gross_mean_pct": 0.27,
+    "median_pct": -0.03,
+    "std_pct": 2.59,
+    "t_stat": -0.07,
+    "win_rate_pct": 50.0,
+    "gross_win_rate_pct": 50.0,
+    "avg_win_pct": 2.04,
+    "avg_loss_pct": -2.22,
+    "payoff": 0.92,
+    "profit_factor": 0.92,
+    "best_pct": 2.69,
+    "worst_pct": -2.98,
+    "by_exit_reason": {
+      "timeout": {
+        "trades": 4,
+        "mean_pct": -0.09,
+        "win_rate_pct": 50.0
+      }
+    }
+  },
+  "event_yearly": {
+    "2020": {
+      "trades": 32,
+      "mean_pct": -0.32,
+      "win_rate_pct": 40.62
+    },
+    "2021": {
+      "trades": 24,
+      "mean_pct": 0.44,
+      "win_rate_pct": 45.83
+    },
+    "2022": {
+      "trades": 20,
+      "mean_pct": 0.58,
+      "win_rate_pct": 40.0
+    },
+    "2023": {
+      "trades": 13,
+      "mean_pct": -3.18,
+      "win_rate_pct": 23.08
+    },
+    "2024": {
+      "trades": 12,
+      "mean_pct": -2.1,
+      "win_rate_pct": 41.67
+    },
+    "2025": {
+      "trades": 4,
+      "mean_pct": -0.09,
+      "win_rate_pct": 50.0
+    }
+  },
+  "portfolio_base": {
+    "total_return_pct": -2.81,
+    "cagr_pct": -0.43,
+    "annual_vol_pct": 1.2,
+    "sharpe": -0.358,
+    "max_drawdown_pct": -4.36,
+    "avg_exposure_pct": 1.41,
+    "max_positions_held": 4,
+    "days": 1651,
+    "accepted_trades": 105,
+    "skipped_slots": 0,
+    "skipped_cash": 0,
+    "skipped_symbol_already_held": 0,
+    "slippage": 0.001
+  },
+  "portfolio_stress_20bp": {
+    "total_return_pct": -3.84,
+    "cagr_pct": -0.6,
+    "annual_vol_pct": 1.21,
+    "sharpe": -0.49,
+    "max_drawdown_pct": -5.16,
+    "avg_exposure_pct": 1.41,
+    "max_positions_held": 4,
+    "days": 1651,
+    "accepted_trades": 105,
+    "skipped_slots": 0,
+    "skipped_cash": 0,
+    "skipped_symbol_already_held": 0,
+    "slippage": 0.002
+  },
+  "accepted_trades": 105
+}
