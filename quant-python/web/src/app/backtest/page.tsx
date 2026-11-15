@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertCircle,
+  ArrowUpRight,
   BarChart3,
   Calendar,
   CheckCircle2,
@@ -638,6 +639,29 @@ export default function BacktestPage() {
           基于相同历史区间与一致资金约束，对多套量化策略进行收益曲线与风险指标横向对比。全市场口径回测存在幸存者偏差。
         </p>
       </div>
+
+      <a
+        href="/research/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-muted/40"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <LineChart className="size-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">策略研究总览</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              首板低开、ETF 配置、小市值/PIT 校正的 2020–2026 曲线、指标与口径说明。
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+          打开总览
+          <ArrowUpRight className="size-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+        </span>
+      </a>
 
       {available === false && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
