@@ -1,0 +1,7 @@
+arm,group,full_cagr_pct,full_sharpe,full_max_drawdown_pct,design_cagr_pct,design_sharpe,design_max_drawdown_pct,holdout_cagr_pct,holdout_sharpe,holdout_max_drawdown_pct,avg_exposure,turnover_x,stress_20bp_cagr_pct,d_sharpe_full,d_sharpe_design,d_sharpe_holdout,prob_diff_gt_zero,accepted
+baseline,baseline,9.87,1.198,-10.19,6.06,0.85,-10.19,15.45,1.602,-7.02,0.63,72.12,8.56,,,,,
+S1_slope_r2_25,slope,9.37,1.038,-14.32,6.36,0.837,-14.32,13.74,1.271,-9.04,0.62,96.92,7.61,-0.1602,-0.0129,-0.3307,0.2218,False
+S1s_slope_r2_29,sensitivity,8.16,0.91,-13.15,7.61,0.96,-13.15,8.94,0.874,-9.3,0.61,95.68,6.49,-0.2877,0.1104,-0.7277,0.1068,False
+R1_rsrs_gate,rsrs,8.54,1.064,-9.89,4.12,0.614,-9.89,15.09,1.564,-9.52,0.64,68.42,7.17,-0.1339,-0.2355,-0.0375,0.2698,False
+R2_rsrs_and_ma200,rsrs,8.8,1.111,-9.89,4.74,0.723,-9.89,14.77,1.539,-9.49,0.66,54.43,7.76,-0.0868,-0.1266,-0.0631,0.3284,False
+R1s_rsrs_dull,sensitivity,8.77,1.096,-10.31,3.75,0.562,-10.31,16.25,1.693,-8.69,0.65,66.39,7.44,-0.1021,-0.2881,0.0913,0.331,False
