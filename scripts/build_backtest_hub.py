@@ -694,6 +694,56 @@ def build_catalog(rich_by_dir: dict[str, str]) -> list[dict[str, Any]]:
             }
         )
     return rows
+def build_pullback_v1_v5() -> dict[str, Any]:
+    source = RESULTS / "2026-11-16-first-board-pullback-v1-v5"
+    labels = {
+        "V0": "V0 基线（≤8%）",
+        "V1": "V1 10–25%·不破起点",
+        "V2": "V2 +50%缩量·地量横住",
+        "V3": "V3 +MA20走平/上翘",
+        "V4": "V4 +放量站上MA20",
+    }
+    descriptions = {
+        "V0": "首板后 1–3 日缩量回调 ≤8%，回调量 ≤60% 首板量且 ≤20 日均额，次日开盘买。",
+        "V1": "回调 10%–25%，不破首板日最低价；量 ≤60% 首板量，1–10 日内首次满足，次日开盘买。",
+        "V2": "V1 + 量 ≤50% 首板量 + 至少 2 个连续地量日 + 首次放量收阳，次日开盘买。",
+        "V3": "V2 + 转折日收盘距 MA20 ≤3%，MA20 五日斜率 ≥0。",
+        "V4": "V3 + 转折日收盘 > MA20（放量站上 MA20）。",
+    }
+    strategies = []
+    for idx, name in enumerate(["V0", "V1", "V2", "V3", "V4"]):
+        curve = pd.read_csv(source / f"portfolio_{name}.csv")
+        curve["date"] = pd.to_datetime(curve["date"])
+        series = normalize(curve.set_index("date")["equity"])
+        trades = pd.read_csv(source / f"trades_{name}.csv", dtype={"symbol": str}) if (source / f"trades_{name}.csv").exists() else pd.DataFrame()
+        stats = trade_metrics(
+            trades,
+            date_col="entry_date",
+            return_col="net_return_pct",
+            pnl_col=None,
+            hold_col="hold_days",
+            return_scale=0.01,
+        ) if not trades.empty else {}
+        strategies.append(_strat(labels[name], descriptions[name], series, COLORS[idx], trade_stats=stats))
+    return _comparison(
+        "pullback-v1-v5",
+        "first-board",
+        "首板缩量回调 V1–V5",
+        "按用户清单逐层加条件；2020-01-02 起，20 万初始，单票 5%/最多 20 只。",
+        "V0 是原基线；V1 放宽到 10–25% 回调但不破首板日最低价；V2–V4 叠加 50% 缩量、"
+        "地量横住、MA20 和放量站上 MA20。V5（冰点过滤）为 0 笔，未入图。"
+        "关键：V1 把事件均值从 -0.82% 翻到 +0.48%（t=1.36），但 V2 只剩 38 笔、V3 8 笔、V4 4 笔，"
+        "样本不足以验证完整清单；V1 也未达到统计显著。",
+        "交易口径；组合为 5%/笔、20 槽，绝对收益被低仓位限制。年化按 252 个交易日折算。",
+        strategies,
+        "2026-11-16-first-board-pullback-v1-v5",
+        [
+            "2026-11-16-first-board-pullback-v1-v5/memo.md",
+            "2026-11-16-first-board-pullback-v1-v5/summary.json",
+        ],
+    )
+
+
 def build_verification() -> dict[str, Any]:
     source = RESULTS / "2026-11-16-first-board-state-machine"
     raw = pd.read_csv(source / "curves.csv")
@@ -878,6 +928,7 @@ def build_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         build_best_of_family(family_sources),
         build_state_machine(),
         build_verification(),
+        build_pullback_v1_v5(),
         build_first_board_full_vs_third(),
         build_first_board_four(),
         build_first_board_pullback(),
