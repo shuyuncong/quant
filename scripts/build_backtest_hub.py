@@ -876,43 +876,63 @@ def build_state_machine() -> dict[str, Any]:
 
 
 def build_best_of_family(comparisons: list[dict[str, Any]]) -> dict[str, Any]:
-    """One champion per family on a single 2020-2026 curve set."""
-    picks: list[tuple[str, str, str, str, str]] = [
-        # (comparison-id, strategy-name, shown label, family tag, basis)
-        ("first-board-low-open-full-vs-third", "首板低开·单票≤1/3", "首板低开·单票≤1/3", "首板/连板", "trade"),
-        ("etf-return-sleeve", "E1 + 10% 纳指 carve", "E1+10%纳指carve", "ETF 配置", "daily"),
-        ("pit-quality-vs-smallcap", "PIT 质量 baseline", "PIT 质量 baseline", "小市值/质量", "trade"),
-        ("open-gap-momentum", "全 A 等权基准", "等权 A 股基准", "基准", "daily"),
-    ]
+    """One credible champion per requested family, 2020-2026, 200k.
+
+    The consolidated artifact is built by scripts/build_family_best_2020_2026.py.
+    This reader keeps the hub page and the CSV/JSON artifacts on the same data.
+    """
+    source = RESULTS / "2026-11-16-family-best-2020-2026"
+    summary = json.loads((source / "summary.json").read_text(encoding="utf-8"))
+    specs = summary["strategies"]
+    ids = [item["id"] for item in specs]
+    curves = _long(source / "curves.csv", "strategy", "equity", ids)
+    metrics_rows = _read_csv(source / "metrics.csv")
+    metric_map = {str(row["strategy"]): row for _, row in metrics_rows.iterrows()}
     strategies: list[dict[str, Any]] = []
-    for color_idx, (cid, name, label, family, basis) in enumerate(picks):
-        comp = next(c for c in comparisons if c["id"] == cid)
-        strat = next(s for s in comp["strategies"] if s["name"] == name)
-        strategies.append(
-            {
-                **strat,
-                "name": label,
-                "color": COLORS[color_idx],
-                "basis": basis,
-                "family": family,
-            }
+    for idx, item in enumerate(specs):
+        row = metric_map[item["name"]]
+        basis = str(row["win_basis"])
+        override = {
+            "total_return": float(row["total_return_pct"]) / 100.0,
+            "annualized_return": float(row["annualized_pct"]) / 100.0,
+            "max_drawdown": float(row["max_drawdown_pct"]) / 100.0,
+            "sharpe": float(row["sharpe"]),
+            "win_rate": float(row["win_rate_pct"]) / 100.0,
+        }
+        if pd.notna(row.get("profit_factor")):
+            override["profit_factor"] = float(row["profit_factor"])
+        if pd.notna(row.get("trades")):
+            override["trades"] = int(row["trades"])
+        strat = _strat(
+            item["name"],
+            item["description"],
+            curves[item["id"]],
+            COLORS[idx],
+            basis=basis,
+            metrics_override=override,
         )
+        strat["family"] = item["family"]
+        strat["win_basis"] = basis
+        strat["currency"] = "USD" if item["id"] == "qqq_ma200_vol15" else "CNY"
+        strategies.append(strat)
     return _comparison(
         "best-of-family",
         "best",
-        "各家族最优策略对比",
-        "每个研究家族选一个代表策略放同一张图；2020-01-02 起，初始 20 万。",
-        "选择规则：首板/连板取唯一正期望的首板低开（1/3 版，风险更可控）；"
-        "ETF 配置取通过验收的 E1+10% 纳指 carve；"
-        "小市值/质量取可信口径的 PIT 质量 baseline（快照版有选择偏差，不选）；"
-        "基准取等权 A 股。开盘缺口动量家族已证伪，不进入本页。",
-        "胜率/盈亏比口径：股票策略为交易口径，ETF 与基准为日频口径。年化按 252 个交易日折算。",
+        "2020–2026 各家族最优策略对比",
+        "每个家族按 2020–2026 Sharpe 选一个冠军，统一归一化到 20 万；2020-01-02 → 2026-10-30。",
+        "选择规则：三股票取 Sharpe 最高的年线趋势；指数取通过验收且 Sharpe 最高的 E1+10% 纳指 carve；"
+        "QQQ 取 Sharpe 最高的 MA200+15% 波动目标（买入持有收益更高但回撤更深）；"
+        "首板低开取单票≤1/3（比满仓回撤更小）；小市值取可信 PIT 口径中 Sharpe 最高的 TTM EP+ME。"
+        "快照版质量 baseline 的 31% 有选择偏差，PIT 质量 baseline 收益率更高但回撤 −48.5%，均不作为冠军。"
+        "基准等权 A 股仅作参照。",
+        "胜率口径不同：股票/小市值为首板/持仓的已平仓交易胜率；ETF/QQQ/基准为日频胜率（正收益交易日占比）。"
+        "QQQ 为美元总收益，未做 USD/CNY 换算；其余为人民币。年化按 252 个交易日折算。",
         strategies,
-        "best-of-family",
+        "2026-11-16-family-best-2020-2026",
         [
-            "2026-11-15-first-board-low-open-maxweight33/memo.md",
-            "2026-11-13-etf-return-sleeve/memo.md",
-            "2026-11-06-pit-quality-baseline/summary.json",
+            "2026-11-16-family-best-2020-2026/memo.md",
+            "2026-11-16-family-best-2020-2026/summary.json",
+            "2026-11-16-family-best-2020-2026/metrics.csv",
         ],
     )
 

@@ -1,0 +1,125 @@
+{
+  "generated_at": "2026-11-16",
+  "period": {
+    "start": "2020-01-02",
+    "end": "2026-10-30",
+    "initial": 200000.0
+  },
+  "selection_rule": "每个家族按 2020-2026 Sharpe 选冠军；同时检查回撤/可信数据口径。不重新调参。",
+  "strategies": [
+    {
+      "id": "three_yearline",
+      "family": "三股票策略",
+      "name": "三股票 · 年线趋势",
+      "description": "三策略中 2020-2026 Sharpe 最高：年线趋势 0.265；零轴金叉 0.240、零轴+底背离 0.224。stop8/TP30、gate-off，2020 起点仅 1,288/5,014 只有预热，当前上市池、无退市股。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-30",
+        "total_return_pct": 25.77,
+        "annualized_pct": 3.56,
+        "sharpe": 0.265,
+        "max_drawdown_pct": -32.34,
+        "win_rate_pct": 35.61,
+        "win_basis": "trade",
+        "profit_factor": null,
+        "trades": 264,
+        "final_equity_200k": 251550.0,
+        "days": 1653
+      }
+    },
+    {
+      "id": "etf_e1_carve10",
+      "family": "指数 / ETF",
+      "name": "指数策略 · E1+10%纳指",
+      "description": "E1 现金 sleeve + 10% 纳指 carve（513100，人民币）；ETF 家族中通过验收且 Sharpe 最高。闲置权重放货币 ETF，总敞口不增加，周度调仓。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-30",
+        "total_return_pct": 109.58,
+        "annualized_pct": 11.95,
+        "sharpe": 1.37,
+        "max_drawdown_pct": -9.71,
+        "win_rate_pct": 55.45,
+        "win_basis": "daily",
+        "profit_factor": 1.283,
+        "trades": null,
+        "final_equity_200k": 419161.54,
+        "days": 1653
+      }
+    },
+    {
+      "id": "qqq_ma200_vol15",
+      "family": "QQQ",
+      "name": "QQQ · MA200+15%波动",
+      "description": "QQQ MA200 + 15% 年化波动目标；2020-2026 Sharpe 1.029，高于买入持有 0.835，但年化 14.1% 低于买入持有 19.3%。QQQ 为美元总收益，未做 USD/CNY 换算。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-30",
+        "total_return_pct": 145.76,
+        "annualized_pct": 14.12,
+        "sharpe": 1.029,
+        "max_drawdown_pct": -14.23,
+        "win_rate_pct": 46.15,
+        "win_basis": "daily",
+        "profit_factor": 1.209,
+        "trades": null,
+        "final_equity_200k": 491512.76,
+        "days": 1717
+      }
+    },
+    {
+      "id": "first_board_third",
+      "family": "首板低开",
+      "name": "首板低开 · 单票≤1/3",
+      "description": "首板低开单票≤1/3 版；Sharpe 1.080，高于满仓版 1.01，最大回撤 −23.3% 对 −35.5%。持有期不再平衡，现金闲置，收益低于满仓版。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-30",
+        "total_return_pct": 174.88,
+        "annualized_pct": 16.68,
+        "sharpe": 1.08,
+        "max_drawdown_pct": -23.29,
+        "win_rate_pct": 50.68,
+        "win_basis": "trade",
+        "profit_factor": 1.676,
+        "trades": 219,
+        "final_equity_200k": 549761.9,
+        "days": 1653
+      }
+    },
+    {
+      "id": "smallcap_ttm_ep_me",
+      "family": "小市值",
+      "name": "小市值 · TTM EP+ME",
+      "description": "PIT 全 A、30%-50% 流通市值分位、TTM EP 前 50% 再按市值取 50 只、行业≤25%、月度、10bp；家族可信口径中 Sharpe 0.427、最大回撤 −25.1%。PIT 质量 baseline 年化更高 6.44%，但回撤 −48.5%，不作为冠军。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-30",
+        "total_return_pct": 40.14,
+        "annualized_pct": 5.07,
+        "sharpe": 0.427,
+        "max_drawdown_pct": -25.13,
+        "win_rate_pct": 46.0,
+        "win_basis": "trade",
+        "profit_factor": null,
+        "trades": 2552,
+        "final_equity_200k": 280275.57,
+        "days": 1653
+      }
+    },
+    {
+      "id": "benchmark_equal_weight",
+      "family": "基准",
+      "name": "等权 A 股基准",
+      "description": "等权主板+创业板、每日再平衡、无成本；仅作市场参照，不参与冠军评选。",
+      "metrics": {
+        "period": "2020-01-02..2026-10-29",
+        "total_return_pct": 102.77,
+        "annualized_pct": 11.39,
+        "sharpe": 0.55,
+        "max_drawdown_pct": -34.63,
+        "win_rate_pct": 54.88,
+        "win_basis": "daily",
+        "profit_factor": 1.106,
+        "trades": null,
+        "final_equity_200k": 405549.44,
+        "days": 1652
+      }
+    }
+  ]
+}
