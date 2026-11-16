@@ -41,6 +41,7 @@ import backtest_winrate as bt
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CACHE_DIR = BASE_DIR / "cache" / "daily_history"
 HISTORY_DIR = BASE_DIR / "cache" / "baostock_history_20261026"
+DELISTED_DIR = BASE_DIR / "cache" / "stock_pit" / "prices_delisted"
 INITIAL_CAPITAL = 1_000_000.0
 LOT = 100
 COMMISSION = 0.0003
@@ -105,6 +106,50 @@ def _repair_amount(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def _merge_delisted_bars(bars: dict[str, pd.DataFrame]) -> int:
+    """Append Eastmoney delisted daily bars that are missing from ``bars``.
+
+    The delisted CSVs are unadjusted (``adjust=""``) and volume is in lots.
+    They are used only for symbols that have no qfq series at all; existing qfq
+    series are left untouched.  This closes most of the survivorship gap but
+    cannot reconstruct qfq dividends for delisted names.
+    """
+    if not DELISTED_DIR.exists():
+        return 0
+    added = 0
+    for path in sorted(DELISTED_DIR.glob("*.csv")):
+        if path.name == "prices_index.csv":
+            continue
+        code = path.stem
+        if code in bars or not code.startswith(("0", "3", "6")):
+            continue
+        try:
+            raw = pd.read_csv(path)
+        except Exception:
+            continue
+        if "日期" not in raw.columns or "收盘" not in raw.columns:
+            continue
+        frame = pd.DataFrame(
+            {
+                "datetime": pd.to_datetime(raw["日期"], errors="coerce"),
+                "open": pd.to_numeric(raw.get("开盘"), errors="coerce"),
+                "high": pd.to_numeric(raw.get("最高"), errors="coerce"),
+                "low": pd.to_numeric(raw.get("最低"), errors="coerce"),
+                "close": pd.to_numeric(raw.get("收盘"), errors="coerce"),
+                "volume": pd.to_numeric(raw.get("成交量"), errors="coerce") * 100.0,
+                "amount": pd.to_numeric(raw.get("成交额"), errors="coerce"),
+                "turnover_rate": pd.to_numeric(raw.get("换手率"), errors="coerce"),
+            }
+        ).dropna(subset=["datetime", "close"])
+        if len(frame) < 2:
+            continue
+        frame = frame.sort_values("datetime").drop_duplicates("datetime").reset_index(drop=True)
+        frame["splice_break"] = False
+        bars[code] = frame
+        added += 1
+    return added
+
+
 def load_bars() -> dict[str, pd.DataFrame]:
     """Merge BaoStock 2016-2024 qfq bars with the recent 2025-2026 cache.
 
@@ -160,6 +205,8 @@ def load_bars() -> dict[str, pd.DataFrame]:
             continue
         recent = _repair_amount(recent)
         bars[code] = recent.sort_values("datetime").drop_duplicates("datetime").reset_index(drop=True)
+    added = _merge_delisted_bars(bars)
+    print(f"merged {added} delisted symbols from {DELISTED_DIR.name}", flush=True)
     return bars
 
 
