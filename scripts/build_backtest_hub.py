@@ -650,6 +650,7 @@ def build_pit_quality_vs_smallcap() -> dict[str, Any]:
 
 CATEGORIES = [
     {"id": "best", "name": "家族最优"},
+    {"id": "state", "name": "走势状态机"},
     {"id": "first-board", "name": "首板 / 连板"},
     {"id": "open-gap", "name": "开盘缺口 / 动量"},
     {"id": "etf", "name": "ETF 配置"},
@@ -692,6 +693,64 @@ def build_catalog(rich_by_dir: dict[str, str]) -> list[dict[str, Any]]:
             }
         )
     return rows
+def build_state_machine() -> dict[str, Any]:
+    source = RESULTS / "2026-11-16-first-board-state-machine"
+    raw = pd.read_csv(source / "curves.csv")
+    raw["date"] = pd.to_datetime(raw["date"])
+    curves = raw.pivot(index="date", columns="strategy", values="equity")
+    trades = pd.read_csv(source / "trades.csv", dtype={"symbol": str})
+    labels = {
+        "base": "状态机·全部",
+        "skip_turn_down": "跳过 turn_down",
+        "only_down": "仅 down 状态",
+        "skip_up": "跳过 up 状态",
+        "half_down": "down 状态半仓",
+    }
+    descriptions = {
+        "base": "等权 A 股状态机不筛选；T-1 状态，T 开盘买、T+1 收盘卖。",
+        "skip_turn_down": "跳过 turn_down（高位转弱）状态；其余同基线。",
+        "only_down": "只在 down（下跌趋势）状态交易，其余时间空仓。",
+        "skip_up": "跳过 up（上涨趋势）状态；其余同基线。",
+        "half_down": "down 状态只投 50% 现金，其余状态满仓。",
+    }
+    strategies = []
+    for idx, name in enumerate(["base", "skip_turn_down", "only_down", "skip_up", "half_down"]):
+        stats = trade_metrics(
+            trades[trades["strategy"] == name],
+            date_col="entry_date",
+            return_col="net_return",
+            pnl_col=None,
+            hold_col=None,
+        )
+        strategies.append(
+            _strat(
+                labels[name],
+                descriptions[name],
+                normalize(curves[name]),
+                COLORS[idx],
+                trade_stats=stats,
+            )
+        )
+    return _comparison(
+        "state-machine",
+        "state",
+        "首板低开 × 走势状态机",
+        "等权主板+创业板日线状态机；固定 MA20/MA60/五日斜率；2020-01-02 起、20 万初始。",
+        "状态定义在首次运行前固定：up/down/turn_up/turn_down/range；信号日只用 T-1 及以前数据。"
+        "结论：状态效应不稳定；只有「跳过 turn_down」在设计和留出段都改善，但样本仅 7/4 笔，"
+        "bootstrap P(Δ>0)=0.946，低于 0.95 验收线，不构成可上线结论。",
+        "交易口径；2020-2024 为设计段，2025-2026 为留出段。"
+        "小级别进场验证见 2026-11-16-first-board-low-open-15m：15m 确认反而破坏首板低开边际。",
+        strategies,
+        "2026-11-16-first-board-state-machine",
+        [
+            "2026-11-16-first-board-state-machine/memo.md",
+            "2026-11-16-first-board-state-machine/summary.json",
+            "2026-11-16-first-board-low-open-15m/memo.md",
+        ],
+    )
+
+
 def build_best_of_family(comparisons: list[dict[str, Any]]) -> dict[str, Any]:
     """One champion per family on a single 2020-2026 curve set."""
     picks: list[tuple[str, str, str, str, str]] = [
@@ -743,6 +802,7 @@ def build_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     ]
     comparisons = [
         build_best_of_family(family_sources),
+        build_state_machine(),
         build_first_board_full_vs_third(),
         build_first_board_four(),
         build_first_board_pullback(),
