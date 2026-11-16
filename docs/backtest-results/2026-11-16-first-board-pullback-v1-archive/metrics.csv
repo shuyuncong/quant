@@ -1,0 +1,2 @@
+﻿strategy,period,trades,net_mean_pct,win_rate_pct,payoff,profit_factor,t_stat,cagr_pct,sharpe,max_drawdown_pct,avg_exposure_pct
+first_board_pullback_v1,2020-01-02..2026-10-30,493,0.43,47.87,1.25,1.15,1.22,1.6,0.42,-5.22,5.53

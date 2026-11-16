@@ -1,0 +1,27 @@
+{
+  "strategy": "first_board_pullback_v1",
+  "version": "v1",
+  "frozen_at": "2026-11-16",
+  "source_commit": "8b5cf95",
+  "status": "archived_research_only_not_production",
+  "files": [
+    "README.md",
+    "code/first_board_pullback_cycle_study.py",
+    "code/first_board_pullback_study.py",
+    "market_cycle.csv",
+    "metrics.csv",
+    "portfolio_curve.csv",
+    "summary.json",
+    "trades.csv"
+  ],
+  "sha256": {
+    "README.md": "e90fbc26cae3252bf44aa76741aad0226d1b94d96341b5f25ab53b348d49aff1",
+    "code/first_board_pullback_cycle_study.py": "e1b38e03b6b62ef7e4f9a0ea8438a35fe6e4075c10c4904b9975a2040b96c4e4",
+    "code/first_board_pullback_study.py": "8697e16a0dba08d238e3fd924d125daec6870cc74203559e63c1eb6801c6eb1e",
+    "market_cycle.csv": "6f03ac7e772afb29aab82a87b6b5a62043561523faf3984c6e11fc33aba96893",
+    "metrics.csv": "c43df3fef1526aab77dc92a7a1e39708ead57dfbce858599d77e2e444f9242d5",
+    "portfolio_curve.csv": "8ba2d89b570653e2cb3935737770d49f70045b65986922a6938b910a608773be",
+    "summary.json": "87ef3648af779c3acd354241b01e9d0f877f64d90e280d4e940bd6e207a68913",
+    "trades.csv": "b8c53b27397726ff2f7fca38a19afafb7097d0109173d94730cf17376685f87c"
+  }
+}
