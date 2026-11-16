@@ -651,6 +651,7 @@ def build_pit_quality_vs_smallcap() -> dict[str, Any]:
 CATEGORIES = [
     {"id": "best", "name": "家族最优"},
     {"id": "state", "name": "走势状态机"},
+    {"id": "verify", "name": "2020–2026 验证"},
     {"id": "first-board", "name": "首板 / 连板"},
     {"id": "open-gap", "name": "开盘缺口 / 动量"},
     {"id": "etf", "name": "ETF 配置"},
@@ -693,6 +694,79 @@ def build_catalog(rich_by_dir: dict[str, str]) -> list[dict[str, Any]]:
             }
         )
     return rows
+def build_verification() -> dict[str, Any]:
+    source = RESULTS / "2026-11-16-first-board-state-machine"
+    raw = pd.read_csv(source / "curves.csv")
+    raw["date"] = pd.to_datetime(raw["date"])
+    curves = raw.pivot(index="date", columns="strategy", values="equity")
+    state_trades = pd.read_csv(source / "trades.csv", dtype={"symbol": str})
+
+    base_comp, base_strat = _find_strategy(
+        [build_first_board_full_vs_third()], "first-board-low-open-full-vs-third", "首板低开·满仓版"
+    )
+    cap_comp, cap_strat = _find_strategy(
+        [build_first_board_full_vs_third()], "first-board-low-open-full-vs-third", "首板低开·单票≤1/3"
+    )
+
+    strategies = [
+        _strat(
+            "首板低开·满仓（原版）",
+            "首板低开源码原版：空仓时按候选等分买入，次日 11:28/14:50 卖出。",
+            pd.Series({pd.Timestamp(d): v for d, v in base_strat["curve"]}),
+            COLORS[0],
+            metrics_override={k: base_strat["metrics"][k] for k in ("win_rate", "profit_factor", "trades", "average_hold_days") if base_strat["metrics"].get(k) is not None},
+        ),
+        _strat(
+            "首板低开·单票≤1/3",
+            "同一选股与卖出规则；买入时单票不超过总资产 1/3。",
+            pd.Series({pd.Timestamp(d): v for d, v in cap_strat["curve"]}),
+            COLORS[1],
+            metrics_override={k: cap_strat["metrics"][k] for k in ("win_rate", "profit_factor", "trades", "average_hold_days") if cap_strat["metrics"].get(k) is not None},
+        ),
+    ]
+    for idx, (name, label, description) in enumerate(
+        [
+            ("base", "状态机·全部", "状态机不筛选；T 开盘买、T+1 收盘卖（简化口径）。"),
+            ("skip_turn_down", "跳过 turn_down", "跳过 T-1 状态为 turn_down 的新开仓；其余同基线。"),
+            ("only_down", "仅 down 状态", "只在 T-1 状态为 down 时开仓；其余时间空仓。"),
+        ],
+        start=2,
+    ):
+        stats = trade_metrics(
+            state_trades[state_trades["strategy"] == name],
+            date_col="entry_date",
+            return_col="net_return",
+            pnl_col=None,
+            hold_col=None,
+        )
+        strategies.append(
+            _strat(
+                label,
+                description,
+                normalize(curves[name]),
+                COLORS[idx],
+                trade_stats=stats,
+            )
+        )
+    return _comparison(
+        "verify-2020-2026",
+        "verify",
+        "2020–2026 统一区间验证",
+        "把原版首板低开、1/3 仓位和状态机规则放到同一 2020-01-02 → 2026-10-30、20 万初始的图上。",
+        "这是同一段历史数据的口径复核，不是独立样本外验证。状态机版本用 T 开盘买、T+1 收盘卖；"
+        "首板低开原版用盘中 11:28/14:50 卖出，两者执行口径不同，不能把差异全部归因于状态机。",
+        "股票策略为交易口径；状态机版本和原版执行时点不同。2025–2026 为已知留出段，"
+        "skip_turn_down 的 bootstrap P(Δ>0)=0.946，低于 0.95 验收线。",
+        strategies,
+        "2026-11-16-first-board-state-machine",
+        [
+            "2026-11-16-first-board-state-machine/memo.md",
+            "2026-11-16-first-board-state-machine/summary.json",
+            "2026-11-15-first-board-low-open-maxweight33/memo.md",
+        ],
+    )
+
+
 def build_state_machine() -> dict[str, Any]:
     source = RESULTS / "2026-11-16-first-board-state-machine"
     raw = pd.read_csv(source / "curves.csv")
@@ -803,6 +877,7 @@ def build_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     comparisons = [
         build_best_of_family(family_sources),
         build_state_machine(),
+        build_verification(),
         build_first_board_full_vs_third(),
         build_first_board_four(),
         build_first_board_pullback(),
