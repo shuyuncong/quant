@@ -797,6 +797,74 @@ def build_low_open_vs_pullback_same_sizing() -> dict[str, Any]:
     )
 
 
+def build_three_slot_stop8() -> dict[str, Any]:
+    source = RESULTS / "2026-11-18-first-board-three-slot-stop8"
+    summary = json.loads((source / "summary.json").read_text(encoding="utf-8"))
+    rules = summary["rules"]
+    specs = [
+        (
+            "low_open",
+            "首板低开",
+            "昨日首板、今日低开 3–4%、60 日相对位置≤50%；开盘买，次日收盘卖，收盘涨停继续持有。",
+        ),
+        (
+            "pullback_v1",
+            "首板缩量回调 V1",
+            "首板后 1–10 日缩量回调 10–25%、不破首板低点，次日开盘买；"
+            "收盘 −5% 止损 / +10% 止盈 / 最多 5 日，均次日开盘卖。",
+        ),
+    ]
+    curves = _long(source / "curves.csv", "strategy", "equity", [key for key, _, _ in specs])
+    strategies = []
+    findings = []
+    for idx, (key, label, description) in enumerate(specs):
+        main = summary["results"][key]["main"]
+        unstopped = summary["results"][key]["no_hard_stop"]
+        shuffled = summary["random_order"][key]
+        without = summary["best_trade_dependence"][key]["without_best_5"]
+        strategies.append(
+            _strat(
+                label,
+                description,
+                curves[key],
+                COLORS[idx],
+                metrics_override={
+                    name: main[name]
+                    for name in ("win_rate", "profit_factor", "trades", "average_hold_days")
+                },
+            )
+        )
+        findings.append(
+            f"{label}：总收益 {main['total_return']:+.1%}、年化 {main['annualized_return']:+.1%}、"
+            f"Sharpe {main['sharpe']:.2f}、最大回撤 {main['max_drawdown']:.1%}；"
+            f"{main['signals']} 个可买信号放弃 {main['dropped']} 个；"
+            f"随机换同日取舍顺序 {shuffled['runs']} 次，总收益 5%–95% 区间 "
+            f"{shuffled['total_return']['p05']:+.0%} … {shuffled['total_return']['p95']:+.0%}；"
+            f"不加 8% 止损为 {unstopped['total_return']:+.1%}；"
+            f"去掉最赚的 5 笔后为 {without['total_return']:+.1%}。"
+        )
+    return _comparison(
+        "three-slot-stop8",
+        "first-board",
+        "首板低开 vs 缩量回调：3 只 / 单票 40% / 浮亏 8% 止损",
+        "2020-01-02 起，初始 20 万（原回测 100 万，按比例缩放）；两条策略各自一个独立账户，账户规则相同。",
+        f"账户规则：最多同时持有 {rules['slots']} 只，同日候选多于空仓位的直接放弃；"
+        f"单票不超过买入时总资产的 {rules['max_weight']:.0%}（现金不够时按可用现金平分，不加杠杆）；"
+        f"买入次日起最低价触及成本 −{rules['hard_stop']:.0%} 即卖出（跳空低开按开盘价）。"
+        + "".join(findings)
+        + "单票 40% 时两条曲线都靠少数几笔大赚撑着，不能当成稳定收益。",
+        "交易口径；胜率/盈亏比按已平仓交易的净盈亏计。佣金 3bp/边（最低 5 元）、卖出印花税 10bp、"
+        "滑点 10bp/边，100 股整手。日线回测：盘中止损假设能按止损价成交，无历史 ST 名单。",
+        strategies,
+        "2026-11-18-first-board-three-slot-stop8",
+        [
+            "2026-11-18-first-board-three-slot-stop8/memo.md",
+            "2026-11-18-first-board-three-slot-stop8/summary.json",
+            "2026-11-18-first-board-three-slot-stop8/metrics.csv",
+        ],
+    )
+
+
 def build_verification() -> dict[str, Any]:
     source = RESULTS / "2026-11-16-first-board-state-machine"
     raw = pd.read_csv(source / "curves.csv")
@@ -1003,6 +1071,7 @@ def build_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         build_verification(),
         build_pullback_v1_v5(),
         build_low_open_vs_pullback_same_sizing(),
+        build_three_slot_stop8(),
         build_first_board_full_vs_third(),
         build_first_board_four(),
         build_first_board_pullback(),

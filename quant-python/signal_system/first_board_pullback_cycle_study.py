@@ -21,7 +21,7 @@ import math
 import pathlib
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -130,6 +130,7 @@ def _trade(
     limit_close: float,
     limit_amount: float,
     volume_multiple: float,
+    simulate_exit: Callable[..., dict[str, Any] | None],
 ) -> dict[str, Any] | None:
     dates = bars["datetime"]
     open_ = bars["open"].to_numpy(dtype=float)
@@ -142,7 +143,7 @@ def _trade(
         return None
     if entry_open / close[j] - 1.0 >= rates[entry_idx] - 0.005:
         return None
-    exit_info = base._simulate_exit(symbol, bars, entry_idx, entry_open, rates, exit_cfg)
+    exit_info = simulate_exit(symbol, bars, entry_idx, entry_open, rates, exit_cfg)
     if exit_info is None:
         return None
     entry_date = pd.Timestamp(dates.iloc[entry_idx])
@@ -169,6 +170,7 @@ def detect(
     cfg: VariantConfig,
     exit_cfg: base.ExitConfig,
     ice_days: set[pd.Timestamp] | None,
+    simulate_exit: Callable[..., dict[str, Any] | None] = base._simulate_exit,
 ) -> list[dict[str, Any]]:
     if len(bars) < 250 + cfg.max_wait + exit_cfg.hold_days:
         return []
@@ -218,7 +220,7 @@ def detect(
                 if j + 1 >= len(bars):
                     break
                 if _low_volume_day(j, close, amount, first_low, limit_close, limit_amount, avg20[t], cfg):
-                    entry = _trade(symbol, bars, t, j, j + 1, exit_cfg, cfg, first_low, limit_close, limit_amount, float(volume_multiple[t]))
+                    entry = _trade(symbol, bars, t, j, j + 1, exit_cfg, cfg, first_low, limit_close, limit_amount, float(volume_multiple[t]), simulate_exit)
                     break
         else:
             for start in range(t + 1, t + 1 + cfg.max_wait - 1):
@@ -242,7 +244,7 @@ def detect(
                     if cfg.reclaim_ma20:
                         if not math.isfinite(ma20[k]) or float(close[k]) <= float(ma20[k]):
                             continue
-                    entry = _trade(symbol, bars, t, k, k + 1, exit_cfg, cfg, first_low, limit_close, limit_amount, float(volume_multiple[t]))
+                    entry = _trade(symbol, bars, t, k, k + 1, exit_cfg, cfg, first_low, limit_close, limit_amount, float(volume_multiple[t]), simulate_exit)
                     if entry is not None:
                         break
                 if entry is not None:
