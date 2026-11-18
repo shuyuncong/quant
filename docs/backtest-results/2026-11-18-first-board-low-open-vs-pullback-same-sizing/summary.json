@@ -1,0 +1,101 @@
+{
+  "generated_at": "2026-11-18",
+  "period": {
+    "start": "2020-01-02",
+    "end": "2026-10-30"
+  },
+  "initial": 1000000.0,
+  "overlap": {
+    "low_trades": 219,
+    "v1_trades": 491,
+    "exact_same_symbol_entry_date": 0,
+    "same_symbol_any_date": 17,
+    "same_symbol_v1_within_15_days_after_low": 2
+  },
+  "regimes": [
+    {
+      "label": "5%×20",
+      "weight": 0.05,
+      "slots": 20,
+      "low": {
+        "total_return_pct": 16.02,
+        "annualized_pct": 2.29,
+        "sharpe": 0.977,
+        "max_drawdown_pct": -4.27,
+        "win_rate_pct": 50.68,
+        "trades": 219,
+        "avg_exposure_pct": 0.71,
+        "final_equity": 1160232.18,
+        "skipped_slots": 0,
+        "skipped_cash": 0,
+        "skipped_duplicate": 0
+      },
+      "v1": {
+        "total_return_pct": 11.11,
+        "annualized_pct": 1.62,
+        "sharpe": 0.414,
+        "max_drawdown_pct": -5.35,
+        "win_rate_pct": 48.07,
+        "trades": 491,
+        "avg_exposure_pct": 5.69,
+        "final_equity": 1111092.0,
+        "skipped_slots": 0,
+        "skipped_cash": 0,
+        "skipped_duplicate": 0
+      },
+      "combined": {
+        "total_return_pct": 26.92,
+        "annualized_pct": 3.71,
+        "sharpe": 0.868,
+        "max_drawdown_pct": -5.2,
+        "win_rate_pct": 48.79,
+        "trades": 705,
+        "avg_exposure_pct": 5.88,
+        "final_equity": 1269213.18
+      },
+      "correlation": 0.03069080152377803
+    },
+    {
+      "label": "10%×10",
+      "weight": 0.1,
+      "slots": 10,
+      "low": {
+        "total_return_pct": 32.05,
+        "annualized_pct": 4.33,
+        "sharpe": 0.999,
+        "max_drawdown_pct": -7.43,
+        "win_rate_pct": 50.68,
+        "trades": 219,
+        "avg_exposure_pct": 1.33,
+        "final_equity": 1320464.37,
+        "skipped_slots": 0,
+        "skipped_cash": 0,
+        "skipped_duplicate": 0
+      },
+      "v1": {
+        "total_return_pct": 21.8,
+        "annualized_pct": 3.06,
+        "sharpe": 0.445,
+        "max_drawdown_pct": -8.09,
+        "win_rate_pct": 47.94,
+        "trades": 486,
+        "avg_exposure_pct": 10.62,
+        "final_equity": 1217962.0,
+        "skipped_slots": 5,
+        "skipped_cash": 0,
+        "skipped_duplicate": 0
+      },
+      "combined": {
+        "total_return_pct": 58.18,
+        "annualized_pct": 7.25,
+        "sharpe": 0.978,
+        "max_drawdown_pct": -7.64,
+        "win_rate_pct": 49.41,
+        "trades": 682,
+        "avg_exposure_pct": 10.01,
+        "final_equity": 1581846.77
+      },
+      "correlation": 0.03180585080086615
+    }
+  ]
+}

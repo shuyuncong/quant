@@ -744,6 +744,59 @@ def build_pullback_v1_v5() -> dict[str, Any]:
     )
 
 
+def build_low_open_vs_pullback_same_sizing() -> dict[str, Any]:
+    source = RESULTS / "2026-11-18-first-board-low-open-vs-pullback-same-sizing"
+    names = [
+        "5%×20 · 首板低开",
+        "5%×20 · 首板缩量回调 V1",
+        "5%×20 · 50/50 组合",
+    ]
+    curves = _wide(source / "curves.csv", names)
+    metrics = _read_csv(source / "metrics.csv")
+    metrics = metrics[metrics["panel"] == "5%×20"]
+    metric_map = {str(row["portfolio"]): row for _, row in metrics.iterrows()}
+    labels = ["首板低开", "首板缩量回调 V1", "50/50 组合"]
+    descriptions = [
+        "首板次日低开 3–4% 买入，次日卖出；标准化为单票 5%、最多 20 槽。",
+        "首板后 1–10 日缩量回调 10–25%，不破首板低点，回调确认后次日开盘买；标准化为单笔 5%、最多 20 槽。",
+        "两个独立子账本各 50 万、各 10 槽；每笔绝对金额与单策略相同。",
+    ]
+    strategies = []
+    for idx, (name, label, description) in enumerate(zip(names, labels, descriptions)):
+        row = metric_map[label]
+        override = {
+            "total_return": float(row["total_return_pct"]) / 100.0,
+            "annualized_return": float(row["annualized_pct"]) / 100.0,
+            "max_drawdown": float(row["max_drawdown_pct"]) / 100.0,
+            "sharpe": float(row["sharpe"]),
+            "win_rate": float(row["win_rate_pct"]) / 100.0,
+            "trades": int(row["trades"]),
+        }
+        strategies.append(
+            _strat(label, description, curves[name], COLORS[idx], basis="trade", metrics_override=override)
+        )
+    return _comparison(
+        "low-open-vs-pullback-same-sizing",
+        "first-board",
+        "首板低开 vs 缩量回调：统一仓位",
+        "2020-01-02 起，初始 20 万；两策略都按单笔 5%、最多 20 槽的同一组合层复测。",
+        "不是同一策略：2020–2026 同股票同入场日重叠 0 笔；同股票出现过 17 只，"
+        "V1 在低开入场后 15 天内也入场的仅 2 对。统一 5%×20 后，低开总收益 +16.0%、"
+        "Sharpe 0.977、回撤 −4.27%；V1 总收益 +11.1%、Sharpe 0.414、回撤 −5.35%；"
+        "50/50 组合总收益 +26.9%，但 Sharpe 0.868，低于低开单独。"
+        "低开原版单票≤1/3 的 +174.9% 不能与 5% 口径直接比较。",
+        "交易口径；胜率为已平仓交易胜率。成本已含在各策略逐笔 net_return；"
+        "组合层固定每笔为初始资金的 5%，不按整手取整。",
+        strategies,
+        "2026-11-18-first-board-low-open-vs-pullback-same-sizing",
+        [
+            "2026-11-18-first-board-low-open-vs-pullback-same-sizing/memo.md",
+            "2026-11-18-first-board-low-open-vs-pullback-same-sizing/summary.json",
+            "2026-11-18-first-board-low-open-vs-pullback-same-sizing/metrics.csv",
+        ],
+    )
+
+
 def build_verification() -> dict[str, Any]:
     source = RESULTS / "2026-11-16-first-board-state-machine"
     raw = pd.read_csv(source / "curves.csv")
@@ -949,6 +1002,7 @@ def build_data() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         build_state_machine(),
         build_verification(),
         build_pullback_v1_v5(),
+        build_low_open_vs_pullback_same_sizing(),
         build_first_board_full_vs_third(),
         build_first_board_four(),
         build_first_board_pullback(),
