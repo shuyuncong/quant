@@ -110,12 +110,12 @@ def load_snapshot(path: Path | None = None) -> dict[str, Any]:
     return _read_json(source)
 
 
-def refresh_snapshot() -> dict[str, Any]:
-    """Recompute the current signal from the local qfq cache and persist it."""
+def refresh_snapshot(as_of: str | None = None) -> dict[str, Any]:
+    """Recompute the signal at `as_of` (default: latest cached session) and persist it."""
     from .engine import compute_signal, load_panel
 
     close, volume = load_panel()
-    signal = compute_signal(close, volume)
+    signal = compute_signal(close, volume, as_of=as_of)
     snapshot = load_snapshot()
     snapshot.update(
         {
@@ -175,14 +175,17 @@ def _week_end(index: Any, day: Any, trade_dates: Any = None) -> dict[str, Any]:
     if trade_dates:
         calendar = sorted(item for item in trade_dates)
         later = [item for item in calendar if item > target.date()]
-        next_session = later[0] if later else None
-        week_last = max((item for item in calendar if item.isocalendar()[:2] == iso), default=target.date())
-        return {
-            "is_week_end": bool(next_session is None or next_session.isocalendar()[:2] != iso),
-            "session": target.strftime("%Y-%m-%d"),
-            "week_last_session": week_last.strftime("%Y-%m-%d"),
-            "calendar": "exchange",
-        }
+        # A calendar built from realised bars (Tencent) ends at `target` and
+        # cannot see the next session. Reading that as "week end" would plan
+        # every day, so only a calendar that knows a later session decides.
+        if later:
+            week_last = max(item for item in calendar if item.isocalendar()[:2] == iso)
+            return {
+                "is_week_end": bool(later[0].isocalendar()[:2] != iso),
+                "session": target.strftime("%Y-%m-%d"),
+                "week_last_session": week_last.strftime("%Y-%m-%d"),
+                "calendar": "exchange",
+            }
 
     week = [item for item in index if item.isocalendar()[:2] == iso]
     return {
@@ -191,18 +194,6 @@ def _week_end(index: Any, day: Any, trade_dates: Any = None) -> dict[str, Any]:
         "week_last_session": (max(week) if week else target).strftime("%Y-%m-%d"),
         "calendar": "friday_fallback",
     }
-
-
-def week_end_status(day: str | None = None, trade_dates: Any = None) -> dict[str, Any]:
-    """Is `day` (default: latest cached session) the week's last trading day?
-
-    The strategy rebalances weekly; running the paper cycle on any other day
-    would trade a different strategy than the one that was backtested.
-    """
-    from .engine import load_panel
-
-    close, _volume = load_panel()
-    return _week_end(close.index, day, trade_dates)
 
 
 def rebuild_snapshot(*, start: str | None = None,
@@ -538,6 +529,14 @@ def fill_paper(as_of: str | None = None) -> dict[str, Any]:
             prices[symbol] = price
     if missing:
         raise EtfDataError(f"缺少下一交易日开盘价: {missing}")
+    # Positions leaving the target must also sell at this open (replay parity);
+    # without a quote `_rebalance_paper` falls back to the last marked price.
+    for symbol in ledger.get("positions") or {}:
+        if symbol in prices or symbol not in opens.columns:
+            continue
+        price = float(opens[symbol].loc[day])
+        if math.isfinite(price) and price > 0:
+            prices[symbol] = price
     snapshot = load_snapshot()
     names = {row.get("symbol"): row.get("name") for row in snapshot.get("target", []) if isinstance(row, dict)}
     snapshot["as_of"] = day.strftime("%Y-%m-%d")
@@ -571,6 +570,80 @@ def initialize_paper(capital: float = 250_000.0, *, plan: bool = True) -> dict[s
 
 def rebalance_paper() -> dict[str, Any]:
     return plan_paper()
+
+
+def advance_paper(trade_dates: Any = None) -> dict[str, Any]:
+    """Advance the ledger session by session up to the latest cached session.
+
+    Every session fills at its own open and gets its own NAV point, so a missed
+    run cannot collapse several sessions into one trade at the latest prices.
+    A week whose last session was not planned live (missed run, or a holiday
+    Friday without a forward-looking calendar) is planned from that session's
+    close before the next session's open fills it.
+    """
+    from .engine import load_panel
+
+    ledger = _load_paper()
+    if not ledger.get("initialized"):
+        raise ValueError("纸面账本尚未初始化")
+    close, _volume = load_panel()
+    index = close.index
+    latest = index[-1]
+    marked = sorted(
+        str(item.get("date") or "") for item in ledger["nav_history"] if isinstance(item, dict)
+    )
+    # Never trade before the ledger existed: late plans need a NAV point at or
+    # before the signal session.
+    started = marked[0] if marked else None
+    sessions = [day for day in index if marked and day.strftime("%Y-%m-%d") > marked[-1]] or [latest]
+
+    steps: list[dict[str, Any]] = []
+    schedule: dict[str, Any] | None = None
+    for day in sessions:
+        key = day.strftime("%Y-%m-%d")
+        step: dict[str, Any] = {"session": key, "late_plan": None, "fill_error": None, "plan_error": None}
+        position = index.get_loc(day)
+        previous = index[position - 1] if position > 0 else None
+        if previous is not None and previous.isocalendar()[:2] != day.isocalendar()[:2]:
+            previous_key = previous.strftime("%Y-%m-%d")
+            current = _load_paper()
+            planned = {
+                str(plan.get("as_of"))
+                for plan in (current.get("pending_plan"), current.get("last_plan"))
+                if isinstance(plan, dict)
+            }
+            if started and previous_key >= started and previous_key not in planned:
+                refresh_snapshot(previous_key)
+                step["late_plan"] = previous_key
+                try:
+                    plan_paper()
+                except ValueError as exc:
+                    step["plan_error"] = str(exc)
+        try:
+            fill_paper(key)
+        except ValueError as exc:
+            step["fill_error"] = str(exc)
+        if day == latest:
+            refresh_snapshot()
+            schedule = _week_end(index, day, trade_dates)
+            if schedule["is_week_end"]:
+                try:
+                    plan_paper()
+                except ValueError as exc:
+                    step["plan_error"] = str(exc)
+            elif step["plan_error"] is None:
+                step["plan_error"] = (
+                    f"非周度调仓日（本周最后交易日 {schedule['week_last_session']}），"
+                    "今日只成交与盯市，不生成新计划"
+                )
+        mark_paper_to_market(key)
+        steps.append(step)
+    return {
+        "steps": steps,
+        "schedule": schedule,
+        "fill_error": steps[-1]["fill_error"],
+        "plan_error": steps[-1]["plan_error"],
+    }
 
 
 def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:

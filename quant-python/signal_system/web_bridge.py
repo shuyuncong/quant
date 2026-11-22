@@ -652,27 +652,20 @@ def _cmd_etf_data_sync(config_path: str, payload: dict[str, Any]) -> int:
 def _cmd_etf_cycle(config_path: str, payload: dict[str, Any]) -> int:
     del payload
     from etf_rotation.data_sync import sync
-    from etf_rotation.service import (
-        fill_paper,
-        get_overview,
-        mark_paper_to_market,
-        plan_paper,
-        refresh_snapshot,
-    )
+    from etf_rotation.service import advance_paper, get_overview
 
     sync_result = sync(config_path=config_path)
-    refresh_snapshot()
-    fill_error = None
-    plan_error = None
+    trade_dates = None
     try:
-        fill_paper()
-    except ValueError as exc:
-        fill_error = str(exc)
-    try:
-        plan_paper()
-    except ValueError as exc:
-        plan_error = str(exc)
-    mark_paper_to_market()
+        from data.market_data import MarketDataClient
+        from utils.helpers import load_config
+
+        trade_dates = MarketDataClient(load_config(config_path)).get_trade_dates()
+    except Exception:  # noqa: BLE001 - calendar is best-effort, fall back to Friday
+        trade_dates = None
+    advanced = advance_paper(trade_dates=trade_dates)
+    fill_error = advanced["fill_error"]
+    plan_error = advanced["plan_error"]
     return _emit({
         "sync": sync_result,
         "overview": get_overview(),

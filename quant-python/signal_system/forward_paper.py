@@ -75,43 +75,23 @@ def _action_cycle(service: Any, *, sync: bool, config: str, calendar: bool) -> d
         from etf_rotation.data_sync import sync as sync_data
 
         sync_result = sync_data(config_path=config)
-    service.refresh_snapshot()
-    fill_error = None
-    plan_error = None
-    try:
-        service.fill_paper()
-    except ValueError as exc:
-        fill_error = str(exc)
     trade_dates = None
-    calendar_mode = "friday_fallback"
     if calendar:
         try:
             from data.market_data import MarketDataClient
             from utils.helpers import load_config
 
             trade_dates = MarketDataClient(load_config(config)).get_trade_dates()
-            calendar_mode = "exchange"
         except Exception:  # noqa: BLE001 - calendar is best-effort
             trade_dates = None
-    schedule = service.week_end_status(trade_dates=trade_dates)
-    if schedule["is_week_end"]:
-        try:
-            service.plan_paper()
-        except ValueError as exc:
-            plan_error = str(exc)
-    else:
-        plan_error = (
-            f"非周度调仓日（本周最后交易日 {schedule['week_last_session']}），"
-            "今日只成交与盯市，不生成新计划"
-        )
-    service.mark_paper_to_market()
+    advanced = service.advance_paper(trade_dates=trade_dates)
     return {
         "action": "cycle",
         "sync": sync_result,
-        "fill_error": fill_error,
-        "plan_error": plan_error,
-        "calendar": calendar_mode,
-        "schedule": schedule,
+        "steps": advanced["steps"],
+        "fill_error": advanced["fill_error"],
+        "plan_error": advanced["plan_error"],
+        "schedule": advanced["schedule"],
         "ledger": _status(service),
     }
 

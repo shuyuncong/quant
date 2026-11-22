@@ -268,6 +268,7 @@ class PaperLedgerTests(unittest.TestCase):
             mock.patch.object(service, "STATE_DIR", root),
             mock.patch.object(service, "PAPER_LEDGER", root / "ledger.json"),
             mock.patch.object(service, "HISTORY_PATH", root / "history.jsonl"),
+            mock.patch.object(service, "RUNTIME_SNAPSHOT", root / "snapshot.json"),
         ]
         for patch in self.patches:
             patch.start()
@@ -369,6 +370,106 @@ class PaperLedgerTests(unittest.TestCase):
         normal_calendar = {d.date() for d in pd.bdate_range("2026-11-02", periods=10)}
         self.assertFalse(service._week_end(index, thursday, normal_calendar)["is_week_end"])
         self.assertTrue(service._week_end(index, friday, normal_calendar)["is_week_end"])
+
+        # A calendar built from realised bars ends at the session itself; it
+        # cannot make a midweek day look like the week's last session.
+        realised = {d.date() for d in index if d <= thursday}
+        blind = service._week_end(index[index <= thursday], thursday, realised)
+        self.assertFalse(blind["is_week_end"])
+        self.assertEqual(blind["calendar"], "friday_fallback")
+
+    def _advance(self, close: pd.DataFrame, open_: pd.DataFrame, volume: pd.DataFrame,
+                 upto: pd.Timestamp) -> dict:
+        with mock.patch.object(engine, "load_panel", return_value=(close.loc[:upto], volume.loc[:upto])), \
+                mock.patch.object(engine, "load_open_panel", return_value=open_.loc[:upto]):
+            return service.advance_paper()
+
+    def test_missed_sessions_are_replayed_at_their_own_opens(self) -> None:
+        index, close, open_, volume = flat_panels(gate_open=False)
+        # Make every session's open distinguishable from every other price.
+        open_ = close * (1.0 + 0.001 * np.arange(len(index))[:, None] / len(index))
+        fridays = [day for day in index if day.weekday() == 4]
+        signal_day = fridays[-4]
+        start = index.get_loc(signal_day)
+        service._save_paper({
+            "initialized": True, "capital": 500_000.0, "cash": 500_000.0,
+            "positions": {}, "orders": [],
+            "nav_history": [{"date": signal_day.strftime("%Y-%m-%d"), "cash": 500_000.0,
+                             "market_value": 0, "equity": 500_000.0, "pnl_pct": 0.0}],
+        })
+        with mock.patch.object(engine, "load_panel", return_value=(close.loc[:signal_day], volume.loc[:signal_day])):
+            service.refresh_snapshot()
+            service.plan_paper()
+
+        # Nothing runs for two weeks, then one catch-up on a Wednesday.
+        upto = index[start + 13]
+        result = self._advance(close, open_, volume, upto)
+        ledger = service._load_paper()
+
+        missed = [day.strftime("%Y-%m-%d") for day in index[start + 1:start + 14]]
+        self.assertEqual([step["session"] for step in result["steps"]], missed)
+        self.assertEqual([item["date"] for item in ledger["nav_history"]][1:], missed)
+
+        first_fill, second_fill, third_fill = index[start + 1], index[start + 6], index[start + 11]
+        by_day: dict[str, list[dict]] = {}
+        for order in ledger["orders"]:
+            by_day.setdefault(order["fill_date"], []).append(order)
+        self.assertEqual(sorted(by_day)[0], first_fill.strftime("%Y-%m-%d"))
+        for day in (first_fill, second_fill, third_fill):
+            for order in by_day.get(day.strftime("%Y-%m-%d"), []):
+                self.assertAlmostEqual(order["price"], float(open_[order["symbol"]].loc[day]), places=6)
+        self.assertNotIn(upto.strftime("%Y-%m-%d"), by_day)
+
+        # Both skipped Fridays were planned from their own close and filled the next Monday.
+        late = [step for step in result["steps"] if step["late_plan"]]
+        self.assertEqual(
+            [(step["late_plan"], step["session"]) for step in late],
+            [
+                (fridays[-3].strftime("%Y-%m-%d"), second_fill.strftime("%Y-%m-%d")),
+                (fridays[-2].strftime("%Y-%m-%d"), third_fill.strftime("%Y-%m-%d")),
+            ],
+        )
+        self.assertEqual(ledger["last_plan"]["as_of"], fridays[-2].strftime("%Y-%m-%d"))
+        self.assertEqual(ledger["last_plan"]["fill_date"], third_fill.strftime("%Y-%m-%d"))
+
+        # Catch-up equals running the cycle every day.
+        service._save_paper({
+            "initialized": True, "capital": 500_000.0, "cash": 500_000.0,
+            "positions": {}, "orders": [],
+            "nav_history": [{"date": signal_day.strftime("%Y-%m-%d"), "cash": 500_000.0,
+                             "market_value": 0, "equity": 500_000.0, "pnl_pct": 0.0}],
+        })
+        with mock.patch.object(engine, "load_panel", return_value=(close.loc[:signal_day], volume.loc[:signal_day])):
+            service.refresh_snapshot()
+            service.plan_paper()
+        for day in index[start + 1:start + 14]:
+            self._advance(close, open_, volume, day)
+        daily = service._load_paper()
+        self.assertEqual(
+            [(item["date"], item["equity"]) for item in daily["nav_history"]],
+            [(item["date"], item["equity"]) for item in ledger["nav_history"]],
+        )
+
+    def test_exited_position_sells_at_fill_day_open(self) -> None:
+        days = pd.bdate_range("2026-11-06", periods=2)
+        opens = pd.DataFrame({"AAA": [1.0, 1.3], "BBB": [2.0, 2.0]}, index=days)
+        service._save_paper({
+            "initialized": True, "capital": 100_000.0, "cash": 0.0,
+            "positions": {"AAA": {"symbol": "AAA", "name": "甲", "shares": 100_000,
+                                   "avg_cost": 1.0, "last_price": 1.0}},
+            "orders": [], "nav_history": [],
+            "pending_plan": {
+                "as_of": "2026-11-06", "status": "planned",
+                "strategy_id": service.CANONICAL["strategy_id"],
+                "target": [{"symbol": "BBB", "name": "乙", "weight": 0.5}],
+            },
+        })
+        snapshot = {"as_of": "2026-11-06", "target": []}
+        with mock.patch.object(engine, "load_open_panel", return_value=opens), \
+                mock.patch.object(service, "load_snapshot", return_value=snapshot):
+            ledger = service.fill_paper()
+        sell = next(order for order in ledger["orders"] if order["side"] == "sell")
+        self.assertEqual(sell["price"], 1.3)
 
 
 if __name__ == "__main__":
