@@ -117,6 +117,11 @@ def _normalize_delisted_volume(panels: dict[str, pd.DataFrame]) -> None:
 def load_bundle() -> Bundle:
     panels = load_study_panels(PANEL_CACHE)
     _normalize_delisted_volume(panels)
+    return bundle_from_panels(panels)
+
+
+def bundle_from_panels(panels: dict[str, pd.DataFrame]) -> Bundle:
+    """日线面板（open/high/low/close/volume/amount/turnover_rate）→ 信号特征。"""
 
     close_frame = panels["close"].astype("float64")
     dates = close_frame.index
@@ -142,7 +147,7 @@ def load_bundle() -> Bundle:
     for column, symbol in enumerate(symbols):
         if symbol.startswith(("688", "689")):
             rate[:, column] = 0.20
-        elif symbol.startswith(("300", "301")):
+        elif symbol.startswith(("300", "301", "302")):
             rate[:, column] = 0.10
             rate[dates >= pd.Timestamp("2020-08-24"), column] = 0.20
 
@@ -224,7 +229,7 @@ def load_bundle() -> Bundle:
 
     prefix = np.array([symbol[:3] for symbol in symbols])
     main = np.isin(prefix, ["000", "001", "002", "003", "600", "601", "603", "605"])
-    chinext = np.isin(prefix, ["300", "301"])
+    chinext = np.isin(prefix, ["300", "301", "302"])
     star = np.isin(prefix, ["688", "689"])
     bj = np.array([symbol.startswith(("4", "8", "92")) for symbol in symbols])
     b_share = np.isin(prefix, ["200", "900"])

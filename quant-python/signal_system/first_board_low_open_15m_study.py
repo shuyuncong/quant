@@ -73,9 +73,13 @@ def fetch_bars(
     start: str,
     end: str,
     refresh: bool = False,
+    *,
+    adjustflag: str = "2",
+    cache_dir: pathlib.Path = CACHE_DIR,
 ) -> pd.DataFrame:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    cache = CACHE_DIR / f"{code.replace('.', '_')}_{start}.pkl"
+    """BaoStock 15m K 线；``adjustflag`` 2=前复权（研究默认）、3=不复权。"""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir / f"{code.replace('.', '_')}_{start}.pkl"
     if cache.exists() and not refresh:
         return pd.read_pickle(cache)
 
@@ -90,7 +94,7 @@ def fetch_bars(
                 start_date=start,
                 end_date=end,
                 frequency="15",
-                adjustflag="2",
+                adjustflag=adjustflag,
             )
             if result.error_code != "0":
                 last_error = result.error_msg
