@@ -1242,12 +1242,15 @@ def _write_readme() -> None:
 - `catalog/<result-dir>/index.html`：历史目录详情页，链接原始 memo/report/summary/curves。
 - `data/manifest.json`：总览嵌入数据的副本，便于检查。
 
-## 重新生成
+## 重新生成与发布
 
 ```bash
 cd /home/ubuntu/development/quant
 quant-python/.venv/bin/python scripts/build_backtest_hub.py
+scripts/publish_research.sh   # 同步到 https://quant.illsky.com/research/
 ```
+
+线上的 `/research/` 由 nginx 直接读静态目录，不随应用部署更新；不运行发布脚本，新结果在线上就是 404。
 
 标准化口径：每个策略曲线在 2020-01-02 归一化到 20 万；年化按 252 个交易日折算；
 股票策略的胜率/盈亏比为交易口径，ETF/基准为日频口径。2026 为年初至今。
