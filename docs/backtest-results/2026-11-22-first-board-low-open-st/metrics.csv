@@ -1,0 +1,5 @@
+run,signals_removed,bought_signals_removed,total_return_pct,cagr_pct,vol_pct,sharpe,max_drawdown_pct,trades,win_rate_pct,mean_net_return_pct,profit_factor
+main,0,0,174.88,15.97,15.37,1.08,-23.29,219,50.68,1.463,1.676
+no_st,2,2,186.13,16.65,15.19,1.13,-23.3,217,51.15,1.532,1.727
+no_st_any,2,2,186.13,16.65,15.19,1.13,-23.3,217,51.15,1.532,1.727
+no_st_or_unknown,2,2,186.13,16.65,15.19,1.13,-23.3,217,51.15,1.532,1.727

@@ -1,0 +1,197 @@
+{
+ "meta": {
+  "generated_at": "2026-11-22T14:49:03",
+  "start": "2020-01-02",
+  "end": "2026-10-30",
+  "st_source": "BaoStock query_history_k_data_plus isST (adjustflag=3)",
+  "st_definition": "isST == 1 on the first-board day (the session before the buy)",
+  "thresholds": {
+   "max_unknown_share": 0.05,
+   "top_trades": 10,
+   "max_st_in_top": 5
+  }
+ },
+ "parity_max_rel_gap": 0.0,
+ "signals": {
+  "all": 328,
+  "since_2020": 277,
+  "st": 2,
+  "st_any": 2,
+  "unknown": 0,
+  "unknown_share": 0.0,
+  "st_bought": 2
+ },
+ "runs": {
+  "main": {
+   "signals_removed": 0,
+   "bought_signals_removed": 0,
+   "total_return_pct": 174.88,
+   "cagr_pct": 15.97,
+   "vol_pct": 15.37,
+   "sharpe": 1.08,
+   "max_drawdown_pct": -23.29,
+   "trades": 219,
+   "win_rate_pct": 50.68,
+   "mean_net_return_pct": 1.463,
+   "profit_factor": 1.676
+  },
+  "no_st": {
+   "signals_removed": 2,
+   "bought_signals_removed": 2,
+   "total_return_pct": 186.13,
+   "cagr_pct": 16.65,
+   "vol_pct": 15.19,
+   "sharpe": 1.13,
+   "max_drawdown_pct": -23.3,
+   "trades": 217,
+   "win_rate_pct": 51.15,
+   "mean_net_return_pct": 1.532,
+   "profit_factor": 1.727
+  },
+  "no_st_any": {
+   "signals_removed": 2,
+   "bought_signals_removed": 2,
+   "total_return_pct": 186.13,
+   "cagr_pct": 16.65,
+   "vol_pct": 15.19,
+   "sharpe": 1.13,
+   "max_drawdown_pct": -23.3,
+   "trades": 217,
+   "win_rate_pct": 51.15,
+   "mean_net_return_pct": 1.532,
+   "profit_factor": 1.727
+  },
+  "no_st_or_unknown": {
+   "signals_removed": 2,
+   "bought_signals_removed": 2,
+   "total_return_pct": 186.13,
+   "cagr_pct": 16.65,
+   "vol_pct": 15.19,
+   "sharpe": 1.13,
+   "max_drawdown_pct": -23.3,
+   "trades": 217,
+   "win_rate_pct": 51.15,
+   "mean_net_return_pct": 1.532,
+   "profit_factor": 1.727
+  }
+ },
+ "best_trades": [
+  {
+   "symbol": "603963",
+   "entry_date": "2022-03-03",
+   "net_return_pct": 44.48,
+   "contribution_pct": 14.81,
+   "st": false
+  },
+  {
+   "symbol": "002361",
+   "entry_date": "2026-03-27",
+   "net_return_pct": 40.92,
+   "contribution_pct": 13.64,
+   "st": false
+  },
+  {
+   "symbol": "001267",
+   "entry_date": "2026-08-05",
+   "net_return_pct": 38.25,
+   "contribution_pct": 12.74,
+   "st": false
+  },
+  {
+   "symbol": "301027",
+   "entry_date": "2024-06-20",
+   "net_return_pct": 22.89,
+   "contribution_pct": 7.63,
+   "st": false
+  },
+  {
+   "symbol": "002160",
+   "entry_date": "2020-12-16",
+   "net_return_pct": 20.06,
+   "contribution_pct": 6.69,
+   "st": false
+  },
+  {
+   "symbol": "002861",
+   "entry_date": "2024-06-11",
+   "net_return_pct": 16.16,
+   "contribution_pct": 5.39,
+   "st": false
+  },
+  {
+   "symbol": "002246",
+   "entry_date": "2025-09-23",
+   "net_return_pct": 16.07,
+   "contribution_pct": 5.36,
+   "st": false
+  },
+  {
+   "symbol": "300592",
+   "entry_date": "2026-08-05",
+   "net_return_pct": 15.95,
+   "contribution_pct": 5.32,
+   "st": false
+  },
+  {
+   "symbol": "600105",
+   "entry_date": "2026-08-05",
+   "net_return_pct": 15.85,
+   "contribution_pct": 5.28,
+   "st": false
+  },
+  {
+   "symbol": "603223",
+   "entry_date": "2023-10-13",
+   "net_return_pct": 15.53,
+   "contribution_pct": 5.17,
+   "st": false
+  }
+ ],
+ "checks": {
+  "coverage": true,
+  "mean_net_return_positive_without_st": true,
+  "st_not_majority_of_best_trades": true
+ },
+ "closed": true,
+ "blend": {
+  "baseline": {
+   "total_return_pct": 109.58,
+   "cagr_pct": 11.45,
+   "vol_pct": 8.51,
+   "sharpe": 1.37,
+   "max_drawdown_pct": -9.71
+  },
+  "B20_main": {
+   "total_return_pct": 124.75,
+   "cagr_pct": 12.6,
+   "vol_pct": 7.78,
+   "sharpe": 1.626,
+   "max_drawdown_pct": -8.49,
+   "vs_baseline": {
+    "sharpe_diff": 0.2565,
+    "ci95_low": -0.02,
+    "ci95_high": 0.5582,
+    "p_value_two_sided": 0.0768,
+    "prob_diff_gt_zero": 0.9616,
+    "n_boot": 5000,
+    "block": 20
+   }
+  },
+  "B20_no_st": {
+   "total_return_pct": 126.4,
+   "cagr_pct": 12.72,
+   "vol_pct": 7.78,
+   "sharpe": 1.641,
+   "max_drawdown_pct": -8.49,
+   "vs_baseline": {
+    "sharpe_diff": 0.2711,
+    "ci95_low": -0.001,
+    "ci95_high": 0.5693,
+    "p_value_two_sided": 0.0516,
+    "prob_diff_gt_zero": 0.9742,
+    "n_boot": 5000,
+    "block": 20
+   }
+  }
+ }
+}
