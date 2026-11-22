@@ -76,8 +76,12 @@ def fetch_bars(
     *,
     adjustflag: str = "2",
     cache_dir: pathlib.Path = CACHE_DIR,
+    frequency: str = "15",
 ) -> pd.DataFrame:
-    """BaoStock 15m K 线；``adjustflag`` 2=前复权（研究默认）、3=不复权。"""
+    """BaoStock 分钟 K 线（默认 15m）；``adjustflag`` 2=前复权（研究默认）、3=不复权。
+
+    缓存文件名不含周期，不同周期要用不同的 ``cache_dir``。
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache = cache_dir / f"{code.replace('.', '_')}_{start}.pkl"
     if cache.exists() and not refresh:
@@ -93,7 +97,7 @@ def fetch_bars(
                 "date,time,open,high,low,close,volume,amount",
                 start_date=start,
                 end_date=end,
-                frequency="15",
+                frequency=frequency,
                 adjustflag=adjustflag,
             )
             if result.error_code != "0":
@@ -117,7 +121,34 @@ def fetch_bars(
             return frame
         except Exception as exc:  # network/SDK failure
             last_error = f"{type(exc).__name__}: {exc}"
-    raise RuntimeError(f"BaoStock 15m failed for {code} {start}..{end}: {last_error}")
+    raise RuntimeError(f"BaoStock {frequency}m failed for {code} {start}..{end}: {last_error}")
+
+
+def first_5m_bar(
+    symbol: str, day: str, cache_dir: pathlib.Path, refresh: bool = False
+) -> dict[str, float] | None:
+    """``symbol`` 在 ``day`` 的第一根不复权 5 分钟线（09:30–09:35，含集合竞价成交）。
+
+    没有数据或没有成交返回 None。要先 ``bs.login()``。
+    """
+    bars = fetch_bars(_code(symbol), day, day, refresh, adjustflag="3", cache_dir=cache_dir, frequency="5")
+    if bars.empty:
+        return None
+    bar = bars.iloc[0]
+    if bar["datetime"].strftime("%H:%M") != "09:35" or not bar["volume"] > 0 or not bar["amount"] > 0:
+        return None
+    return {key: float(bar[key]) for key in ("open", "high", "low", "volume", "amount")}
+
+
+def repriced_net_return(gross_entry: float, proceeds: float, price_ratio: float) -> float:
+    """买入价变为原来的 ``price_ratio`` 倍、股数和卖出不变时的单笔净收益。
+
+    ``proceeds`` 是卖出到手金额（已扣费）；买入佣金按新金额重算。
+    """
+    from first_board_four_strategies_study import _fee
+
+    gross = gross_entry * price_ratio
+    return proceeds / (gross + _fee(gross)) - 1.0
 
 
 def signal_table(start: str, end: str) -> pd.DataFrame:

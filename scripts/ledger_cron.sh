@@ -8,7 +8,8 @@
 # 已启用的通知渠道（quant-python/signal_system/ledger_alert.py）。报警发不出去
 # 只记日志，不改变退出码。
 #
-# 管不到的情况：cron 本身没在跑（机器关机、crontab 被清空）时不会有任何报警。
+# 管不到的情况：cron 本身没在跑（crontab 被清空）时这里不会报警；那种情况由
+# ledger_heartbeat.py 兜底（systemd 用户定时器，见 scripts/systemd/）。
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SIGNAL_SYSTEM="$ROOT/quant-python/signal_system"

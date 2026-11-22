@@ -1,0 +1,9 @@
+[Unit]
+Description=Quant paper-ledger heartbeat (alert when a ledger has not advanced)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/development/quant/quant-python/signal_system
+ExecStart=%h/development/quant/quant-python/.venv/bin/python -W ignore ledger_heartbeat.py
+StandardOutput=append:%h/development/quant/quant-python/signal_system/logs/ledger_heartbeat.log
+StandardError=append:%h/development/quant/quant-python/signal_system/logs/ledger_heartbeat.log

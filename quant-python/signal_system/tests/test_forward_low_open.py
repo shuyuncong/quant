@@ -181,6 +181,27 @@ class ForwardLowOpenTests(unittest.TestCase):
         # 同样的价格在 20% 涨跌幅的票上不算涨停，上午就卖。
         self.assertEqual(forward.source_exit(bars(sealed), 10.0, 0.20)["time"], "11:30")
 
+    def test_first_5m_fill_reprices_the_entry_without_touching_the_ledger_return(self):
+        gross_entry, gross_exit = 100_000.0, 103_000.0
+        exit_fee = four._fee(gross_exit, sell=True)
+        net = (gross_exit - exit_fee) / (gross_entry + four._fee(gross_entry)) - 1.0
+        row = {"gross_entry": gross_entry, "gross_exit": gross_exit, "exit_fee": exit_fee, "net_return": net}
+
+        # 均价等于开盘价：重算结果回到账本的净收益。
+        same = dict(row)
+        forward.first_5m_fill(same, {"open": 10.0, "high": 10.0, "volume": 1e5, "amount": 1e6})
+        self.assertAlmostEqual(same["vwap_net_return"], net)
+        self.assertAlmostEqual(same["first_5m"]["participation"], 0.1)
+
+        # 均价比开盘高 2%：3% 的毛利剩不到 1%。价格基准不同（除权换算）不影响结果。
+        for scale in (1.0, 0.5):
+            dearer = dict(row)
+            bar = {"open": 10.0 * scale, "high": 10.5 * scale, "volume": 1e6 / scale, "amount": 10.2e6}
+            forward.first_5m_fill(dearer, bar)
+            self.assertAlmostEqual(dearer["first_5m"]["vwap"], 10.2 * scale)
+            self.assertAlmostEqual(dearer["vwap_net_return"], (gross_exit - exit_fee) / (102_000.0 * 1.0003) - 1.0)
+            self.assertEqual(dearer["net_return"], net)
+
 
 if __name__ == "__main__":
     unittest.main()

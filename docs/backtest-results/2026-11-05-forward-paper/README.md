@@ -48,7 +48,8 @@ Windows 上用 `scripts/run_forward_paper.ps1 -Sync -Calendar`，效果相同。
 - 幂等：重复运行不会重复成交或重复生成计划；漏跑的交易日下次自动补上。
 - 同步因网络失败时 `cycle` 会明确报错，不动账本。先修数据同步，不要用旧行情或手工价格继续。
 - 日志：`quant-python/signal_system/logs/forward_paper.log`。
-- 失败报警：运行退出码非 0 时，把错误推送到 Web 设置页里已启用的通知渠道（当前只有 Bark）。cron 本身没在跑时不会有报警。
+- 失败报警：运行退出码非 0 时，把错误推送到 Web 设置页里已启用的通知渠道（当前只有 Bark）。
+- 心跳：交易日 22:30，systemd 用户定时器 `quant-ledger-heartbeat.timer` 运行 `ledger_heartbeat.py`，检查这份账本、首板低开账本和 Web 的 25 万账本是否都推进到了最新交易日，落后就推送到同一组渠道。它不走 cron，所以 cron 没在跑时也会报。整台机器关机或断网时仍然没有报警。日志：`quant-python/signal_system/logs/ledger_heartbeat.log`；单元文件：`scripts/systemd/`。
 
 
 ## 每周节奏

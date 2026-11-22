@@ -1,0 +1,16 @@
+# 纸面账本心跳：周一到周五 22:30（Asia/Shanghai，服务器本地时区）。
+# 首板低开账本 21:30 推进，是三份账本里最晚的；留一小时余量。
+#
+# 安装（用户级，需要 loginctl enable-linger）：
+#   cp scripts/systemd/quant-ledger-heartbeat.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now quant-ledger-heartbeat.timer
+[Unit]
+Description=Quant paper-ledger heartbeat timer
+
+[Timer]
+OnCalendar=Mon..Fri 22:30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

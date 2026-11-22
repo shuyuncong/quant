@@ -9,10 +9,12 @@
 开盘/收盘价就是实际成交价；持仓期间遇到除权，历史价被整体重述，下次运行时
 把持仓换算到新的价格基准（成本不变）。
 
-附带两项尽力而为的诊断，失败不影响账本，下次运行自动补：
+附带三项尽力而为的诊断，失败不影响账本，下次运行自动补：
 - 股票名称与 ST 标记（回测没有历史 ST 名单）；
 - 按聚宽源码 11:28 止盈 / 14:50 清仓规则、用 15 分钟线重放的卖出价
-  （回测用收盘价近似）。
+  （回测用收盘价近似）；
+- 买入日第一根 5 分钟线的均价、成交额，以及按该均价买入重算的单笔净收益
+  （账本按开盘价成交，但低开幅度要等竞价结束才知道，最早 9:30 才能下单）。
 
 用法::
 
@@ -37,12 +39,13 @@ import numpy as np
 import pandas as pd
 
 import first_board_four_strategies_study as four
-from first_board_low_open_15m_study import fetch_bars
+from first_board_low_open_15m_study import fetch_bars, first_5m_bar, repriced_net_return
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_STATE = BASE_DIR / "state" / "forward_low_open_1m"
 DEFAULT_DATA = BASE_DIR / "cache" / "daily_history"
 INTRADAY_CACHE = BASE_DIR / "cache" / "forward_low_open_15m"
+FILL_CACHE = BASE_DIR / "cache" / "forward_low_open_5m"
 STRATEGY = "s1_first_board_low_open"
 STRATEGY_ID = "first_board_low_open_maxweight33"
 MAX_WEIGHT = 0.3333333333  # 与归档回测的 --max-weight 一致
@@ -325,11 +328,32 @@ def _annotate_trade(row: dict[str, Any], bundle: four.Bundle, cache_dir: Path) -
     return True
 
 
+def first_5m_fill(row: dict[str, Any], bar: dict[str, float]) -> None:
+    """把买入日第一根 5 分钟线记到成交上，并按它的均价重算单笔净收益。
+
+    只用均价 ÷ 第一根开盘价这个比例去调整买入金额，所以持仓被除权换算过也成立。
+    账本净值不受影响。
+    """
+
+    vwap = bar["amount"] / bar["volume"]
+    row["first_5m"] = {
+        "open": bar["open"],
+        "vwap": vwap,
+        "high": bar["high"],
+        "amount": bar["amount"],
+        "participation": row["gross_entry"] / bar["amount"],
+    }
+    row["vwap_net_return"] = repriced_net_return(
+        row["gross_entry"], row["gross_exit"] - row["exit_fee"], vwap / bar["open"]
+    )
+
+
 def annotate(ledger: dict[str, Any], bundle: four.Bundle, cache_dir: Path = INTRADAY_CACHE) -> dict[str, int]:
     signals = [row for row in ledger["signals"] if "name" not in row]
     trades = [row for row in ledger["trades"] if "source_exit" not in row]
-    done = {"names": 0, "intraday": 0, "pending": len(signals) + len(trades)}
-    if not signals and not trades:
+    fills = [row for row in ledger["trades"] if "first_5m" not in row]
+    done = {"names": 0, "intraday": 0, "fills": 0, "pending": len(signals) + len(trades) + len(fills)}
+    if not done["pending"]:
         return done
     import baostock as bs
 
@@ -347,9 +371,14 @@ def annotate(ledger: dict[str, Any], bundle: four.Bundle, cache_dir: Path = INTR
                     done["names"] += 1
             for row in trades:
                 done["intraday"] += _annotate_trade(row, bundle, cache_dir)
+            for row in fills:
+                bar = first_5m_bar(row["symbol"], row["entry_date"], FILL_CACHE, refresh=True)
+                if bar is not None:  # 否则分钟线还没入库，下次再补
+                    first_5m_fill(row, bar)
+                    done["fills"] += 1
         finally:
             bs.logout()
-    done["pending"] -= done["names"] + done["intraday"]
+    done["pending"] -= done["names"] + done["intraday"] + done["fills"]
     return done
 
 
@@ -367,6 +396,7 @@ def status(ledger: dict[str, Any]) -> dict[str, Any]:
     equity = nav[-1]["equity"] if nav else ledger["cash"]
     returns = [row["net_return"] for row in ledger["trades"]]
     paired = [row for row in ledger["trades"] if row.get("source_net_return") is not None]
+    filled = [row for row in ledger["trades"] if "first_5m" in row]
     return {
         "last_session": ledger["last_session"],
         "cash": round(ledger["cash"], 2),
@@ -381,6 +411,12 @@ def status(ledger: dict[str, Any]) -> dict[str, Any]:
         "intraday_checked": len(paired),
         "mean_net_return_close_pct": _mean_pct([row["net_return"] for row in paired]),
         "mean_net_return_source_pct": _mean_pct([row["source_net_return"] for row in paired]),
+        "fill_checked": len(filled),
+        "mean_net_return_open_pct": _mean_pct([row["net_return"] for row in filled]),
+        "mean_net_return_vwap_5m_pct": _mean_pct([row["vwap_net_return"] for row in filled]),
+        "mean_vwap_5m_vs_open_pct": _mean_pct(
+            [row["first_5m"]["vwap"] / row["first_5m"]["open"] - 1.0 for row in filled]
+        ),
     }
 
 
