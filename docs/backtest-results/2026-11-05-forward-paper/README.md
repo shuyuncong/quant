@@ -38,6 +38,7 @@ Windows 上用 `scripts/run_forward_paper.ps1 -Sync -Calendar`，效果相同。
 - 幂等：重复运行不会重复成交或重复生成计划；漏跑的交易日下次自动补上。
 - 同步因网络失败时 `cycle` 会明确报错，不动账本。先修数据同步，不要用旧行情或手工价格继续。
 - 日志：`quant-python/signal_system/logs/forward_paper.log`。
+- 失败报警：运行退出码非 0 时，把错误推送到 Web 设置页里已启用的通知渠道（当前只有 Bark）。cron 本身没在跑时不会有报警。
 
 
 ## 每周节奏
