@@ -123,7 +123,7 @@ OVERVIEW_TEMPLATE = r'''<!doctype html>
   <div class="eyebrow">Quant research · 2026-11-15</div>
   <h1>回测总览：首板、ETF 与小市值，谁赢了？</h1>
   <p class="sub">同一区间、同一套指标：<strong>2020-01-02 → 2026-10-30</strong>，<strong>8 条代表曲线</strong>。所有资金曲线按 <strong>20 万初始资金</strong>回测，图中以区间起点 = 100 展示；2026 为 YTD。首板策略是日线机械复现，ETF 和小市值是各自研究口径，不能只看收益排名。</p>
-  <div class="pills">__PILLS__<a class="pill link" href="index.html">分类对比 →</a><a class="pill link" href="index.html#catalog">全部目录 →</a></div>
+  <div class="pills">__PILLS__<a class="pill link" href="index.html">分类对比 →</a><a class="pill link" href="index.html#catalog">全部目录 →</a><a class="pill link" href="../forward-low-open/">首板低开每日看板 →</a></div>
 </header>
 
 <main class="wrap">

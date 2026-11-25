@@ -10,7 +10,8 @@
 # 线上目录 = docs/backtest-results 的镜像，外加两处：
 # - 根页面 index.html 是回测总览（overview.html）加一行 <base>，这样打开
 #   /research/ 直接就是总览，页面里的相对链接仍指向回测中心目录；
-# - 只存在于线上的内容（_preview/、reference-*.html）原样保留。
+# - 只存在于线上的内容（_preview/、reference-*.html，以及 run_forward_low_open.sh
+#   每晚写的 forward-low-open/ 看板）原样保留。
 # 只新增和覆盖，不删除：仓库里删掉的结果目录需要手工从线上目录移除。
 set -euo pipefail
 

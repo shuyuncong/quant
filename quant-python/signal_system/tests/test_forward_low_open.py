@@ -140,6 +140,36 @@ class ForwardLowOpenTests(unittest.TestCase):
             forward.check_complete(four.bundle_from_panels(panels))
         forward.check_complete(four.bundle_from_panels(study_panels()))
 
+    def test_watchlist_band_is_exactly_where_the_next_open_signals(self):
+        # 首板收盘 10.45：区间两端都不在价位上；11.00：两端（10.56、10.67）正好在价位上。
+        for board_close, band in ((10.45, (10.04, 10.13)), (11.0, (10.56, 10.67))):
+            panels = study_panels()
+            panels["high"].loc[DAYS[BOARD - 30]] = 13.5  # 两种收盘价都落在 60 日区间的下半区
+            for symbol in ("000001", "000002"):
+                set_bar(panels, BOARD, symbol, 9.5, board_close)
+
+            def until(day):
+                return {field: frame.loc[:DAYS[day]] for field, frame in panels.items()}
+
+            def signals(open_):
+                panels["open"].loc[DAYS[BOARD + 1], "000001"] = open_
+                bundle = four.bundle_from_panels(until(BOARD + 1))
+                columns = four.build_signals(bundle)[forward.STRATEGY].get(BOARD + 1, np.empty(0, dtype=int))
+                return "000001" in bundle.symbols[columns]
+
+            watch = forward.watchlist(until(BOARD))
+            self.assertEqual(
+                (watch["as_of"], watch["session"]), (str(DAYS[BOARD].date()), str(DAYS[BOARD + 1].date()))
+            )
+            self.assertEqual([row["symbol"] for row in watch["rows"]], ["000001", "000002"])
+            # 次日 600000 才首板；前两只低开后没再涨停，不再进名单。
+            self.assertEqual([row["symbol"] for row in forward.watchlist(until(BOARD + 1))["rows"]], ["600000"])
+
+            row = watch["rows"][0]
+            self.assertEqual((row["prev_close"], row["low"], row["high"]), (board_close, *band))
+            self.assertTrue(signals(row["low"]) and signals(row["high"]))
+            self.assertFalse(signals(round(row["low"] - 0.01, 2)) or signals(round(row["high"] + 0.01, 2)))
+
     def test_loader_keeps_closed_stock_bars_only(self):
         frame = pd.DataFrame({
             "datetime": ["2026-11-18 00:00:00", "2026-11-19 00:00:00", "2026-11-20 00:00:00"],

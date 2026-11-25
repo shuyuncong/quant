@@ -16,6 +16,10 @@
 - 买入日第一根 5 分钟线的均价、成交额，以及按该均价买入重算的单笔净收益
   （账本按开盘价成交，但低开幅度要等竞价结束才知道，最早 9:30 才能下单）。
 
+每次推进后还会算出下一个交易日的观察名单（除"低开"以外的条件都已满足的股票，
+附能触发信号的开盘价区间），存在账本的 ``watchlist`` 里，只保留最新一份；给了
+``--page`` 就连同账本一起渲染成一页 HTML（``forward_low_open_page``）。
+
 用法::
 
     python forward_low_open.py --action init
@@ -40,6 +44,7 @@ import pandas as pd
 
 import first_board_four_strategies_study as four
 from first_board_low_open_15m_study import fetch_bars, first_5m_bar, repriced_net_return
+from forward_low_open_page import render
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_STATE = BASE_DIR / "state" / "forward_low_open_1m"
@@ -54,6 +59,7 @@ HISTORY_BARS = 400  # 60 日相对位置 + 上市满 250 个自然日
 COVERAGE = 0.98
 REBASE_TOLERANCE = 1e-3
 FIELDS = ("open", "high", "low", "close", "volume", "amount")
+LOW_OPEN = (0.96, 0.97)  # 信号要求的 开盘 ÷ 昨收 区间；与 four.build_signals 的首板低开条件一致
 
 
 class LedgerError(RuntimeError):
@@ -149,12 +155,17 @@ def load_ledger(state_dir: Path) -> dict[str, Any]:
     return ledger
 
 
-def save_ledger(state_dir: Path, ledger: dict[str, Any]) -> None:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    path = state_dir / "ledger.json"
+def _write(path: Path, text: str) -> None:
+    """先写临时文件再改名，读的一方看不到写了一半的内容。"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
+    temporary.write_text(text, encoding="utf-8")
     temporary.replace(path)
+
+
+def save_ledger(state_dir: Path, ledger: dict[str, Any]) -> None:
+    _write(state_dir / "ledger.json", json.dumps(ledger, ensure_ascii=False, indent=1))
 
 
 def _restore(
@@ -275,6 +286,59 @@ def advance(ledger: dict[str, Any], bundle: four.Bundle, now: datetime) -> dict[
 
 
 # ---------------------------------------------------------------------------
+# 观察名单
+# ---------------------------------------------------------------------------
+
+
+def watchlist(panels: dict[str, pd.DataFrame]) -> dict[str, Any]:
+    """收盘后就能确定的下一个交易日候选：除"低开"以外的条件都已满足的股票。
+
+    在面板末尾补一根假想的 K 线（每只股票都开在 ``LOW_OPEN`` 区间的正中），再走一遍
+    回测的 ``build_signals``，所以名单和账本用的是同一份选股代码。``low``/``high``
+    是能触发信号的开盘价区间（含两端，0.01 元一档）。
+
+    ``session`` 取下一个工作日：行情源的交易日历没有未来的日期，节假日前会偏早。
+    "上市满 250 天"也按这一天算，长假前正好卡在 250 天上的股票会被漏掉。
+    """
+
+    close = panels["close"]
+    session = close.index[-1] + pd.offsets.BDay(1)
+    probe = {
+        field: pd.concat([
+            frame,
+            (
+                close.iloc[-1] * sum(LOW_OPEN) / 2
+                if field in ("open", "high", "low", "close")
+                else frame.iloc[-1]
+            ).to_frame(session).T,
+        ])
+        for field, frame in panels.items()
+    }
+    bundle = four.bundle_from_panels(probe)
+    rows = []
+    for column in four.build_signals(bundle)[STRATEGY].get(len(bundle.dates) - 1, ()):
+        prev_close = float(bundle.close_prev[-1, column])
+        ticks = np.arange(
+            math.floor(prev_close * LOW_OPEN[0] * 100), math.ceil(prev_close * LOW_OPEN[1] * 100) + 1
+        ) / 100.0
+        ticks = ticks[(ticks / prev_close >= LOW_OPEN[0]) & (ticks / prev_close <= LOW_OPEN[1])]
+        if ticks.size:
+            rows.append({
+                "symbol": str(bundle.symbols[column]),
+                "prev_close": prev_close,
+                "low": float(ticks[0]),
+                "high": float(ticks[-1]),
+                "rp60": float(bundle.rp60[-1, column]),
+            })
+    return {
+        "as_of": close.index[-1].strftime("%Y-%m-%d"),
+        "session": session.strftime("%Y-%m-%d"),
+        "band": list(LOW_OPEN),
+        "rows": rows,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 诊断：名称 / ST、源码盘中卖点
 # ---------------------------------------------------------------------------
 
@@ -349,10 +413,10 @@ def first_5m_fill(row: dict[str, Any], bar: dict[str, float]) -> None:
 
 
 def annotate(ledger: dict[str, Any], bundle: four.Bundle, cache_dir: Path = INTRADAY_CACHE) -> dict[str, int]:
-    signals = [row for row in ledger["signals"] if "name" not in row]
+    unnamed = [row for row in (*ledger["signals"], *ledger["watchlist"]["rows"]) if "name" not in row]
     trades = [row for row in ledger["trades"] if "source_exit" not in row]
     fills = [row for row in ledger["trades"] if "first_5m" not in row]
-    done = {"names": 0, "intraday": 0, "fills": 0, "pending": len(signals) + len(trades) + len(fills)}
+    done = {"names": 0, "intraday": 0, "fills": 0, "pending": len(unnamed) + len(trades) + len(fills)}
     if not done["pending"]:
         return done
     import baostock as bs
@@ -362,7 +426,7 @@ def annotate(ledger: dict[str, Any], bundle: four.Bundle, cache_dir: Path = INTR
         if login.error_code != "0":
             raise LedgerError(f"BaoStock 登录失败: {login.error_msg}")
         try:
-            for row in signals:
+            for row in unnamed:
                 symbol = row["symbol"]
                 result = bs.query_stock_basic(code=f"{'sh' if symbol[0] == '6' else 'sz'}.{symbol}")
                 if result.error_code == "0" and result.next():
@@ -427,21 +491,34 @@ def _expected_session(config: str) -> date:
     return MarketDataClient(load_config(config)).latest_expected_trade_date()
 
 
-def cycle(state_dir: Path, data_dir: Path, config: str, diagnostics: bool) -> dict[str, Any]:
+def cycle(
+    state_dir: Path, data_dir: Path, config: str, diagnostics: bool, page: Path | None
+) -> dict[str, Any]:
     ledger = load_ledger(state_dir)
-    bundle = four.bundle_from_panels(load_panels(data_dir))
+    panels = load_panels(data_dir)
+    bundle = four.bundle_from_panels(panels)
     expected = _expected_session(config)
     if bundle.dates[-1].date() < expected:
         raise LedgerError(f"行情缓存只到 {bundle.dates[-1].date()}，应到 {expected}")
     check_complete(bundle)
-    result = advance(ledger, bundle, datetime.now())
-    save_ledger(state_dir, ledger)
+    now = datetime.now()
+    result = advance(ledger, bundle, now)
+    save_ledger(state_dir, ledger)  # 先落盘：后面的名单或页面出错，也不丢这次推进
+    ledger["watchlist"] = watchlist(panels)
+    result["watchlist"] = len(ledger["watchlist"]["rows"])
+
+    def publish() -> None:
+        save_ledger(state_dir, ledger)
+        if page is not None:
+            _write(page, render(ledger, status(ledger), now))
+
+    publish()  # 名称要联网取，可能很慢或取不到：先发一版只有代码的
     if diagnostics:
         try:
             result["diagnostics"] = annotate(ledger, bundle)
         except Exception as exc:  # noqa: BLE001 - 诊断失败不影响账本，下次运行再补
             result["diagnostics"] = {"error": f"{type(exc).__name__}: {exc}"}
-        save_ledger(state_dir, ledger)
+        publish()
     return result
 
 
@@ -454,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--capital", type=float, default=four.INITIAL_CAPITAL)
     parser.add_argument("--start", default=SAMPLE_END, help="账本起点（该交易日收盘后空仓）")
     parser.add_argument("--no-diagnostics", action="store_true")
+    parser.add_argument("--page", help="看板 HTML 的输出路径；不给就不生成")
     args = parser.parse_args(argv)
 
     state_dir = Path(args.state_dir)
@@ -464,7 +542,10 @@ def main(argv: list[str] | None = None) -> int:
                 raise LedgerError(f"账本已存在: {state_dir / 'ledger.json'}")
             save_ledger(state_dir, new_ledger(args.capital, args.start))
         elif args.action == "cycle":
-            payload.update(cycle(state_dir, Path(args.data_dir), args.config, not args.no_diagnostics))
+            page = Path(args.page) if args.page else None
+            payload.update(
+                cycle(state_dir, Path(args.data_dir), args.config, not args.no_diagnostics, page)
+            )
         payload["ledger"] = status(load_ledger(state_dir))
         print(json.dumps({"ok": True, "data": payload}, ensure_ascii=False, indent=2))
         return 0
