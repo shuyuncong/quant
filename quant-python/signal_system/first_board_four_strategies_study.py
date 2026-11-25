@@ -585,15 +585,23 @@ class StrategyPortfolio:
         # 源码：策略2固定10仓；其余按当日候选数平分可用资金。
         self.max_positions = 10 if strategy == "s2_consecutive_leader" else 50
 
+    def mark_price(self, bundle: Bundle, index: int, position: Position) -> float:
+        """收盘盯市价：当天有成交用收盘价，否则沿用 ``last_price``。"""
+
+        close = float(bundle.close[index, position.column])
+        volume = float(bundle.volume[index, position.column])
+        if math.isfinite(close) and math.isfinite(volume) and volume > 0:
+            return close
+        return position.last_price
+
     def _equity(self, bundle: Bundle, index: int, mark: str = "close") -> float:
         value = self.cash
         for position in self.positions.values():
-            price = position.last_price
-            if mark == "close":
-                close = float(bundle.close[index, position.column])
-                volume = float(bundle.volume[index, position.column])
-                if math.isfinite(close) and math.isfinite(volume) and volume > 0:
-                    price = close
+            price = (
+                self.mark_price(bundle, index, position)
+                if mark == "close"
+                else position.last_price
+            )
             value += position.qty * price
         return value
 
@@ -918,13 +926,7 @@ def simulate(
 
     if portfolio.positions:
         for position in list(portfolio.positions.values()):
-            close = float(bundle.close[end_index, position.column])
-            volume = float(bundle.volume[end_index, position.column])
-            raw = (
-                close
-                if math.isfinite(close) and math.isfinite(volume) and volume > 0
-                else position.last_price
-            )
+            raw = portfolio.mark_price(bundle, end_index, position)
             portfolio._exit(bundle, end_index, position, raw, "end_of_sample")
         equities[-1] = portfolio.cash
         exposures[-1] = 0.0

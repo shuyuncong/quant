@@ -103,6 +103,19 @@ class ForwardLowOpenTests(unittest.TestCase):
         )
         self.assertFalse(any(row["backfilled"] for row in ledger["trades"]))
 
+    def test_position_is_marked_at_the_close_on_the_buy_day(self):
+        # 开盘 10.08 买入、当天收盘 10.2：持仓的现价是收盘价，和权益用的是同一个价。
+        ledger = run_daily(study_panels(), DAYS[(DAYS > START) & (DAYS <= DAYS[BOARD + 1])])
+
+        self.assertEqual(
+            keys(ledger["positions"], "symbol", "mark_price"), [("000001", 10.2), ("000002", 10.2)]
+        )
+        self.assertAlmostEqual(
+            ledger["cash"] + sum(row["qty"] * row["mark_price"] for row in ledger["positions"]),
+            ledger["nav_history"][-1]["equity"],
+            delta=0.01,
+        )
+
     def test_one_catch_up_run_equals_daily_runs(self):
         panels = study_panels()
         daily = run_daily(panels, DAYS[DAYS > START])

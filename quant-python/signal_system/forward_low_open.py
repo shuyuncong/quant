@@ -278,6 +278,9 @@ def advance(ledger: dict[str, Any], bundle: four.Bundle, now: datetime) -> dict[
             "entry_cost": position.entry_cost,
             "last_price": position.last_price,
             "stale_days": position.stale_days,
+            # 权益用的盯市价（账本此时停在行情的最后一天）。last_price 要到买入次日的
+            # 卖出环节才更新，买入当天还是买入价，不能拿来当现价。
+            "mark_price": portfolio.mark_price(bundle, len(bundle.dates) - 1, position),
         }
         for position in portfolio.positions.values()
     ]

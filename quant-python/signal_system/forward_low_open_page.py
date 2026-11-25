@@ -119,8 +119,8 @@ def _plan(ledger: dict[str, Any], named: dict[str, dict[str, Any]]) -> str:
                 _stock(row["symbol"], named),
                 row["entry_date"][5:],
                 f"{row['entry_price']:.2f}",
-                f"{row['last_price']:.2f}",
-                _pct(row["last_price"] / row["entry_price"] - 1.0),
+                f"{row['mark_price']:.2f}",
+                _pct(row["mark_price"] / row["entry_price"] - 1.0),
             ]
             for row in positions
         ]
