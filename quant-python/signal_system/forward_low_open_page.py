@@ -132,8 +132,9 @@ def _plan(ledger: dict[str, Any], named: dict[str, dict[str, Any]]) -> str:
     if not ledger["watchlist"]["rows"]:
         return "<p>账本空仓，名单也是空的：没有符合条件的首板，这一天不会有信号。</p>"
     return (
-        "<p>账本空仓。</p><ol>"
-        "<li>9:25 竞价结束后，看名单里每只的开盘价。</li>"
+        "<p>账本空仓。9:25 竞价结束后会自动判信号并推送到手机，每个交易日一条，没有信号也推。"
+        "没收到推送就自己看：</p><ol>"
+        "<li>9:25 之后看名单里每只的开盘价。</li>"
         "<li>开盘价落在「买入区间」内（含两端）的就是信号。</li>"
         f"<li>9:30 买入全部信号：{_sizing(ledger['rule'])}。</li>"
         "<li>再下一个交易日收盘卖出；收盘涨停的继续拿。</li></ol>"

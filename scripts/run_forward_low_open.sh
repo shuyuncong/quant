@@ -10,6 +10,8 @@
 # 限时 20 分钟（正常约 1 分钟）：名称和分钟线来自 BaoStock，它的 socket 没有超时，
 # 服务端不回包会一直卡住、占着锁，之后每天的运行都会被跳过。账本和看板在取名称
 # 之前已经写好，超时只丢当晚的诊断，下次运行自动补。
+# 账本推进成功后，再拿 9:25 推送的记录（run_forward_low_open_auction.sh）和账本对账：
+# 当天没有早盘记录，或推送的信号、股数和账本记的不一致，就报警。
 #
 # crontab（服务器时区 Asia/Shanghai）：
 #   30 21 * * 1-5 /home/ubuntu/development/quant/scripts/run_forward_low_open.sh
@@ -22,3 +24,8 @@ run_ledger "首板低开纸面账本推进失败" \
   timeout --verbose 20m "$PYTHON" -W ignore forward_low_open.py --action cycle \
   --data-dir "${LOW_OPEN_DATA_DIR:-/opt/docker/quant/cache/daily_history}" \
   --page "${RESEARCH_WEB_ROOT:-/var/www/html/quant/research}/forward-low-open/index.html"
+
+run_ledger "首板低开早盘推送和账本对不上" \
+  "$SIGNAL_SYSTEM/state/forward_low_open_1m" \
+  "$SIGNAL_SYSTEM/logs/forward_low_open_auction.log" \
+  "$PYTHON" -W ignore forward_low_open_auction.py --action reconcile

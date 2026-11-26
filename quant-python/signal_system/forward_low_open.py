@@ -155,7 +155,7 @@ def load_ledger(state_dir: Path) -> dict[str, Any]:
     return ledger
 
 
-def _write(path: Path, text: str) -> None:
+def write_atomic(path: Path, text: str) -> None:
     """先写临时文件再改名，读的一方看不到写了一半的内容。"""
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -165,7 +165,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def save_ledger(state_dir: Path, ledger: dict[str, Any]) -> None:
-    _write(state_dir / "ledger.json", json.dumps(ledger, ensure_ascii=False, indent=1))
+    write_atomic(state_dir / "ledger.json", json.dumps(ledger, ensure_ascii=False, indent=1))
 
 
 def _restore(
@@ -513,7 +513,7 @@ def cycle(
     def publish() -> None:
         save_ledger(state_dir, ledger)
         if page is not None:
-            _write(page, render(ledger, status(ledger), now))
+            write_atomic(page, render(ledger, status(ledger), now))
 
     publish()  # 名称要联网取，可能很慢或取不到：先发一版只有代码的
     if diagnostics:

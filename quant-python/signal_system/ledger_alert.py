@@ -66,26 +66,32 @@ def apply_settings(config: dict[str, Any], settings: dict[str, str]) -> dict[str
     return config
 
 
-def send(title: str, body: str, config: dict[str, Any]) -> dict[str, str]:
-    """向每个已启用的渠道发一条报警，返回 渠道 → "ok" 或失败原因。"""
+def push(title: str, content: str, config: dict[str, Any], event: str) -> dict[str, str]:
+    """向每个已启用的渠道发一条"标题 + 正文"，返回 渠道 → "ok" 或失败原因。"""
 
     notifier = SignalNotifier(config)
-    stamp = now_shanghai().isoformat(timespec="seconds")
     payload = {
-        "event_id": f"ledger-alert-{stamp}",
+        "event_id": f"{event}-{now_shanghai().isoformat(timespec='seconds')}",
         "symbol": "SYSTEM",
         "name": title,
         "timeframe": "report",
         "side": "info",
         "risk_notice": "纸面账本，不涉及实盘资金",
         # 借用扫描汇总的排版（标题 + 正文），四个渠道都已支持。
-        "evidence": {"notification_kind": "scan_summary", "content": f"{socket.gethostname()} {stamp}\n{body}"},
+        "evidence": {"notification_kind": "scan_summary", "content": content},
     }
     results: dict[str, str] = {}
     for channel in notifier.active_channels():
         ok, detail = notifier.send(channel, payload)
         results[channel] = "ok" if ok else detail
     return results
+
+
+def send(title: str, body: str, config: dict[str, Any]) -> dict[str, str]:
+    """发一条报警：正文前面加上主机名和时间。"""
+
+    stamp = now_shanghai().isoformat(timespec="seconds")
+    return push(title, f"{socket.gethostname()} {stamp}\n{body}", config, "ledger-alert")
 
 
 def main(argv: list[str] | None = None) -> int:
