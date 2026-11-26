@@ -18,11 +18,15 @@ STATE_DIR = Path(os.getenv("ETF_ROTATION_STATE_DIR", Path(__file__).resolve().pa
 RUNTIME_SNAPSHOT = STATE_DIR / "etf_rotation_snapshot.json"
 HISTORY_PATH = STATE_DIR / "etf_rotation_history.jsonl"
 PAPER_LEDGER = STATE_DIR / "etf_paper_ledger.json"
+PAPER_REFERENCE = STATE_DIR / "etf_paper_reference.json"
 REQUIRED_KEYS = {"strategy", "as_of", "mode", "metrics", "signal", "target", "curve"}
 LOT = 100
 COMMISSION = 0.0003
 MIN_COMMISSION = 5.0
 SLIPPAGE = 0.0005
+# Sessions the reference backtest runs before the ledger's first NAV point:
+# `run_panels` needs 30, and it leaves room for several weekly rebalances.
+REFERENCE_WARMUP = 30
 
 METRIC_KEYS = (
     "total_return_pct", "cagr_pct", "max_drawdown_pct", "sharpe",
@@ -586,7 +590,7 @@ def advance_paper(trade_dates: Any = None) -> dict[str, Any]:
     ledger = _load_paper()
     if not ledger.get("initialized"):
         raise ValueError("纸面账本尚未初始化")
-    close, _volume = load_panel()
+    close, volume = load_panel()
     index = close.index
     latest = index[-1]
     marked = sorted(
@@ -638,6 +642,7 @@ def advance_paper(trade_dates: Any = None) -> dict[str, Any]:
                 )
         mark_paper_to_market(key)
         steps.append(step)
+    _refresh_reference(close, volume)
     return {
         "steps": steps,
         "schedule": schedule,
@@ -697,60 +702,101 @@ def mark_paper_to_market(as_of: str | None = None) -> dict[str, Any]:
     return ledger
 
 
-def _tracking(ledger: dict[str, Any]) -> dict[str, Any]:
-    nav = sorted(
-        [item for item in ledger.get("nav_history", []) if isinstance(item, dict)],
-        key=lambda item: str(item.get("date") or ""),
+def _refresh_reference(close: Any, volume: Any) -> None:
+    """Rerun the canonical backtest across the ledger's sessions and persist its curve.
+
+    `snapshot["curve"]` is the static evaluation curve: it stops at the last
+    manual rebuild, so the ledger's sessions are not on it. The run starts
+    `REFERENCE_WARMUP` sessions before the ledger's first NAV point with the
+    ledger's capital. Every weekly rebalance resets the weights to target, so by
+    the ledger's first session the curve no longer depends on where the run
+    began. Only the sessions the ledger has lived through are kept.
+    """
+    import pandas as pd
+
+    from . import backtest
+    from .engine import load_open_panel
+
+    ledger = _load_paper()
+    first = min(str(item["date"]) for item in ledger["nav_history"])
+    position = int(close.index.searchsorted(pd.Timestamp(first)))
+    start = close.index[max(position - REFERENCE_WARMUP, 0)]
+    result = backtest.run_panels(
+        close, load_open_panel(), volume,
+        start=start.strftime("%Y-%m-%d"), initial=float(ledger["capital"]),
     )
-    empty = {
-        "points": len(nav),
+    payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "backtest_start": result["start"],
+        "curve": [row for row in result["curve"] if row["date"] >= first],
+    }
+    temporary = PAPER_REFERENCE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    temporary.replace(PAPER_REFERENCE)
+
+
+def _load_reference() -> dict[str, float]:
+    """Backtest equity by session as the last cycle wrote it; empty when there is none."""
+    try:
+        payload = json.loads(PAPER_REFERENCE.read_text(encoding="utf-8"))
+        return {str(row["date"]): float(row["equity"]) for row in payload["curve"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def _tracking(ledger: dict[str, Any]) -> dict[str, Any]:
+    """Paper NAV against the canonical backtest since the ledger first held positions.
+
+    The cash sessions before the first fill are left out: the backtest is
+    invested throughout, so they would only measure when the ledger happened to
+    start. Only sessions present in both series count, so a backtest that has
+    not reached the ledger's sessions gives no comparison instead of a flat one.
+    """
+    tracking: dict[str, Any] = {
+        "points": 0,
+        "since": None,
+        "until": None,
         "paper_return_pct": None,
         "backtest_return_pct": None,
         "difference_pct": None,
         "tracking_error_pct": None,
     }
-    if len(nav) < 2:
-        return empty
-    snapshot = load_snapshot()
-    curve = {
-        str(item.get("date")): float(item.get("equity") or 0.0)
-        for item in snapshot.get("curve", [])
-        if isinstance(item, dict)
-    }
-    if not curve:
-        return empty
-    backtest_dates = sorted(curve)
-    aligned: list[tuple[float, float]] = []
-    for item in nav:
-        date = str(item.get("date") or "")
-        candidates = [day for day in backtest_dates if day <= date]
-        if not candidates:
-            continue
-        aligned.append((float(item.get("equity") or 0.0), curve[candidates[-1]]))
+    reference = _load_reference()
+    nav = sorted(
+        (item for item in ledger.get("nav_history", []) if isinstance(item, dict)),
+        key=lambda item: str(item.get("date") or ""),
+    )
+    invested = next(
+        (position for position, item in enumerate(nav) if float(item.get("market_value") or 0.0) > 0),
+        len(nav),
+    )
+    aligned = [
+        (str(item["date"]), float(item["equity"]), reference[str(item["date"])])
+        for item in nav[invested:]
+        if str(item.get("date")) in reference
+    ]
+    tracking["points"] = len(aligned)
     if len(aligned) < 2:
-        return empty
-    paper_returns = []
-    backtest_returns = []
-    for (prev_paper, prev_bt), (cur_paper, cur_bt) in zip(aligned, aligned[1:]):
-        if prev_paper <= 0 or prev_bt <= 0:
-            continue
-        paper_returns.append(cur_paper / prev_paper - 1.0)
-        backtest_returns.append(cur_bt / prev_bt - 1.0)
-    if len(paper_returns) < 1:
-        return empty
-    diffs = [paper - backtest for paper, backtest in zip(paper_returns, backtest_returns)]
+        return tracking
+    paper = [row[1] for row in aligned]
+    canonical = [row[2] for row in aligned]
+    diffs = [
+        paper[position] / paper[position - 1] - canonical[position] / canonical[position - 1]
+        for position in range(1, len(aligned))
+    ]
     mean = sum(diffs) / len(diffs)
     variance = sum((value - mean) ** 2 for value in diffs) / len(diffs)
-    tracking_error = math.sqrt(variance) * math.sqrt(252.0) * 100.0
-    paper_return = aligned[-1][0] / aligned[0][0] - 1.0
-    backtest_return = aligned[-1][1] / aligned[0][1] - 1.0
-    return {
-        "points": len(aligned),
+    paper_return = paper[-1] / paper[0] - 1.0
+    canonical_return = canonical[-1] / canonical[0] - 1.0
+    tracking.update({
+        "since": aligned[0][0],
+        "until": aligned[-1][0],
         "paper_return_pct": round(paper_return * 100, 2),
-        "backtest_return_pct": round(backtest_return * 100, 2),
-        "difference_pct": round((paper_return - backtest_return) * 100, 2),
-        "tracking_error_pct": round(tracking_error, 2),
-    }
+        "backtest_return_pct": round(canonical_return * 100, 2),
+        "difference_pct": round((paper_return - canonical_return) * 100, 2),
+        "tracking_error_pct": round(math.sqrt(variance * 252.0) * 100.0, 2),
+    })
+    return tracking
 
 
 def get_paper_ledger() -> dict[str, Any]:

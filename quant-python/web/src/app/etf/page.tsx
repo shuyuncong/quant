@@ -62,6 +62,8 @@ interface EtfPaperNav {
 
 interface EtfPaperTracking {
   points: number;
+  since: string | null;
+  until: string | null;
   paper_return_pct: number | null;
   backtest_return_pct: number | null;
   difference_pct: number | null;
@@ -665,8 +667,8 @@ export default function EtfPage() {
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
                   {paper.tracking?.points && paper.tracking.points >= 2
-                    ? `累计差异 ${paper.tracking.difference_pct == null ? "—" : `${signed(paper.tracking.difference_pct, 2)}%`}；跟踪误差按对齐后的净值日收益差年化。样本很短时仅供观察。`
-                    : "至少需要 2 个净值日才能计算跟踪误差。当前样本不足，不构成有效统计。"}
+                    ? `自 ${paper.tracking.since} 收盘（首次持仓）至 ${paper.tracking.until}，累计差异 ${paper.tracking.difference_pct == null ? "—" : `${signed(paper.tracking.difference_pct, 2)}%`}。回测是同一套规则在这段时间的净值，由定时任务「ETF 轮动刷新」每日重算；跟踪误差按日收益差年化。样本很短时仅供观察。`
+                    : "账本持仓后至少要有 2 个净值日，且回测已算到这些交易日，才能比较。回测由定时任务「ETF 轮动刷新」每日重算。"}
                 </p>
               </div>
               {paper.nav_history && paper.nav_history.length >= 2 && (

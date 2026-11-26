@@ -267,6 +267,7 @@ class PaperLedgerTests(unittest.TestCase):
         self.patches = [
             mock.patch.object(service, "STATE_DIR", root),
             mock.patch.object(service, "PAPER_LEDGER", root / "ledger.json"),
+            mock.patch.object(service, "PAPER_REFERENCE", root / "reference.json"),
             mock.patch.object(service, "HISTORY_PATH", root / "history.jsonl"),
             mock.patch.object(service, "RUNTIME_SNAPSHOT", root / "snapshot.json"),
         ]
@@ -470,6 +471,97 @@ class PaperLedgerTests(unittest.TestCase):
             ledger = service.fill_paper()
         sell = next(order for order in ledger["orders"] if order["side"] == "sell")
         self.assertEqual(sell["price"], 1.3)
+
+    @staticmethod
+    def _marks(rows: list[tuple[str, float, float]]) -> dict:
+        return {"nav_history": [
+            {"date": day, "market_value": market_value, "equity": equity}
+            for day, market_value, equity in rows
+        ]}
+
+    @staticmethod
+    def _write_reference(curve: dict[str, float]) -> None:
+        service.PAPER_REFERENCE.write_text(json.dumps({
+            "curve": [{"date": day, "equity": equity} for day, equity in curve.items()],
+        }), encoding="utf-8")
+
+    def test_tracking_needs_a_backtest_that_reaches_the_ledger(self) -> None:
+        ledger = self._marks([
+            ("2026-11-04", 0.0, 500_000.0),
+            ("2026-11-09", 373_000.0, 499_705.12),
+            ("2026-11-10", 371_000.0, 497_705.12),
+        ])
+        blank = {"points": 0, "since": None, "until": None, "paper_return_pct": None,
+                 "backtest_return_pct": None, "difference_pct": None, "tracking_error_pct": None}
+        self.assertEqual(service._tracking(ledger), blank)
+
+        # The curve that used to be compared stopped on the ledger's first day:
+        # every session matched that one point and the backtest read 0.00%.
+        self._write_reference({"2026-11-04": 477_162.22})
+        self.assertEqual(service._tracking(ledger), blank)
+
+    def test_tracking_starts_at_the_first_invested_session(self) -> None:
+        ledger = self._marks([
+            ("2026-11-04", 0.0, 500_000.0),
+            ("2026-11-06", 0.0, 500_000.0),
+            ("2026-11-09", 375_000.0, 499_700.0),
+            ("2026-11-10", 371_000.0, 494_703.0),   # -1.0%
+            ("2026-11-11", 376_000.0, 499_650.03),  # +1.0%
+        ])
+        # The backtest gained 3.3% while the ledger sat in cash. That is when the
+        # ledger started, not a tracking gap.
+        curve = {
+            "2026-11-04": 300_000.0, "2026-11-05": 303_000.0, "2026-11-06": 306_000.0,
+            "2026-11-09": 310_000.0,
+            "2026-11-10": 306_900.0,  # -1.0%
+            "2026-11-11": 310_582.8,  # +1.2%
+        }
+        self._write_reference(curve)
+        tracking = service._tracking(ledger)
+        self.assertEqual((tracking["since"], tracking["until"], tracking["points"]),
+                         ("2026-11-09", "2026-11-11", 3))
+        self.assertEqual(tracking["paper_return_pct"], -0.01)
+        self.assertEqual(tracking["backtest_return_pct"], 0.19)
+        self.assertEqual(tracking["difference_pct"], -0.2)
+        # Daily gaps of 0 and -0.2pp: 0.1pp population std, times sqrt(252).
+        self.assertEqual(tracking["tracking_error_pct"], 1.59)
+
+        # A backtest one session behind compares up to where it reaches, and says so.
+        del curve["2026-11-11"]
+        self._write_reference(curve)
+        tracking = service._tracking(ledger)
+        self.assertEqual((tracking["until"], tracking["points"]), ("2026-11-10", 2))
+        self.assertEqual((tracking["paper_return_pct"], tracking["backtest_return_pct"]), (-1.0, -1.0))
+
+    def test_cycle_reruns_the_backtest_across_the_ledger(self) -> None:
+        index, close, open_, volume = flat_panels(gate_open=False)
+        signal_day = [day for day in index if day.weekday() == 4][-4]
+        start = index.get_loc(signal_day)
+        service._save_paper({
+            "initialized": True, "capital": 500_000.0, "cash": 500_000.0,
+            "positions": {}, "orders": [],
+            "nav_history": [{"date": signal_day.strftime("%Y-%m-%d"), "cash": 500_000.0,
+                             "market_value": 0, "equity": 500_000.0, "pnl_pct": 0.0}],
+        })
+        with mock.patch.object(engine, "load_panel", return_value=(close.loc[:signal_day], volume.loc[:signal_day])):
+            service.refresh_snapshot()
+            service.plan_paper()
+
+        # A catch-up run, then a later one: each must carry the backtest to the
+        # session it just marked.
+        for upto in (index[start + 8], index[start + 13]):
+            self._advance(close, open_, volume, upto)
+            ledger = service.get_paper_ledger()
+            reference = json.loads(service.PAPER_REFERENCE.read_text(encoding="utf-8"))
+            self.assertEqual([row["date"] for row in reference["curve"]],
+                             [item["date"] for item in ledger["nav_history"]])
+            tracking = ledger["tracking"]
+            self.assertEqual((tracking["since"], tracking["until"]),
+                             (index[start + 1].strftime("%Y-%m-%d"), upto.strftime("%Y-%m-%d")))
+            self.assertEqual(tracking["points"], len(ledger["nav_history"]) - 1)
+            # Both hold the same targets from the first fill on.
+            self.assertGreater(tracking["backtest_return_pct"], 0.0)
+            self.assertAlmostEqual(tracking["paper_return_pct"], tracking["backtest_return_pct"], delta=0.05)
 
 
 if __name__ == "__main__":
