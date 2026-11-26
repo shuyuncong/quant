@@ -97,3 +97,7 @@ quant-python/signal_system/capacity_sweep_arms/*.log
 quant-python/signal_system/rankcache/*.log
 quant-python/signal_system/rankcache/*.pkl
 quant-python/signal_system/account_25w_arms/*.log
+
+# 临时预览页面和外部资料压缩包：只留在本机，不入库
+docs/preview/
+docs/学习/*.7z
