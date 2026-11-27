@@ -100,6 +100,15 @@ class ThreeSlotAccountTests(unittest.TestCase):
         self.assertEqual(DAYS[2], trade["exit_date"])
         self.assertAlmostEqual(8.5 * (1.0 - study.four.SLIPPAGE), trade["exit_price"])
 
+    def test_low_open_exit_carries_only_a_close_sealed_at_the_limit(self):
+        # Day 1 closes +9.6% under the 11.00 high: sold at that close.  Sealed at 11.00: carried a day.
+        for close, exit_day in ((10.96, 1), (11.0, 2)):
+            market = flat_market()
+            set_bar(market, 1, open_=10.0, high=11.0, low=10.0, close=close)
+            book = study.run_book(market, {0: [0]}, study.low_open_exit, START, END)
+            trade = book.trades.iloc[0]
+            self.assertEqual(("signal", DAYS[exit_day]), (trade["exit_reason"], trade["exit_date"]), close)
+
 
 if __name__ == "__main__":
     unittest.main()

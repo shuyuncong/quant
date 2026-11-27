@@ -84,6 +84,20 @@ class FirstBoardPullbackTests(unittest.TestCase):
         bars.loc[t, "amount"] = 150_000_000.0
         self.assertEqual([], self.detect(bars))
 
+    def test_board_that_closed_below_its_high_is_not_a_first_board(self):
+        bars = self.bars.copy()
+        bars.loc[260, "close"] = 10.96  # +9.6%, but under the 11.00 high: touched, not sealed
+        self.assertEqual([], self.detect(bars))
+
+    def test_unsealed_prior_board_does_not_block_first_board(self):
+        bars = self.bars.copy()
+        t = 255
+        bars.loc[t, "close"] = 10.96
+        bars.loc[t, "high"] = 11.0
+        bars.loc[t, "open"] = 10.0
+        bars.loc[t, "amount"] = 150_000_000.0
+        self.assertEqual(1, len(self.detect(bars)))
+
     def test_pullback_must_shrink_volume(self):
         bars = self.bars.copy()
         bars.loc[261, "amount"] = 100_000_000.0

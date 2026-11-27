@@ -54,7 +54,7 @@ from etf_extended_study import StudyError
 from first_board_low_open_15m_study import first_5m_bar, repriced_net_return
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_OUT = blend.RESULTS / "2026-11-22-first-board-low-open-fill"
+DEFAULT_OUT = blend.LOW_OPEN_BASELINE / "fill"
 BAR_CACHE = BASE_DIR / "cache" / "first_board_low_open_5m"
 MAX_PARTICIPATION = 0.10
 MAX_UNKNOWN_SHARE = 0.05

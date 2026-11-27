@@ -223,9 +223,11 @@ def limit_rate_series(symbol: str, dates: pd.Series) -> np.ndarray:
 
 
 def _is_limit_up_at(close: np.ndarray, high: np.ndarray, prev: np.ndarray, rates: np.ndarray) -> np.ndarray:
-    # high == close means the close was sealed at the upper limit; qfq rounding
-    # makes an exact equality check unreliable, so allow 0.5 cents.
-    return (close / prev - 1.0 >= rates - 0.005) & (high >= close - 0.005)
+    # Sealed at the upper limit: the close reached the limit move (0.5% slack,
+    # because qfq prices cannot reproduce the exact limit price) and is the
+    # day's high.  qfq rescales prices, so a tick is no longer 0.01: compare
+    # with a relative tolerance that only absorbs float noise.
+    return (close / prev - 1.0 >= rates - 0.005) & np.isclose(close, high, rtol=1e-9, atol=0.0)
 
 
 def _is_limit_down_open(open_: float, prev_close: float, rate: float) -> bool:

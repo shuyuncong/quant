@@ -66,9 +66,12 @@ from strategy_statistics import paired_sharpe_diff
 
 BASE_DIR = Path(__file__).resolve().parent
 RESULTS = BASE_DIR.parent.parent / "docs" / "backtest-results"
-DEFAULT_OUT = RESULTS / "2026-11-22-etf-low-open-blend"
+# 2026-11-27 起涨停要求收盘封住，首板低开的基准随之重跑；旧口径的归档是
+# 2026-11-15-first-board-low-open-maxweight33。
+LOW_OPEN_BASELINE = RESULTS / "2026-11-27-first-board-low-open-sealed"
+DEFAULT_OUT = LOW_OPEN_BASELINE / "blend"
 ETF_ARCHIVE = RESULTS / "2026-11-13-etf-return-sleeve" / "curves.csv"
-LOW_OPEN_ARCHIVE = RESULTS / "2026-11-15-first-board-low-open-maxweight33" / "curves.csv"
+LOW_OPEN_ARCHIVE = LOW_OPEN_BASELINE / "curves.csv"
 ETF_ARM = "E1N3_cash_carve10"
 LOW_OPEN = "s1_first_board_low_open"
 LOW_OPEN_START = "2019-01-01"  # 归档回测的起点；净值有路径依赖，必须从同一天跑

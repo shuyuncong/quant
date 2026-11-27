@@ -1,0 +1,187 @@
+{
+ "meta": {
+  "generated_at": "2026-11-27T21:21:31",
+  "start": "2020-01-02",
+  "end": "2026-10-30",
+  "source": "BaoStock query_history_k_data_plus frequency=5 adjustflag=3, first bar (09:35)",
+  "thresholds": {
+   "max_participation": 0.1,
+   "max_unknown_share": 0.05,
+   "max_limited_share": 0.1
+  }
+ },
+ "parity_max_rel_gap": 0.0,
+ "trades": 208,
+ "unknown": 0,
+ "unknown_share": 0.0,
+ "flat_first_bar": 0,
+ "first_5m_amount": {
+  "min": 1002969,
+  "p10": 17959016,
+  "median": 53999648
+ },
+ "participation_pct": {
+  "median": 1.425,
+  "p90": 4.396,
+  "max": 50.008
+ },
+ "fills": {
+  "open_plus_10bp_all": {
+   "trades": 208,
+   "mean_net_return_pct": 1.555
+  },
+  "open_plus_10bp": {
+   "trades": 208,
+   "mean_net_return_pct": 1.555
+  },
+  "first_5m_vwap": {
+   "trades": 208,
+   "mean_net_return_pct": 0.689,
+   "win_rate_pct": 44.23,
+   "mean_price_vs_open_pct": 0.849,
+   "median_price_vs_open_pct": 0.706
+  },
+  "first_5m_high": {
+   "trades": 208,
+   "mean_net_return_pct": -1.235,
+   "win_rate_pct": 34.62,
+   "mean_price_vs_open_pct": 2.814,
+   "median_price_vs_open_pct": 2.416
+  }
+ },
+ "capacity": {
+  "x1": {
+   "limited_share": 0.0096,
+   "fillable_amount_share": 0.9969,
+   "median_participation": 0.01425
+  },
+  "x5": {
+   "limited_share": 0.3221,
+   "fillable_amount_share": 0.8625,
+   "median_participation": 0.07127
+  },
+  "x10": {
+   "limited_share": 0.6442,
+   "fillable_amount_share": 0.6693,
+   "median_participation": 0.14254
+  }
+ },
+ "best_trades": [
+  {
+   "symbol": "603963",
+   "entry_date": "2022-03-03",
+   "contribution_pct": 14.83,
+   "net_return_pct": 44.48,
+   "unknown": false,
+   "net_return_vwap_pct": 39.24,
+   "vwap_vs_open_pct": 3.77,
+   "participation_pct": 1.46,
+   "first_5m_amount": 38776302
+  },
+  {
+   "symbol": "002361",
+   "entry_date": "2026-03-27",
+   "contribution_pct": 13.63,
+   "net_return_pct": 40.92,
+   "unknown": false,
+   "net_return_vwap_pct": 39.27,
+   "vwap_vs_open_pct": 1.18,
+   "participation_pct": 0.34,
+   "first_5m_amount": 295560744
+  },
+  {
+   "symbol": "001267",
+   "entry_date": "2026-08-05",
+   "contribution_pct": 12.72,
+   "net_return_pct": 38.25,
+   "unknown": false,
+   "net_return_vwap_pct": 35.32,
+   "vwap_vs_open_pct": 2.17,
+   "participation_pct": 0.34,
+   "first_5m_amount": 298483001
+  },
+  {
+   "symbol": "301027",
+   "entry_date": "2024-06-20",
+   "contribution_pct": 7.63,
+   "net_return_pct": 22.89,
+   "unknown": false,
+   "net_return_vwap_pct": 21.31,
+   "vwap_vs_open_pct": 1.3,
+   "participation_pct": 1.77,
+   "first_5m_amount": 53978672
+  },
+  {
+   "symbol": "002160",
+   "entry_date": "2020-12-16",
+   "contribution_pct": 6.69,
+   "net_return_pct": 20.06,
+   "unknown": false,
+   "net_return_vwap_pct": 19.62,
+   "vwap_vs_open_pct": 0.37,
+   "participation_pct": 1.24,
+   "first_5m_amount": 39599600
+  },
+  {
+   "symbol": "002861",
+   "entry_date": "2024-06-11",
+   "contribution_pct": 5.39,
+   "net_return_pct": 16.16,
+   "unknown": false,
+   "net_return_vwap_pct": 13.95,
+   "vwap_vs_open_pct": 1.94,
+   "participation_pct": 4.59,
+   "first_5m_amount": 19406384
+  },
+  {
+   "symbol": "300592",
+   "entry_date": "2026-08-05",
+   "contribution_pct": 5.32,
+   "net_return_pct": 15.95,
+   "unknown": false,
+   "net_return_vwap_pct": 13.74,
+   "vwap_vs_open_pct": 1.94,
+   "participation_pct": 1.39,
+   "first_5m_amount": 72613432
+  },
+  {
+   "symbol": "600105",
+   "entry_date": "2026-08-05",
+   "contribution_pct": 5.27,
+   "net_return_pct": 15.85,
+   "unknown": false,
+   "net_return_vwap_pct": 14.29,
+   "vwap_vs_open_pct": 1.36,
+   "participation_pct": 0.07,
+   "first_5m_amount": 1472076308
+  },
+  {
+   "symbol": "603223",
+   "entry_date": "2023-10-13",
+   "contribution_pct": 5.17,
+   "net_return_pct": 15.53,
+   "unknown": false,
+   "net_return_vwap_pct": 13.69,
+   "vwap_vs_open_pct": 1.61,
+   "participation_pct": 1.79,
+   "first_5m_amount": 45532740
+  },
+  {
+   "symbol": "603002",
+   "entry_date": "2025-04-18",
+   "contribution_pct": 4.71,
+   "net_return_pct": 14.13,
+   "unknown": false,
+   "net_return_vwap_pct": 13.53,
+   "vwap_vs_open_pct": 0.54,
+   "participation_pct": 1.64,
+   "first_5m_amount": 56206052
+  }
+ ],
+ "checks": {
+  "coverage": true,
+  "mean_net_return_positive_at_first_5m_vwap": true,
+  "few_capacity_limited_trades": true
+ },
+ "closed": true
+}

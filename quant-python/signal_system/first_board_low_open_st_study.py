@@ -48,7 +48,7 @@ from etf_extended_study import StudyError
 from strategy_statistics import paired_sharpe_diff
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_OUT = blend.RESULTS / "2026-11-22-first-board-low-open-st"
+DEFAULT_OUT = blend.LOW_OPEN_BASELINE / "st"
 FLAG_CACHE = BASE_DIR / "cache" / "first_board_st" / "flags.json"
 MAX_UNKNOWN_SHARE = 0.05
 TOP_TRADES = 10

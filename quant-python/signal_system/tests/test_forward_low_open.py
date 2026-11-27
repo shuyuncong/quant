@@ -116,6 +116,42 @@ class ForwardLowOpenTests(unittest.TestCase):
             delta=0.01,
         )
 
+    def test_board_that_closed_below_its_high_is_not_a_first_board(self):
+        # 000001 盘中摸到涨停价 10.45，收盘回落到 10.41（+9.6%）：没封住，不进名单，次日低开也不出信号。
+        panels = study_panels()
+        panels["close"].loc[DAYS[BOARD], "000001"] = 10.41
+
+        watch = forward.watchlist({field: frame.loc[:DAYS[BOARD]] for field, frame in panels.items()})
+        self.assertEqual([row["symbol"] for row in watch["rows"]], ["000002"])
+        ledger = run_daily(panels, DAYS[DAYS > START])
+        self.assertEqual(
+            keys(ledger["signals"], "symbol", "action"), [("000002", "bought"), ("600000", "holding")]
+        )
+
+    def test_sealed_board_right_after_an_unsealed_one_is_still_a_first_board(self):
+        # 000001 前一天摸板没封住（收 10.41），今天封在 11.45：今天才是第一个涨停，照样进名单。
+        panels = study_panels()
+        panels["high"].loc[DAYS[BOARD - 30]] = 14.5  # 让 11.45 也落在 60 日区间的下半区
+        set_bar(panels, BOARD - 1, "000001", 9.5, 10.41)
+        panels["high"].loc[DAYS[BOARD - 1], "000001"] = 10.45
+        set_bar(panels, BOARD, "000001", 10.41, 11.45)
+
+        watch = forward.watchlist({field: frame.loc[:DAYS[BOARD]] for field, frame in panels.items()})
+        self.assertEqual([row["symbol"] for row in watch["rows"]], ["000001", "000002"])
+
+    def test_holding_is_carried_only_when_the_close_is_sealed_at_the_limit(self):
+        # 000002 买入次日摸到涨停 11.22、收在 11.18（+9.6%）：没封住，当天收盘就卖，不多拿一天。
+        panels = study_panels()
+        panels["close"].loc[DAYS[BOARD + 2], "000002"] = 11.18
+
+        ledger = run_daily(panels, DAYS[DAYS > START])
+
+        sold = str(DAYS[BOARD + 2].date())
+        self.assertEqual(
+            keys(ledger["trades"], "symbol", "exit_date", "hold_days"),
+            [("000001", sold, 1), ("000002", sold, 1)],
+        )
+
     def test_one_catch_up_run_equals_daily_runs(self):
         panels = study_panels()
         daily = run_daily(panels, DAYS[DAYS > START])

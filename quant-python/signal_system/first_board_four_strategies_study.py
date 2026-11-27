@@ -151,9 +151,12 @@ def bundle_from_panels(panels: dict[str, pd.DataFrame]) -> Bundle:
             rate[:, column] = 0.10
             rate[dates >= pd.Timestamp("2020-08-24"), column] = 0.20
 
-    limit_up = (ret >= rate - 0.005) & (high >= close - 0.005)
+    # 收盘涨停：涨幅到了涨停幅度（前复权价算不准涨停价，留 0.5% 容差），并且封住了，
+    # 即收盘价就是当天最高价。复权把价格整体缩放，一档价差不再是 0.01 元，所以只按
+    # 相对误差容浮点误差。摸到涨停但收盘没封住的归 touched。
+    limit_up = (ret >= rate - 0.005) & np.isclose(close, high, rtol=1e-9, atol=0.0)
     limit_up[0] = False
-    touched = (high_ret >= rate - 0.005) & (ret < rate - 0.005)
+    touched = (high_ret >= rate - 0.005) & ~limit_up
     one_word = (open_ret >= rate - 0.005) & (low_ret >= rate - 0.005)
     limit_down = ret <= -rate + 0.005
 
@@ -1110,7 +1113,8 @@ def _write_memo(
         "无法复现盘中止盈/止损的成交价。策略2 的 T+1 盈利即卖尤其依赖 14:50 价格；"
         "收盘价近似会把盘中冲高回落误判为未盈利，从而拖到 T+2，放大亏损。",
         "- **涨停/跌停**：开盘涨停不买（策略2 非一字板按涨停价排板）；收盘涨停不卖；"
-        "收盘跌停不卖。qfq 价格用 0.5% 容差识别涨跌停。",
+        "收盘跌停不卖。qfq 价格用 0.5% 容差识别涨跌停；收盘涨停还要求收盘价等于当日最高价，"
+        "摸到涨停但收盘没封住的不算。",
         "- **T+1**：买入当日不可卖；策略2 的 T+1 盈利即卖、T+2 强制卖按收盘价近似。",
         "- **ST/退市**：无历史 ST 标记；退市股保留在面板中，停牌超过 60 个交易日按最后价强平。",
         "- **市值**：用 `成交额 / 换手率` 近似流通市值；源码用 `circulating_market_cap` 和 `market_cap` 混合过滤。",

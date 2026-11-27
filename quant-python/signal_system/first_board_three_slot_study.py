@@ -84,10 +84,11 @@ class Market:
         return float(price / previous - 1.0) if previous > 0 else math.nan
 
     def limit_up_close(self, index: int, column: int) -> bool:
+        """收盘封住涨停：涨幅到了涨停幅度，且收盘价就是当天最高价（只容浮点误差）。"""
         close = self.close[index, column]
         return bool(
             self.move(close, index, column) >= self.rate[index, column] - LIMIT_TOLERANCE
-            and self.high[index, column] >= close - LIMIT_TOLERANCE
+            and math.isclose(close, self.high[index, column], rel_tol=1e-9)
         )
 
     def limit_down(self, price: float, index: int, column: int) -> bool:

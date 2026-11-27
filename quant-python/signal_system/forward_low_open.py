@@ -4,6 +4,8 @@
 ``first_board_four_strategies_study``（``build_signals`` / ``StrategyPortfolio``），
 本文件只负责读每日行情缓存、逐个交易日推进、把信号/成交/净值追加到账本。
 回测样本止于 2026-10-30，之后的每一笔都是样本外。
+2026-11-27 修正：涨停要求收盘封住（收盘价等于当日最高价），之前只看收盘涨幅；
+同口径的基准回测在 docs/backtest-results/2026-11-27-first-board-low-open-sealed/。
 
 成交价用当日缓存里的前复权价。前复权以最新交易日为基准，所以当日的前复权
 开盘/收盘价就是实际成交价；持仓期间遇到除权，历史价被整体重述，下次运行时
@@ -238,7 +240,7 @@ def advance(ledger: dict[str, Any], bundle: four.Bundle, now: datetime) -> dict[
                 "prev_close": float(bundle.close_prev[index, column]),
                 "open_ratio": float(bundle.open_ratio[index, column]),
                 "rp60": float(bundle.rp60[index, column]),
-                # 回测用 0.5% 容差认定涨停；这里记下昨收是否正好等于涨停价。
+                # 回测按收盘涨幅（0.5% 容差）加收盘价等于最高价认定涨停；这里记下昨收是否正好等于涨停价。
                 "prev_close_at_limit": abs(float(bundle.close_prev[index, column]) - limit) < 0.005,
                 "action": "bought" if bought else ("holding" if not flat else "unfilled"),
                 **record,
